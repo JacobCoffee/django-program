@@ -4,86 +4,28 @@ Provides :class:`PretalxSpeaker`, :class:`PretalxTalk`, and :class:`PretalxSlot`
 as frozen dataclasses that parse raw API dicts into well-typed Python objects.
 Also includes :class:`SubmissionState` for the submission lifecycle and helper
 functions for resolving Pretalx multilingual fields.
+
+The normalization helpers live in :mod:`pretalx_client.adapters.normalization`
+and the datetime/slot helpers in :mod:`pretalx_client.adapters.schedule`.  This
+module re-exports the underscore-prefixed aliases for backward compatibility.
 """
 
 import enum
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 -- used at runtime by dataclass fields
 from typing import Any
 
+from pretalx_client.adapters.normalization import (
+    localized,
+    resolve_id_or_localized,
+)
+from pretalx_client.adapters.schedule import normalize_slot, parse_datetime
 
-def _localized(value: str | dict[str, object] | None) -> str:
-    """Extract a display string from a Pretalx multilingual field.
-
-    Pretalx returns localized fields as either a plain string or a dict
-    keyed by language code (e.g. ``{"en": "Talk", "de": "Vortrag"}``).
-    This helper returns the ``en`` value when available, falling back to
-    the first available language, or an empty string for ``None``.
-
-    Args:
-        value: A string, a multilingual dict, an object with a ``name``
-            dict, or ``None``.
-
-    Returns:
-        The resolved display string.
-    """
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    if not isinstance(value, dict):
-        return str(value)
-
-    if "en" in value:
-        return str(value["en"])
-    if "name" in value:
-        return _localized(value["name"])  # type: ignore[arg-type]
-    return next((v for v in value.values() if isinstance(v, str)), "")
-
-
-def _resolve_id_or_localized(
-    value: int | str | dict[str, object] | None,
-    mapping: dict[int, str] | None = None,
-) -> str:
-    """Resolve a Pretalx field that may be an integer ID or a localized value.
-
-    When the real API returns an integer ID (e.g. for ``submission_type``,
-    ``track``, or ``room``), the optional mapping dict is used to look up the
-    human-readable name.  Falls back to :func:`_localized` for string/dict
-    values, or ``str(value)`` for unmapped integers.
-
-    Args:
-        value: An integer ID, a string, a multilingual dict, or ``None``.
-        mapping: Optional ``{id: name}`` dict for resolving integer IDs.
-
-    Returns:
-        The resolved display string, or empty string for ``None``.
-    """
-    if value is None:
-        return ""
-    if isinstance(value, int):
-        if mapping and value in mapping:
-            return mapping[value]
-        return str(value)
-    return _localized(value)
-
-
-def _parse_datetime(value: str) -> datetime | None:
-    """Parse an ISO 8601 datetime string, returning ``None`` on failure.
-
-    Args:
-        value: An ISO 8601 formatted datetime string.
-
-    Returns:
-        A ``datetime`` instance, or ``None`` if the string is empty or
-        cannot be parsed.
-    """
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except (ValueError, TypeError):  # fmt: skip
-        return None
+# Backward-compatible aliases -- existing consumers import these underscore
+# names from ``pretalx_client.models``.  Keep them available here.
+_localized = localized
+_resolve_id_or_localized = resolve_id_or_localized
+_parse_datetime = parse_datetime
 
 
 class SubmissionState(enum.StrEnum):
@@ -206,10 +148,10 @@ class PretalxTalk:
         speaker_codes = [s["code"] if isinstance(s, dict) else str(s) for s in speakers_raw]
 
         sub_type_raw = data.get("submission_type")
-        submission_type = _resolve_id_or_localized(sub_type_raw, submission_types)
+        submission_type = resolve_id_or_localized(sub_type_raw, submission_types)
 
         track_raw = data.get("track")
-        track = _resolve_id_or_localized(track_raw, tracks)
+        track = resolve_id_or_localized(track_raw, tracks)
 
         slot = data.get("slot") or {}
         room = ""
@@ -217,7 +159,7 @@ class PretalxTalk:
         slot_end = ""
         if slot and isinstance(slot, dict):
             room_raw = slot.get("room")
-            room = _resolve_id_or_localized(room_raw, rooms)
+            room = resolve_id_or_localized(room_raw, rooms)
             slot_start = slot.get("start") or ""
             slot_end = slot.get("end") or ""
 
@@ -268,6 +210,9 @@ class PretalxSlot:
     ) -> PretalxSlot:
         """Construct a ``PretalxSlot`` from a raw Pretalx schedule slot dict.
 
+        Delegates to :func:`~pretalx_client.adapters.schedule.normalize_slot`
+        for field extraction and normalization, then builds the dataclass.
+
         Handles both the legacy format (string ``room``, ``code``, ``title``
         keys) and the real paginated ``/slots/`` format (integer ``room`` ID,
         ``submission`` key instead of ``code``, no ``title``).
@@ -280,21 +225,13 @@ class PretalxSlot:
         Returns:
             A populated ``PretalxSlot`` instance.
         """
-        start_str = data.get("start") or ""
-        end_str = data.get("end") or ""
-
-        room_raw = data.get("room")
-        room = _resolve_id_or_localized(room_raw, rooms)
-
-        code = data.get("submission") or data.get("code") or ""
-        title = _localized(data.get("title")) if "title" in data else ""
-
+        normalized = normalize_slot(data, rooms=rooms)
         return cls(
-            room=room,
-            start=start_str,
-            end=end_str,
-            code=code,
-            title=title,
-            start_dt=_parse_datetime(start_str),
-            end_dt=_parse_datetime(end_str),
+            room=normalized["room"],
+            start=normalized["start"],
+            end=normalized["end"],
+            code=normalized["code"],
+            title=normalized["title"],
+            start_dt=normalized["start_dt"],
+            end_dt=normalized["end_dt"],
         )

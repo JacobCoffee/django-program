@@ -15,11 +15,12 @@ from typing import Any
 
 import httpx
 
+from pretalx_client.adapters.normalization import localized
+from pretalx_client.adapters.talks import fetch_talks_with_fallback
 from pretalx_client.models import (
     PretalxSlot,
     PretalxSpeaker,
     PretalxTalk,
-    _localized,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,6 +155,30 @@ class PretalxClient:
         logger.debug("Collected %d results from paginated endpoint", len(results))
         return results
 
+    def fetch_event(self) -> dict[str, Any]:
+        """Fetch metadata for this event.
+
+        Returns the raw event dict with keys: name, slug, date_from,
+        date_to, timezone, urls, etc.
+
+        Returns:
+            A raw event dict from the Pretalx API.
+
+        Raises:
+            RuntimeError: If the API returns an HTTP error status.
+        """
+        with httpx.Client(timeout=30, headers=self.headers) as client:
+            try:
+                response = client.get(self.api_url)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
+                raise RuntimeError(msg) from exc
+            except httpx.RequestError as exc:
+                msg = f"Pretalx API connection error for URL {self.api_url}: {exc}"
+                raise RuntimeError(msg) from exc
+        return response.json()
+
     def _fetch_id_name_mapping(self, endpoint: str) -> dict[int, str]:
         """Fetch a lookup table from a Pretalx endpoint that returns ID+name objects.
 
@@ -174,7 +199,7 @@ class PretalxClient:
         for item in items:
             item_id = item.get("id")
             if item_id is not None:
-                mapping[int(item_id)] = _localized(item.get("name"))
+                mapping[int(item_id)] = localized(item.get("name"))
         return mapping
 
     def fetch_rooms(self) -> dict[int, str]:
@@ -231,10 +256,10 @@ class PretalxClient:
     ) -> list[PretalxTalk]:
         """Fetch all confirmed/accepted talks for the event.
 
-        Tries the ``/talks/`` endpoint first. When that returns 404 (as it
-        does for some Pretalx events like PyCon US), falls back to
-        ``/submissions/`` with both ``confirmed`` and ``accepted`` states to
-        capture all scheduled content including tutorials and sponsor talks.
+        Delegates to :func:`~pretalx_client.adapters.talks.fetch_talks_with_fallback`
+        for the endpoint selection logic.  Tries the ``/talks/`` endpoint first.
+        When that returns 404 (as it does for some Pretalx events like PyCon US),
+        falls back to ``/submissions/`` with ``confirmed`` and ``accepted`` states.
 
         Args:
             submission_types: Optional ID-to-name mapping for submission types.
@@ -244,14 +269,7 @@ class PretalxClient:
         Returns:
             A list of :class:`PretalxTalk` instances.
         """
-        url = f"{self.api_url}talks/"
-        raw = self._get_paginated_or_none(url)
-        if raw is None:
-            logger.info("talks/ endpoint returned 404, falling back to submissions/ with confirmed+accepted states")
-            confirmed = self._get_paginated(f"{self.api_url}submissions/?state=confirmed")
-            accepted = self._get_paginated(f"{self.api_url}submissions/?state=accepted")
-            raw = confirmed + accepted
-            logger.info("Fetched %d confirmed + %d accepted = %d submissions", len(confirmed), len(accepted), len(raw))
+        raw = fetch_talks_with_fallback(self)
         return [
             PretalxTalk.from_api(
                 item,
@@ -294,6 +312,57 @@ class PretalxClient:
             )
             for item in self._get_paginated(url)
         ]
+
+    @classmethod
+    def fetch_events(
+        cls,
+        *,
+        base_url: str = "https://pretalx.com",
+        api_token: str = "",
+    ) -> list[dict[str, Any]]:
+        """Fetch all events accessible to the given API token.
+
+        Calls ``GET /api/events/`` which does not require an event slug.
+        Returns raw event dicts with keys: name, slug, date_from, date_to, etc.
+
+        Args:
+            base_url: Root URL of the Pretalx instance.
+            api_token: API token for authenticated access.
+
+        Returns:
+            A list of raw event dicts from the Pretalx API.
+        """
+        normalized = base_url.rstrip("/").removesuffix("/api")
+        url: str | None = f"{normalized}/api/events/"
+
+        headers: dict[str, str] = {"Accept": "application/json"}
+        if api_token:
+            headers["Authorization"] = f"Token {api_token}"
+
+        results: list[dict[str, Any]] = []
+        with httpx.Client(timeout=30, headers=headers) as client:
+            while url is not None:
+                logger.debug("Fetching %s", url)
+                try:
+                    response = client.get(url)
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
+                    raise RuntimeError(msg) from exc
+                except httpx.RequestError as exc:
+                    msg = f"Pretalx API connection error for URL {url}: {exc}"
+                    raise RuntimeError(msg) from exc
+
+                data = response.json()
+                if isinstance(data, list):
+                    results.extend(data)
+                    url = None
+                else:
+                    results.extend(data.get("results", []))
+                    url = data.get("next")
+
+        logger.debug("Collected %d events", len(results))
+        return results
 
     def fetch_schedule(
         self,
