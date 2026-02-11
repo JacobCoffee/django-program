@@ -105,7 +105,7 @@ jobs:
 
       - name: Install Django ${{ matrix.django }}
         if: matrix.django != '5.2'
-        run: uv pip install --constraint /dev/null 'django~=${{ matrix.django }}.0'
+        run: uv pip install --no-config 'django~=${{ matrix.django }}.0'
 
       - name: Run tests
         run: uv run pytest tests/ -v
