@@ -195,6 +195,7 @@ ignore = [
   "D105",   # Missing docstring in magic method (__str__ etc.)
   "D106",   # Missing docstring in public nested class (Django Meta)
   "DJ001",  # Avoid using null=True on string fields (not always applicable)
+  "TC",     # PEP 649 makes TYPE_CHECKING blocks unnecessary on Python 3.14+
 ]
 select = ["ALL"]
 
@@ -251,7 +252,6 @@ known-first-party = ["django_program", "tests"]
   "S101",
   "SIM",
   "SLF001",
-  "TCH",
   "TRY",
   "UP006",
 ]

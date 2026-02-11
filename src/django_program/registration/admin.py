@@ -1,15 +1,19 @@
 """Django admin configuration for the registration app."""
 
 from django.contrib import admin
+from django.http import HttpRequest
 
 from django_program.registration.models import (
     AddOn,
     Cart,
     CartItem,
     Credit,
+    EventProcessingException,
     Order,
     OrderLineItem,
     Payment,
+    StripeCustomer,
+    StripeEvent,
     TicketType,
     Voucher,
 )
@@ -143,3 +147,60 @@ class CreditAdmin(admin.ModelAdmin):
 
     list_display = ("user", "conference", "amount", "status", "created_at")
     list_filter = ("conference", "status")
+
+
+@admin.register(StripeCustomer)
+class StripeCustomerAdmin(admin.ModelAdmin):
+    """Read-only admin for Stripe customer mappings."""
+
+    list_display = ("user", "conference", "stripe_customer_id", "created_at")
+    list_filter = ("conference",)
+    search_fields = ("user__email", "stripe_customer_id")
+    readonly_fields = ("user", "conference", "stripe_customer_id", "created_at")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: StripeCustomer | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+
+@admin.register(StripeEvent)
+class StripeEventAdmin(admin.ModelAdmin):
+    """Read-only admin for Stripe webhook events."""
+
+    list_display = ("stripe_id", "kind", "processed", "livemode", "created_at")
+    list_filter = ("kind", "processed", "livemode")
+    search_fields = ("stripe_id", "customer_id")
+    readonly_fields = (
+        "stripe_id",
+        "kind",
+        "livemode",
+        "payload",
+        "customer_id",
+        "processed",
+        "api_version",
+        "created_at",
+    )
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: StripeEvent | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+
+@admin.register(EventProcessingException)
+class EventProcessingExceptionAdmin(admin.ModelAdmin):
+    """Read-only admin for webhook processing errors."""
+
+    list_display = ("message", "event", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("message",)
+    readonly_fields = ("event", "data", "message", "traceback", "created_at")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: EventProcessingException | None = None) -> bool:  # noqa: ARG002, D102
+        return False

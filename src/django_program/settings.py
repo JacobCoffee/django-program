@@ -28,6 +28,8 @@ class StripeConfig:
     secret_key: str | None = None
     publishable_key: str | None = None
     webhook_secret: str | None = None
+    api_version: str = "2024-12-18"
+    webhook_tolerance: int = 300
 
 
 @dataclass(frozen=True, slots=True)

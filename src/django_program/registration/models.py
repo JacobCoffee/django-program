@@ -443,6 +443,13 @@ class Payment(models.Model):
         CREDIT = "credit", "Credit"
         MANUAL = "manual", "Manual"
 
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        REFUNDED = "refunded", "Refunded"
+
     order = models.ForeignKey(
         Order,
         on_delete=models.CASCADE,
@@ -452,6 +459,12 @@ class Payment(models.Model):
         max_length=20,
         choices=Method.choices,
         default=Method.STRIPE,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.SUCCEEDED,
+        help_text="Defaults to SUCCEEDED for backward compatibility with existing data.",
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     stripe_payment_intent_id = models.CharField(max_length=200, blank=True, default="")
@@ -528,3 +541,80 @@ class Credit(models.Model):
 
     def __str__(self) -> str:
         return f"Credit {self.amount} for {self.user} ({self.status})"
+
+
+class StripeCustomer(models.Model):
+    """Maps a Django user to a Stripe customer for a specific conference.
+
+    Each user gets a separate Stripe customer per conference since each
+    conference may use a different Stripe account.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="stripe_customers",
+    )
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="stripe_customers",
+    )
+    stripe_customer_id = models.CharField(max_length=200, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("user", "conference")]
+
+    def __str__(self) -> str:
+        return f"{self.user} → {self.stripe_customer_id}"
+
+
+class StripeEvent(models.Model):
+    """A record of a Stripe webhook event for idempotent processing.
+
+    Stores the full event payload and tracks whether the event has been
+    successfully processed by the webhook handler.
+    """
+
+    stripe_id = models.CharField(max_length=200, unique=True)
+    kind = models.CharField(max_length=200)
+    livemode = models.BooleanField(default=False)
+    payload = models.JSONField(default=dict)
+    customer_id = models.CharField(max_length=200, blank=True, default="")
+    processed = models.BooleanField(default=False)
+    api_version = models.CharField(max_length=50, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        status = "processed" if self.processed else "pending"
+        return f"{self.kind} ({status})"
+
+
+class EventProcessingException(models.Model):
+    """Records an error that occurred while processing a webhook event.
+
+    Captures the full traceback and contextual data so that failed events
+    can be investigated and retried.
+    """
+
+    event = models.ForeignKey(
+        StripeEvent,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="processing_exceptions",
+    )
+    data = models.TextField(blank=True, default="")
+    message = models.CharField(max_length=500)
+    traceback = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return str(self.message)[:80]

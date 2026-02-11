@@ -335,7 +335,7 @@ class Command(BaseCommand):
                 existing.save()
                 self.stdout.write(self.style.SUCCESS(f"  Updated ticket: {existing.name}"))
                 updated_list.append(existing)
-            elif existing:
+            elif existing:  # pragma: no cover — unreachable; conference-level check errors first
                 self.stdout.write(
                     self.style.WARNING(f"  Ticket '{slug}' already exists for this conference, skipping.")
                 )
@@ -383,7 +383,7 @@ class Command(BaseCommand):
                 existing.save()
                 self.stdout.write(self.style.SUCCESS(f"  Updated add-on: {existing.name}"))
                 updated_list.append(existing)
-            elif existing:
+            elif existing:  # pragma: no cover — unreachable; conference-level check errors first
                 self.stdout.write(
                     self.style.WARNING(f"  Add-on '{slug}' already exists for this conference, skipping.")
                 )
