@@ -1,6 +1,5 @@
 """Management command to bootstrap a conference from a TOML configuration file."""
 
-import datetime
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
@@ -50,10 +49,7 @@ def _map_fields(data: dict[str, Any], field_map: dict[str, str]) -> dict[str, An
     result: dict[str, Any] = {}
     for config_key, model_field in field_map.items():
         if config_key in data:
-            value = data[config_key]
-            if isinstance(value, datetime.date):
-                value = str(value)
-            result[model_field] = value
+            result[model_field] = data[config_key]
     return result
 
 
