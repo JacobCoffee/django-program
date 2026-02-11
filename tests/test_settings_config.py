@@ -25,6 +25,10 @@ def test_get_config_validates_primitive_values() -> None:
         with pytest.raises(ValueError, match="positive integer"):
             get_config()
 
+    with override_settings(DJANGO_PROGRAM={"pending_order_expiry_minutes": 0}):
+        with pytest.raises(ValueError, match="positive integer"):
+            get_config()
+
     with override_settings(DJANGO_PROGRAM={"currency": ""}):
         with pytest.raises(ValueError, match="currency"):
             get_config()

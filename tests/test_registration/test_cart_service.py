@@ -2,11 +2,14 @@
 
 from datetime import date, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.utils import timezone
 
 from django_program.conference.models import Conference
@@ -19,7 +22,16 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
-from django_program.registration.services.cart import CartService, CartSummary
+from django_program.registration.services.cart import (
+    CartService,
+    CartSummary,
+    LineItemSummary,
+    _apply_voucher_discounts,
+    _cart_item_description,
+    _item_is_voucher_applicable,
+    _upsert_addon_item,
+    _upsert_ticket_item,
+)
 
 User = get_user_model()
 
@@ -1207,3 +1219,75 @@ class TestGetSummary:
         line = summary.items[0]
         assert line.discount == Decimal("50.00")
         assert line.line_total == Decimal("50.00")
+
+
+# =============================================================================
+# TestConcurrentUpsert — IntegrityError race condition paths
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestConcurrentUpsert:
+    def test_ticket_upsert_handles_integrity_error(self, cart, ticket_type):
+        CartItem.objects.create(cart=cart, ticket_type=ticket_type, quantity=1)
+
+        with patch.object(CartItem.objects, "create", side_effect=IntegrityError("duplicate key")):
+            item = _upsert_ticket_item(cart=cart, ticket_type=ticket_type, qty=2, item=None, existing_in_orders=0)
+
+        assert item.quantity == 3
+
+    def test_addon_upsert_handles_integrity_error(self, cart, conference):
+        addon = AddOn.objects.create(
+            conference=conference,
+            name="Parking",
+            slug="parking-upsert",
+            price=Decimal("25.00"),
+            is_active=True,
+        )
+        CartItem.objects.create(cart=cart, addon=addon, quantity=1)
+
+        with patch.object(CartItem.objects, "create", side_effect=IntegrityError("duplicate key")):
+            item = _upsert_addon_item(cart=cart, addon=addon, qty=2, item=None)
+
+        assert item.quantity == 3
+
+
+# =============================================================================
+# TestEdgeCaseHelpers — defensive fallback paths
+# =============================================================================
+
+
+class TestEdgeCaseHelpers:
+    def test_cart_item_description_unknown(self):
+        item = SimpleNamespace(ticket_type=None, addon=None)
+        assert _cart_item_description(item) == "Unknown item"
+
+    def test_item_is_voucher_applicable_no_type(self):
+        item = SimpleNamespace(ticket_type_id=None, addon_id=None)
+        assert _item_is_voucher_applicable(item, None, None) is False
+
+    @pytest.mark.django_db
+    def test_apply_voucher_discounts_unknown_type(self, cart, ticket_type, conference):
+        CartService.add_ticket(cart, ticket_type, qty=1)
+        voucher = Voucher.objects.create(
+            conference=conference,
+            code="WEIRD",
+            voucher_type="comp",
+            discount_value=Decimal("10.00"),
+            max_uses=10,
+            is_active=True,
+        )
+        # Force an unrecognized voucher_type value
+        Voucher.objects.filter(pk=voucher.pk).update(voucher_type="unknown_type")
+        voucher.refresh_from_db()
+
+        line = LineItemSummary(
+            item_id=1,
+            description="General",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            discount=Decimal("0.00"),
+            line_total=Decimal("100.00"),
+        )
+        result = _apply_voucher_discounts(voucher, [line], [(0, Decimal("100.00"))])
+        assert result == Decimal("0.00")
