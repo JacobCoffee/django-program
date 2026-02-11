@@ -109,9 +109,8 @@ class PaymentService:
         )
 
         logger.info(
-            "Initiated Stripe payment for order %s (intent %s)",
+            "Initiated Stripe payment for order %s",
             order.reference,
-            payment_intent_id,
         )
         return client_secret
 
