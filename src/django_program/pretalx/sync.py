@@ -137,9 +137,13 @@ class PretalxSyncService:
                 },
             )
 
-            speakers = Speaker.objects.filter(
-                conference=self.conference,
-                pretalx_code__in=api_talk.speaker_codes,
+            speakers = (
+                Speaker.objects.filter(
+                    conference=self.conference,
+                    pretalx_code__in=api_talk.speaker_codes,
+                )
+                if api_talk.speaker_codes
+                else Speaker.objects.none()
             )
             talk.speakers.set(speakers)
 
@@ -157,6 +161,10 @@ class PretalxSyncService:
         slots are classified by title heuristics: titles containing "break" or
         "lunch" become ``BREAK``, "social" or "party" become ``SOCIAL``, and
         everything else becomes ``OTHER``.
+
+        Slots that no longer appear in the Pretalx schedule (e.g. because a
+        slot was rescheduled to a different time or room) are deleted after the
+        sync completes.
 
         Returns:
             The number of schedule slots synced.
@@ -202,6 +210,16 @@ class PretalxSyncService:
 
             logger.debug("Synced slot %s at %s in %s", title, start_dt, api_slot.room)
             count += 1
+
+        stale_count, _ = (
+            ScheduleSlot.objects.filter(
+                conference=self.conference,
+            )
+            .exclude(synced_at=now)
+            .delete()
+        )
+        if stale_count:
+            logger.info("Removed %d stale schedule slots for %s", stale_count, self.conference.slug)
 
         logger.info("Synced %d schedule slots for %s", count, self.conference.slug)
         return count
