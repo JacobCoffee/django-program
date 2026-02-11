@@ -102,7 +102,7 @@ class CheckoutService:
 
         _revalidate_stock(items)
 
-        summary = CartService.get_summary(cart)
+        summary = CartService.get_summary_from_items(cart, items)
 
         voucher = cart.voucher
         _validate_voucher_for_checkout(voucher)
@@ -133,8 +133,11 @@ class CheckoutService:
             except IntegrityError:
                 continue
 
+        items_by_id = {item.pk: item for item in items}
         for line in summary.items:
-            cart_item = next(i for i in items if i.pk == line.item_id)
+            cart_item = items_by_id.get(line.item_id)
+            if cart_item is None:
+                raise ValidationError("Cart changed during checkout. Please try again.")
             OrderLineItem.objects.create(
                 order=order,
                 description=line.description,
