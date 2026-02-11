@@ -260,6 +260,9 @@ deprecated = "warn"
 unresolved-attribute = "warn"
 # Django field types (CharField etc.) don't resolve to Python builtins
 invalid-return-type = "warn"
+# Django field descriptors don't implement SupportsInt/SupportsIndex protocols
+unsupported-operator = "warn"
+invalid-argument-type = "warn"
 
 [tool.ty.src]
 exclude = ["docs/conf.py", "tests/", "refcode/"]
