@@ -113,9 +113,7 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
         self._warn_deferred_keys(conf)
-
         sections_data: list[dict[str, Any]] = conf["sections"]
-
         if dry_run:
             self._print_dry_run(conf, sections_data)
             return
@@ -156,7 +154,6 @@ class Command(BaseCommand):
         fields.pop("slug", None)
 
         existing = Conference.objects.filter(slug=slug).first()
-
         if existing and not update:
             raise CommandError(f"Conference with slug '{slug}' already exists. Use --update to update it.")
 
@@ -201,7 +198,6 @@ class Command(BaseCommand):
                 fields["order"] = position
 
             existing = Section.objects.filter(conference=conference, slug=slug).first()
-
             if existing and update:
                 for attr, value in fields.items():
                     setattr(existing, attr, value)
@@ -227,7 +223,6 @@ class Command(BaseCommand):
             sections_data: List of section mappings from the config file.
         """
         self.stdout.write(self.style.MIGRATE_HEADING("\n[DRY RUN] No database changes will be made.\n"))
-
         self.stdout.write(self.style.MIGRATE_HEADING("Conference:"))
         self.stdout.write(f"  Name:       {conf['name']}")
         self.stdout.write(f"  Slug:       {conf['slug']}")
