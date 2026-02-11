@@ -116,15 +116,16 @@ class CartService:
                 rule violations (unavailable, out of stock, limit exceeded,
                 or voucher required).
         """
+        _assert_cart_open(cart)
+
         if qty < 1:
             raise ValidationError("Quantity must be at least 1.")
 
+        if ticket_type.conference_id != cart.conference_id:
+            raise ValidationError("Ticket type does not belong to this cart's conference.")
+
         if not ticket_type.is_available:
             raise ValidationError(f"Ticket type '{ticket_type.name}' is not available.")
-
-        remaining = ticket_type.remaining_quantity
-        if remaining is not None and remaining < qty:
-            raise ValidationError(f"Only {remaining} tickets of type '{ticket_type.name}' remaining.")
 
         existing_in_cart = (
             cart.items.filter(ticket_type=ticket_type).aggregate(
@@ -132,6 +133,11 @@ class CartService:
             )["total"]
             or 0
         )
+
+        remaining = ticket_type.remaining_quantity
+        if remaining is not None and remaining < existing_in_cart + qty:
+            raise ValidationError(f"Only {remaining} tickets of type '{ticket_type.name}' remaining.")
+
         existing_in_orders = (
             OrderLineItem.objects.filter(
                 order__user=cart.user,
@@ -192,8 +198,13 @@ class CartService:
                 rule violations (inactive, out of window, prerequisite
                 ticket missing, or out of stock).
         """
+        _assert_cart_open(cart)
+
         if qty < 1:
             raise ValidationError("Quantity must be at least 1.")
+
+        if addon.conference_id != cart.conference_id:
+            raise ValidationError("Add-on does not belong to this cart's conference.")
 
         _validate_addon_available(addon)
 
@@ -211,6 +222,13 @@ class CartService:
                     f"{', '.join(str(pk) for pk in sorted(required_ticket_ids))}."
                 )
 
+        existing_in_cart = (
+            cart.items.filter(addon=addon).aggregate(
+                total=models.Sum("quantity"),
+            )["total"]
+            or 0
+        )
+
         if addon.total_quantity > 0:
             sold = (
                 OrderLineItem.objects.filter(
@@ -223,7 +241,7 @@ class CartService:
                 or 0
             )
             remaining = addon.total_quantity - sold
-            if remaining < qty:
+            if remaining < existing_in_cart + qty:
                 raise ValidationError(f"Only {remaining} of add-on '{addon.name}' remaining.")
 
         item = cart.items.filter(addon=addon).first()
@@ -257,6 +275,8 @@ class CartService:
             ValidationError: If the item does not exist or does not belong
                 to this cart.
         """
+        _assert_cart_open(cart)
+
         try:
             item = cart.items.get(pk=item_id)
         except CartItem.DoesNotExist:
@@ -287,6 +307,8 @@ class CartService:
             ValidationError: If the new quantity violates stock or per-user
                 limits, or if the item does not belong to this cart.
         """
+        _assert_cart_open(cart)
+
         if qty <= 0:
             CartService.remove_item(cart, item_id)
             return None
@@ -321,6 +343,8 @@ class CartService:
             ValidationError: If the voucher code is not found, not valid,
                 or does not belong to this cart's conference.
         """
+        _assert_cart_open(cart)
+
         try:
             voucher = Voucher.objects.get(code=code, conference=cart.conference)
         except Voucher.DoesNotExist:
@@ -373,6 +397,16 @@ class CartService:
             discount=total_discount,
             total=max(subtotal - total_discount, Decimal("0.00")),
         )
+
+
+def _assert_cart_open(cart: Cart) -> None:
+    """Raise ValidationError when the cart cannot be modified."""
+    now = timezone.now()
+    if cart.expires_at and cart.expires_at < now:
+        raise ValidationError("Cart has expired.")
+
+    if cart.status != Cart.Status.OPEN:
+        raise ValidationError("Only open carts can be modified.")
 
 
 def _resolve_voucher_scope(
