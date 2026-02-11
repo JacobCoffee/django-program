@@ -147,57 +147,6 @@ class PretalxSyncService:
                 count = progress["count"]
         return count
 
-    def _prepare_speaker_batches(
-        self,
-        api_speakers: list[object],
-        existing: dict[str, Speaker],
-        users_by_email: dict[str, object],
-        now: datetime,
-    ) -> tuple[list[Speaker], list[Speaker]]:
-        """Sort API speakers into create and update batches.
-
-        Args:
-            api_speakers: Speaker DTOs fetched from the Pretalx API.
-            existing: Map of pretalx_code to existing Speaker instances.
-            users_by_email: Map of lowercased email to Django User instances.
-            now: Timestamp to set as ``synced_at``.
-
-        Returns:
-            A tuple of ``(to_create, to_update)`` Speaker lists.
-        """
-        to_create: list[Speaker] = []
-        to_update: list[Speaker] = []
-
-        for api_speaker in api_speakers:
-            if api_speaker.code in existing:
-                speaker = existing[api_speaker.code]
-                speaker.name = api_speaker.name
-                speaker.biography = api_speaker.biography
-                speaker.avatar_url = api_speaker.avatar_url
-                speaker.email = api_speaker.email
-                speaker.synced_at = now
-                if api_speaker.email and speaker.user is None:
-                    matched = users_by_email.get(api_speaker.email.lower())
-                    if matched:
-                        speaker.user = matched
-                to_update.append(speaker)
-            else:
-                user = users_by_email.get(api_speaker.email.lower()) if api_speaker.email else None
-                to_create.append(
-                    Speaker(
-                        conference=self.conference,
-                        pretalx_code=api_speaker.code,
-                        name=api_speaker.name,
-                        biography=api_speaker.biography,
-                        avatar_url=api_speaker.avatar_url,
-                        email=api_speaker.email,
-                        synced_at=now,
-                        user=user,
-                    )
-                )
-
-        return to_create, to_update
-
     def sync_speakers_iter(self) -> Iterator[dict[str, int]]:
         """Bulk sync speakers from Pretalx, yielding progress updates.
 
@@ -217,16 +166,21 @@ class PretalxSyncService:
         existing = {s.pretalx_code: s for s in Speaker.objects.filter(conference=self.conference)}
 
         emails = {s.email.lower() for s in api_speakers if s.email}
-        users_by_email = {}
+        users_by_email: dict[str, object] = {}
         if emails:
             for u in User.objects.annotate(
                 email_lower=Lower("email"),
             ).filter(email_lower__in=emails):
                 users_by_email[u.email_lower] = u
 
-        to_create, to_update = self._prepare_speaker_batches(api_speakers, existing, users_by_email, now)
+        to_create: list[Speaker] = []
+        to_update: list[Speaker] = []
 
-        for i in range(total):
+        for i, api_speaker in enumerate(api_speakers):
+            target = to_update if api_speaker.code in existing else to_create
+            target.append(
+                _build_speaker(api_speaker, self.conference, existing, users_by_email, now),
+            )
             if (i + 1) % _PROGRESS_CHUNK == 0 or (i + 1) == total:
                 yield {"current": i + 1, "total": total}
 
@@ -489,6 +443,40 @@ class PretalxSyncService:
             "talks": self.sync_talks(),
             "schedule_slots": self.sync_schedule(),
         }
+
+
+def _build_speaker(
+    api_speaker: object,
+    conference: Conference,
+    existing: dict[str, Speaker],
+    users_by_email: dict[str, object],
+    now: datetime,
+) -> Speaker:
+    """Build or update a Speaker instance from an API speaker DTO."""
+    if api_speaker.code in existing:
+        speaker = existing[api_speaker.code]
+        speaker.name = api_speaker.name
+        speaker.biography = api_speaker.biography
+        speaker.avatar_url = api_speaker.avatar_url
+        speaker.email = api_speaker.email
+        speaker.synced_at = now
+        if api_speaker.email and speaker.user is None:
+            matched = users_by_email.get(api_speaker.email.lower())
+            if matched:
+                speaker.user = matched
+        return speaker
+
+    user = users_by_email.get(api_speaker.email.lower()) if api_speaker.email else None
+    return Speaker(
+        conference=conference,
+        pretalx_code=api_speaker.code,
+        name=api_speaker.name,
+        biography=api_speaker.biography,
+        avatar_url=api_speaker.avatar_url,
+        email=api_speaker.email,
+        synced_at=now,
+        user=user,
+    )
 
 
 def _parse_iso_datetime(value: str) -> datetime | None:
