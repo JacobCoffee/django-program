@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.dispatch import Signal
 
 from django_program.conference.models import Conference, Section
@@ -359,6 +360,60 @@ def test_cart_item_line_total(conference: Conference, user):
     )
 
     assert item.line_total == Decimal("600.00")
+
+
+@pytest.mark.django_db
+def test_cart_item_unique_ticket_per_cart_constraint(conference: Conference, user):
+    ticket = TicketType.objects.create(
+        conference=conference,
+        name="Unique Ticket",
+        slug="unique-ticket",
+        price=Decimal("99.00"),
+    )
+    cart = Cart.objects.create(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+    )
+    CartItem.objects.create(
+        cart=cart,
+        ticket_type=ticket,
+        quantity=1,
+    )
+
+    with pytest.raises(IntegrityError):
+        CartItem.objects.create(
+            cart=cart,
+            ticket_type=ticket,
+            quantity=2,
+        )
+
+
+@pytest.mark.django_db
+def test_cart_item_unique_addon_per_cart_constraint(conference: Conference, user):
+    addon = AddOn.objects.create(
+        conference=conference,
+        name="Unique Addon",
+        slug="unique-addon",
+        price=Decimal("19.00"),
+    )
+    cart = Cart.objects.create(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+    )
+    CartItem.objects.create(
+        cart=cart,
+        addon=addon,
+        quantity=1,
+    )
+
+    with pytest.raises(IntegrityError):
+        CartItem.objects.create(
+            cart=cart,
+            addon=addon,
+            quantity=2,
+        )
 
 
 @pytest.mark.django_db

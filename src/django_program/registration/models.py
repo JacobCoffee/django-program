@@ -300,6 +300,16 @@ class CartItem(models.Model):
                 ),
                 name="registration_cartitem_exactly_one_type",
             ),
+            models.UniqueConstraint(
+                fields=["cart", "ticket_type"],
+                condition=models.Q(ticket_type__isnull=False),
+                name="registration_cartitem_unique_ticket_per_cart",
+            ),
+            models.UniqueConstraint(
+                fields=["cart", "addon"],
+                condition=models.Q(addon__isnull=False),
+                name="registration_cartitem_unique_addon_per_cart",
+            ),
         ]
 
     def __str__(self) -> str:
