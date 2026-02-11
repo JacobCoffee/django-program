@@ -336,6 +336,37 @@ class TestCheckout:
         with pytest.raises(ValidationError, match="no longer valid"):
             CheckoutService.checkout(cart)
 
+    def test_rejects_checkout_for_voucher_required_ticket_when_voucher_removed(self, cart, conference):
+        hidden_ticket = TicketType.objects.create(
+            conference=conference,
+            name="Hidden",
+            slug="hidden",
+            price=Decimal("100.00"),
+            total_quantity=0,
+            limit_per_user=10,
+            is_active=True,
+            requires_voucher=True,
+        )
+        voucher = Voucher.objects.create(
+            conference=conference,
+            code="HIDDEN",
+            voucher_type=Voucher.VoucherType.COMP,
+            max_uses=5,
+            is_active=True,
+            unlocks_hidden_tickets=True,
+        )
+        voucher.applicable_ticket_types.add(hidden_ticket)
+
+        CartService.apply_voucher(cart, "HIDDEN")
+        CartService.add_ticket(cart, hidden_ticket, qty=1)
+        CartService.remove_voucher(cart)
+
+        with pytest.raises(ValidationError, match="requires a voucher"):
+            CheckoutService.checkout(cart)
+
+        voucher.refresh_from_db()
+        assert voucher.times_used == 0
+
     def test_retries_on_reference_collision(self, cart_with_ticket):
         """IntegrityError on duplicate reference triggers retry with new reference."""
         real_create = Order.objects.create

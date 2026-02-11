@@ -100,11 +100,11 @@ class CheckoutService:
         if not items:
             raise ValidationError("Cannot check out an empty cart.")
 
-        _revalidate_stock(items)
+        voucher = cart.voucher
+        _revalidate_stock(items, voucher=voucher)
 
         summary = CartService.get_summary_from_items(cart, items)
 
-        voucher = cart.voucher
         _validate_voucher_for_checkout(voucher)
         voucher_code = voucher.code if voucher else ""
         voucher_details = _snapshot_voucher(voucher) if voucher else ""
@@ -339,7 +339,7 @@ def _increment_voucher_usage(*, voucher: Voucher | None, now: object) -> None:
         raise ValidationError(f"Voucher code '{voucher.code}' is no longer valid.")
 
 
-def _revalidate_stock(items: list[object]) -> None:
+def _revalidate_stock(items: list[object], *, voucher: Voucher | None) -> None:
     """Re-validate stock availability for all cart items at checkout time.
 
     Raises:
@@ -349,16 +349,24 @@ def _revalidate_stock(items: list[object]) -> None:
     ticket_type_ids = {item.ticket_type_id for item in items if item.ticket_type_id is not None}
     for item in items:
         if item.ticket_type is not None:
-            _revalidate_ticket_stock(item)
+            _revalidate_ticket_stock(item, voucher=voucher)
         elif item.addon is not None:
             _revalidate_addon_stock(item, now, ticket_type_ids)
 
 
-def _revalidate_ticket_stock(item: object) -> None:
+def _revalidate_ticket_stock(item: object, *, voucher: Voucher | None) -> None:
     """Validate a ticket type is still available with sufficient stock."""
     tt = item.ticket_type
     if not tt.is_available:
         raise ValidationError(f"Ticket type '{tt.name}' is no longer available.")
+    if tt.requires_voucher:
+        if voucher is None or not voucher.unlocks_hidden_tickets:
+            raise ValidationError(
+                f"Ticket type '{tt.name}' requires a voucher that unlocks hidden tickets."
+            )
+        applicable_ids = set(voucher.applicable_ticket_types.values_list("pk", flat=True))
+        if applicable_ids and tt.pk not in applicable_ids:
+            raise ValidationError(f"The applied voucher does not cover ticket type '{tt.name}'.")
     remaining = tt.remaining_quantity
     if remaining is not None and remaining < item.quantity:
         raise ValidationError(f"Only {remaining} tickets of type '{tt.name}' remaining, but {item.quantity} requested.")
