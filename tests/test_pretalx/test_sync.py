@@ -37,7 +37,7 @@ def test_sync_service_uses_django_program_pretalx_config(settings):
 
 
 @pytest.mark.django_db
-def test_sync_talks_clears_speakers_when_api_returns_none(settings):
+def test_sync_talks_clears_speakers_when_api_returns_empty_list(settings):
     settings.DJANGO_PROGRAM = {"pretalx": {"base_url": "https://pretalx.example.com", "token": None}}
     conference = Conference.objects.create(
         name="PyCon Test",
