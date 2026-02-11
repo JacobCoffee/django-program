@@ -266,3 +266,4 @@ exclude = ["docs/conf.py", "tests/", "refcode/"]
 
 [tool.uv]
 default-groups = ["dev"]
+constraint-dependencies = ["django>=5.2,<5.3"]
