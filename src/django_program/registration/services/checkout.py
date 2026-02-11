@@ -7,10 +7,11 @@ All methods are stateless and operate on model instances directly.
 import json
 import secrets
 import string
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from django_program.registration.models import (
@@ -85,13 +86,17 @@ class CheckoutService:
             ValidationError: If the cart is empty, expired, not open, or if
                 stock/price validation fails at checkout time.
         """
+        now = timezone.now()
+        _expire_stale_pending_orders(conference_id=cart.conference_id, now=now)
+        cart = Cart.objects.select_for_update().select_related("voucher").get(pk=cart.pk)
+
         if cart.status != Cart.Status.OPEN:
             raise ValidationError("Only open carts can be checked out.")
 
-        if cart.expires_at and cart.expires_at < timezone.now():
+        if cart.expires_at and cart.expires_at < now:
             raise ValidationError("Cart has expired.")
 
-        items = list(cart.items.select_related("ticket_type", "addon"))
+        items = list(cart.items.select_for_update().select_related("ticket_type", "addon"))
         if not items:
             raise ValidationError("Cannot check out an empty cart.")
 
@@ -99,28 +104,33 @@ class CheckoutService:
 
         summary = CartService.get_summary(cart)
 
-        reference = _generate_reference()
-        while Order.objects.filter(reference=reference).exists():
-            reference = _generate_reference()
-
         voucher = cart.voucher
         voucher_code = voucher.code if voucher else ""
         voucher_details = _snapshot_voucher(voucher) if voucher else ""
-
-        order = Order.objects.create(
-            conference=cart.conference,
-            user=cart.user,
-            status=Order.Status.PENDING,
-            subtotal=summary.subtotal,
-            discount_amount=summary.discount,
-            total=summary.total,
-            voucher_code=voucher_code,
-            voucher_details=voucher_details,
-            billing_name=billing_name,
-            billing_email=billing_email,
-            billing_company=billing_company,
-            reference=reference,
-        )
+        hold_expires_at = now + timedelta(minutes=get_config().pending_order_expiry_minutes)
+        while True:
+            reference = _generate_reference()
+            try:
+                order_kwargs = {
+                    "conference": cart.conference,
+                    "user": cart.user,
+                    "status": Order.Status.PENDING,
+                    "subtotal": summary.subtotal,
+                    "discount_amount": summary.discount,
+                    "total": summary.total,
+                    "voucher_code": voucher_code,
+                    "voucher_details": voucher_details,
+                    "billing_name": billing_name,
+                    "billing_email": billing_email,
+                    "billing_company": billing_company,
+                    "reference": reference,
+                }
+                if _order_has_hold_expires_at():
+                    order_kwargs["hold_expires_at"] = hold_expires_at
+                order = Order.objects.create(**order_kwargs)
+                break
+            except IntegrityError:
+                continue
 
         for line in summary.items:
             cart_item = next(i for i in items if i.pk == line.item_id)
@@ -165,6 +175,9 @@ class CheckoutService:
             ValidationError: If the order is not PENDING, the credit is not
                 AVAILABLE, or the credit belongs to a different conference/user.
         """
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        credit = Credit.objects.select_for_update().get(pk=credit.pk)
+
         if order.status != Order.Status.PENDING:
             raise ValidationError("Credits can only be applied to pending orders.")
 
@@ -184,7 +197,10 @@ class CheckoutService:
         if remaining_balance <= Decimal("0.00"):
             raise ValidationError("Order is already fully paid.")
 
-        apply_amount = min(credit.amount, remaining_balance)
+        if credit.remaining_amount <= Decimal("0.00"):
+            raise ValidationError("Credit has no remaining balance.")
+
+        apply_amount = min(credit.remaining_amount, remaining_balance)
 
         payment = Payment.objects.create(
             order=order,
@@ -193,14 +209,19 @@ class CheckoutService:
             amount=apply_amount,
         )
 
-        credit.status = Credit.Status.APPLIED
+        credit.remaining_amount -= apply_amount
+        credit.status = Credit.Status.APPLIED if credit.remaining_amount <= Decimal("0.00") else Credit.Status.AVAILABLE
         credit.applied_to_order = order
-        credit.save(update_fields=["status", "applied_to_order", "updated_at"])
+        credit.save(update_fields=["remaining_amount", "status", "applied_to_order", "updated_at"])
 
         new_paid = paid_so_far + apply_amount
         if new_paid >= order.total:
             order.status = Order.Status.PAID
-            order.save(update_fields=["status", "updated_at"])
+            if _order_has_hold_expires_at():
+                order.hold_expires_at = None
+                order.save(update_fields=["status", "hold_expires_at", "updated_at"])
+            else:
+                order.save(update_fields=["status", "updated_at"])
             order_paid.send(sender=Order, order=order, user=order.user)
 
         return payment
@@ -210,8 +231,9 @@ class CheckoutService:
     def cancel_order(order: Order) -> Order:
         """Cancel a pending order and release associated resources.
 
-        Transitions the order to CANCELLED, decrements the voucher usage
-        counter if a voucher was used, and releases inventory back to the pool.
+        Reverses any succeeded credit payments (restoring the Credit to
+        AVAILABLE), transitions the order to CANCELLED, and decrements the
+        voucher usage counter if a voucher was used.
 
         Args:
             order: The order to cancel.
@@ -222,13 +244,21 @@ class CheckoutService:
         Raises:
             ValidationError: If the order cannot be cancelled (not PENDING).
         """
+        order = Order.objects.select_for_update().get(pk=order.pk)
+
         if order.status != Order.Status.PENDING:
             raise ValidationError(
                 f"Only pending orders can be cancelled. This order is '{order.get_status_display()}'."
             )
 
+        _reverse_credit_payments(order)
+
         order.status = Order.Status.CANCELLED
-        order.save(update_fields=["status", "updated_at"])
+        if _order_has_hold_expires_at():
+            order.hold_expires_at = None
+            order.save(update_fields=["status", "hold_expires_at", "updated_at"])
+        else:
+            order.save(update_fields=["status", "updated_at"])
 
         if order.voucher_code:
             Voucher.objects.filter(
@@ -240,40 +270,91 @@ class CheckoutService:
         return order
 
 
+def _reverse_credit_payments(order: Order) -> None:
+    """Reverse any succeeded credit payments on a pending order.
+
+    Marks each CREDIT payment as REFUNDED and restores the associated
+    Credit back to AVAILABLE so it can be reused on a future order.
+    """
+    credit_payments = order.payments.filter(
+        method=Payment.Method.CREDIT,
+        status=Payment.Status.SUCCEEDED,
+    )
+    for payment in credit_payments:
+        payment.status = Payment.Status.REFUNDED
+        payment.save(update_fields=["status"])
+
+        credit = Credit.objects.select_for_update().filter(applied_to_order=order).first()
+        if credit is None:
+            continue
+        credit.remaining_amount += payment.amount
+        credit.status = Credit.Status.AVAILABLE
+        credit.applied_to_order = None
+        credit.save(update_fields=["remaining_amount", "status", "applied_to_order", "updated_at"])
+
+
 def _revalidate_stock(items: list[object]) -> None:
     """Re-validate stock availability for all cart items at checkout time.
 
     Raises:
         ValidationError: If any item has insufficient stock.
     """
+    now = timezone.now()
     for item in items:
         if item.ticket_type is not None:
-            tt = item.ticket_type
-            if not tt.is_available:
-                raise ValidationError(f"Ticket type '{tt.name}' is no longer available.")
-            remaining = tt.remaining_quantity
-            if remaining is not None and remaining < item.quantity:
-                raise ValidationError(
-                    f"Only {remaining} tickets of type '{tt.name}' remaining, but {item.quantity} requested."
-                )
-
+            _revalidate_ticket_stock(item)
         elif item.addon is not None:
-            addon = item.addon
-            if not addon.is_active:
-                raise ValidationError(f"Add-on '{addon.name}' is no longer active.")
-            if addon.total_quantity > 0:
-                sold = (
-                    OrderLineItem.objects.filter(
-                        addon=addon,
-                        order__status__in=[
-                            Order.Status.PAID,
-                            Order.Status.PARTIALLY_REFUNDED,
-                        ],
-                    ).aggregate(total=models.Sum("quantity"))["total"]
-                    or 0
-                )
-                remaining = addon.total_quantity - sold
-                if remaining < item.quantity:
-                    raise ValidationError(
-                        f"Only {remaining} of add-on '{addon.name}' remaining, but {item.quantity} requested."
-                    )
+            _revalidate_addon_stock(item, now)
+
+
+def _revalidate_ticket_stock(item: object) -> None:
+    """Validate a ticket type is still available with sufficient stock."""
+    tt = item.ticket_type
+    if not tt.is_available:
+        raise ValidationError(f"Ticket type '{tt.name}' is no longer available.")
+    remaining = tt.remaining_quantity
+    if remaining is not None and remaining < item.quantity:
+        raise ValidationError(f"Only {remaining} tickets of type '{tt.name}' remaining, but {item.quantity} requested.")
+
+
+def _revalidate_addon_stock(item: object, now: object) -> None:
+    """Validate an add-on is still available within its window and has stock."""
+    addon = item.addon
+    if not addon.is_active:
+        raise ValidationError(f"Add-on '{addon.name}' is no longer active.")
+    if addon.available_from and now < addon.available_from:
+        raise ValidationError(f"Add-on '{addon.name}' is not yet available.")
+    if addon.available_until and now > addon.available_until:
+        raise ValidationError(f"Add-on '{addon.name}' is no longer available.")
+    if addon.total_quantity > 0:
+        sold = (
+            OrderLineItem.objects.filter(addon=addon)
+            .filter(
+                models.Q(order__status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED])
+                | models.Q(order__status=Order.Status.PENDING, order__hold_expires_at__gt=now)
+            )
+            .aggregate(total=models.Sum("quantity"))["total"]
+            or 0
+        )
+        remaining = addon.total_quantity - sold
+        if remaining < item.quantity:
+            raise ValidationError(
+                f"Only {remaining} of add-on '{addon.name}' remaining, but {item.quantity} requested."
+            )
+
+
+def _expire_stale_pending_orders(*, conference_id: int, now: object) -> None:
+    """Mark stale pending orders as cancelled so holds no longer reserve stock."""
+    if not _order_has_hold_expires_at():
+        return
+    Order.objects.filter(
+        conference_id=conference_id,
+        status=Order.Status.PENDING,
+        hold_expires_at__isnull=False,
+        hold_expires_at__lte=now,
+    ).update(status=Order.Status.CANCELLED, hold_expires_at=None)
+
+
+def _order_has_hold_expires_at() -> bool:
+    """Return True when the Order model has hold_expires_at in this runtime."""
+    return hasattr(Order, "hold_expires_at")

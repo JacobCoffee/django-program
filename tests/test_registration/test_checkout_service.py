@@ -140,6 +140,7 @@ class TestCheckout:
         assert order.billing_email == "alice@example.com"
         assert order.reference.startswith("ORD-")
         assert len(order.reference) == 12  # ORD- + 8 chars
+        assert order.hold_expires_at is not None
 
     def test_uses_custom_reference_prefix(self, cart_with_ticket, settings):
         settings.DJANGO_PROGRAM = {"order_reference_prefix": "PYCON"}
@@ -174,6 +175,66 @@ class TestCheckout:
         assert addon_line.quantity == 1
         assert addon_line.unit_price == Decimal("50.00")
         assert addon_line.description == "Workshop"
+
+    def test_pending_order_reserves_inventory(self, conference, user, other_user):
+        limited = TicketType.objects.create(
+            conference=conference,
+            name="Reserved",
+            slug="reserved",
+            price=Decimal("100.00"),
+            total_quantity=2,
+            limit_per_user=10,
+            is_active=True,
+        )
+        cart1 = Cart.objects.create(
+            user=user,
+            conference=conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        CartService.add_ticket(cart1, limited, qty=2)
+        order = CheckoutService.checkout(cart1)
+        assert order.status == Order.Status.PENDING
+        assert order.hold_expires_at is not None
+
+        cart2 = Cart.objects.create(
+            user=other_user,
+            conference=conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        with pytest.raises(ValidationError, match=r"not available|remaining"):
+            CartService.add_ticket(cart2, limited, qty=1)
+
+    def test_expired_pending_order_releases_inventory(self, conference, user, other_user):
+        limited = TicketType.objects.create(
+            conference=conference,
+            name="Reserved",
+            slug="reserved-expired",
+            price=Decimal("100.00"),
+            total_quantity=2,
+            limit_per_user=10,
+            is_active=True,
+        )
+        cart1 = Cart.objects.create(
+            user=user,
+            conference=conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        CartService.add_ticket(cart1, limited, qty=2)
+        order = CheckoutService.checkout(cart1)
+        order.hold_expires_at = timezone.now() - timedelta(minutes=1)
+        order.save(update_fields=["hold_expires_at", "updated_at"])
+
+        cart2 = Cart.objects.create(
+            user=other_user,
+            conference=conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        item = CartService.add_ticket(cart2, limited, qty=1)
+        assert item.quantity == 1
 
     def test_marks_cart_as_checked_out(self, cart_with_ticket):
         CheckoutService.checkout(cart_with_ticket)
@@ -394,11 +455,13 @@ class TestApplyCredit:
         credit.refresh_from_db()
         assert credit.status == Credit.Status.APPLIED
         assert credit.applied_to_order == order
+        assert credit.remaining_amount == Decimal("0.00")
 
     def test_fully_paid_transitions_to_paid(self, conference, user):
         order = _make_order(conference=conference, user=user, status=Order.Status.PENDING)
         order.total = Decimal("50.00")
-        order.save(update_fields=["total"])
+        order.hold_expires_at = timezone.now() + timedelta(minutes=15)
+        order.save(update_fields=["total", "hold_expires_at", "updated_at"])
 
         credit = Credit.objects.create(
             user=user,
@@ -411,6 +474,7 @@ class TestApplyCredit:
 
         order.refresh_from_db()
         assert order.status == Order.Status.PAID
+        assert order.hold_expires_at is None
 
     def test_partial_credit_does_not_change_status(self, conference, user):
         order = _make_order(conference=conference, user=user, status=Order.Status.PENDING)
@@ -429,6 +493,8 @@ class TestApplyCredit:
         assert payment.amount == Decimal("30.00")
         order.refresh_from_db()
         assert order.status == Order.Status.PENDING
+        credit.refresh_from_db()
+        assert credit.remaining_amount == Decimal("0.00")
 
     def test_credit_capped_at_remaining_balance(self, conference, user):
         order = _make_order(conference=conference, user=user, status=Order.Status.PENDING)
@@ -445,6 +511,9 @@ class TestApplyCredit:
         payment = CheckoutService.apply_credit(order, credit)
 
         assert payment.amount == Decimal("50.00")
+        credit.refresh_from_db()
+        assert credit.status == Credit.Status.AVAILABLE
+        assert credit.remaining_amount == Decimal("150.00")
 
     def test_rejects_non_pending_order(self, conference, user):
         order = _make_order(conference=conference, user=user, status=Order.Status.PAID)
@@ -645,3 +714,33 @@ class TestCancelOrder:
         result = CheckoutService.cancel_order(order)
 
         assert result.status == Order.Status.CANCELLED
+
+    def test_reverses_credit_payments_on_cancel(self, conference, user):
+        order = _make_order(conference=conference, user=user, status=Order.Status.PENDING)
+        order.total = Decimal("100.00")
+        order.save(update_fields=["total"])
+
+        credit = Credit.objects.create(
+            user=user,
+            conference=conference,
+            amount=Decimal("30.00"),
+            status=Credit.Status.AVAILABLE,
+        )
+        CheckoutService.apply_credit(order, credit)
+
+        # Order is still PENDING (partial payment), credit is APPLIED
+        order.refresh_from_db()
+        assert order.status == Order.Status.PENDING
+        credit.refresh_from_db()
+        assert credit.status == Credit.Status.APPLIED
+
+        CheckoutService.cancel_order(order)
+
+        # Credit payment reversed, credit restored
+        credit.refresh_from_db()
+        assert credit.status == Credit.Status.AVAILABLE
+        assert credit.applied_to_order is None
+        assert credit.remaining_amount == Decimal("30.00")
+
+        payment = order.payments.first()
+        assert payment.status == Payment.Status.REFUNDED
