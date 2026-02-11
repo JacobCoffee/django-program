@@ -218,7 +218,8 @@ class Cart(models.Model):
     """A user's shopping cart for a conference.
 
     Carts hold ticket and add-on selections before checkout. They transition
-    through statuses from ``OPEN`` to ``CHECKED_OUT`` on successful payment,
+    through statuses from ``OPEN`` to ``CHECKED_OUT`` when submitted to
+    checkout and converted to an order (which may still be pending payment),
     or to ``EXPIRED`` / ``ABANDONED`` when the session times out.
     """
 
