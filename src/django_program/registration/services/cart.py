@@ -132,25 +132,13 @@ class CartService:
 
         item = cart.items.select_for_update().filter(ticket_type=ticket_type).first()
         existing_in_cart = item.quantity if item is not None else 0
-
-        remaining = ticket_type.remaining_quantity
-        if remaining is not None and remaining < existing_in_cart + qty:
-            raise ValidationError(f"Only {remaining} tickets of type '{ticket_type.name}' remaining.")
-
-        existing_in_orders = (
-            OrderLineItem.objects.filter(
-                order__user=cart.user,
-                order__conference=cart.conference,
-                ticket_type=ticket_type,
-                order__status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED],
-            ).aggregate(total=models.Sum("quantity"))["total"]
-            or 0
+        existing_in_orders = _ticket_order_quantity(cart, ticket_type)
+        _validate_ticket_stock_and_limit(
+            ticket_type=ticket_type,
+            qty=qty,
+            existing_in_cart=existing_in_cart,
+            existing_in_orders=existing_in_orders,
         )
-        if existing_in_cart + existing_in_orders + qty > ticket_type.limit_per_user:
-            raise ValidationError(
-                f"Adding {qty} would exceed the per-user limit of "
-                f"{ticket_type.limit_per_user} for '{ticket_type.name}'."
-            )
 
         if ticket_type.requires_voucher:
             voucher = cart.voucher
@@ -162,31 +150,13 @@ class CartService:
             if applicable_ids and ticket_type.pk not in applicable_ids:
                 raise ValidationError(f"The applied voucher does not cover ticket type '{ticket_type.name}'.")
 
-        if item is not None:
-            item.quantity += qty
-            item.save(update_fields=["quantity"])
-        else:
-            try:
-                item = CartItem.objects.create(
-                    cart=cart,
-                    ticket_type=ticket_type,
-                    quantity=qty,
-                )
-            except IntegrityError:
-                # Another transaction inserted the same cart/ticket row.
-                item = cart.items.select_for_update().get(ticket_type=ticket_type)
-                remaining = ticket_type.remaining_quantity
-                if remaining is not None and remaining < item.quantity + qty:
-                    raise ValidationError(f"Only {remaining} tickets of type '{ticket_type.name}' remaining.") from None
-
-                if item.quantity + existing_in_orders + qty > ticket_type.limit_per_user:
-                    raise ValidationError(
-                        f"Adding {qty} would exceed the per-user limit of "
-                        f"{ticket_type.limit_per_user} for '{ticket_type.name}'."
-                    ) from None
-
-                item.quantity += qty
-                item.save(update_fields=["quantity"])
+        item = _upsert_ticket_item(
+            cart=cart,
+            ticket_type=ticket_type,
+            qty=qty,
+            item=item,
+            existing_in_orders=existing_in_orders,
+        )
 
         _extend_cart_expiry(cart)
         return item
@@ -238,52 +208,8 @@ class CartService:
 
         item = cart.items.select_for_update().filter(addon=addon).first()
         existing_in_cart = item.quantity if item is not None else 0
-
-        if addon.total_quantity > 0:
-            sold = (
-                OrderLineItem.objects.filter(
-                    addon=addon,
-                    order__status__in=[
-                        Order.Status.PAID,
-                        Order.Status.PARTIALLY_REFUNDED,
-                    ],
-                ).aggregate(total=models.Sum("quantity"))["total"]
-                or 0
-            )
-            remaining = addon.total_quantity - sold
-            if remaining < existing_in_cart + qty:
-                raise ValidationError(f"Only {remaining} of add-on '{addon.name}' remaining.")
-
-        if item is not None:
-            item.quantity += qty
-            item.save(update_fields=["quantity"])
-        else:
-            try:
-                item = CartItem.objects.create(
-                    cart=cart,
-                    addon=addon,
-                    quantity=qty,
-                )
-            except IntegrityError:
-                # Another transaction inserted the same cart/add-on row.
-                item = cart.items.select_for_update().get(addon=addon)
-                if addon.total_quantity > 0:
-                    sold = (
-                        OrderLineItem.objects.filter(
-                            addon=addon,
-                            order__status__in=[
-                                Order.Status.PAID,
-                                Order.Status.PARTIALLY_REFUNDED,
-                            ],
-                        ).aggregate(total=models.Sum("quantity"))["total"]
-                        or 0
-                    )
-                    remaining = addon.total_quantity - sold
-                    if remaining < item.quantity + qty:
-                        raise ValidationError(f"Only {remaining} of add-on '{addon.name}' remaining.") from None
-
-                item.quantity += qty
-                item.save(update_fields=["quantity"])
+        _validate_addon_stock(addon, existing_in_cart + qty)
+        item = _upsert_addon_item(cart=cart, addon=addon, qty=qty, item=item)
 
         _extend_cart_expiry(cart)
         return item
@@ -439,6 +365,113 @@ def _assert_cart_open(cart: Cart) -> None:
         raise ValidationError("Only open carts can be modified.")
 
 
+def _ticket_order_quantity(cart: Cart, ticket_type: TicketType) -> int:
+    """Return quantity already purchased by this user for this ticket."""
+    return (
+        OrderLineItem.objects.filter(
+            order__user=cart.user,
+            order__conference=cart.conference,
+            ticket_type=ticket_type,
+            order__status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED],
+        ).aggregate(total=models.Sum("quantity"))["total"]
+        or 0
+    )
+
+
+def _validate_ticket_stock_and_limit(
+    *,
+    ticket_type: TicketType,
+    qty: int,
+    existing_in_cart: int,
+    existing_in_orders: int,
+) -> None:
+    """Validate ticket stock and per-user limits for add quantity."""
+    remaining = ticket_type.remaining_quantity
+    if remaining is not None and remaining < existing_in_cart + qty:
+        raise ValidationError(f"Only {remaining} tickets of type '{ticket_type.name}' remaining.")
+
+    if existing_in_cart + existing_in_orders + qty > ticket_type.limit_per_user:
+        raise ValidationError(
+            f"Adding {qty} would exceed the per-user limit of {ticket_type.limit_per_user} for '{ticket_type.name}'."
+        )
+
+
+def _upsert_ticket_item(
+    *,
+    cart: Cart,
+    ticket_type: TicketType,
+    qty: int,
+    item: CartItem | None,
+    existing_in_orders: int,
+) -> CartItem:
+    """Increment/create ticket cart item safely under concurrent inserts."""
+    if item is not None:
+        item.quantity += qty
+        item.save(update_fields=["quantity"])
+        return item
+
+    try:
+        return CartItem.objects.create(
+            cart=cart,
+            ticket_type=ticket_type,
+            quantity=qty,
+        )
+    except IntegrityError:
+        item = cart.items.select_for_update().get(ticket_type=ticket_type)
+        _validate_ticket_stock_and_limit(
+            ticket_type=ticket_type,
+            qty=qty,
+            existing_in_cart=item.quantity,
+            existing_in_orders=existing_in_orders,
+        )
+        item.quantity += qty
+        item.save(update_fields=["quantity"])
+        return item
+
+
+def _addon_sold_quantity(addon: AddOn) -> int:
+    """Return quantity already sold for an add-on."""
+    return (
+        OrderLineItem.objects.filter(
+            addon=addon,
+            order__status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED],
+        ).aggregate(total=models.Sum("quantity"))["total"]
+        or 0
+    )
+
+
+def _validate_addon_stock(addon: AddOn, desired_total_qty: int) -> None:
+    """Validate add-on stock against desired total in-cart quantity."""
+    if addon.total_quantity <= 0:
+        return
+
+    sold = _addon_sold_quantity(addon)
+    remaining = addon.total_quantity - sold
+    if remaining < desired_total_qty:
+        raise ValidationError(f"Only {remaining} of add-on '{addon.name}' remaining.")
+
+
+def _upsert_addon_item(*, cart: Cart, addon: AddOn, qty: int, item: CartItem | None) -> CartItem:
+    """Increment/create add-on cart item safely under concurrent inserts."""
+    if item is not None:
+        item.quantity += qty
+        item.save(update_fields=["quantity"])
+        return item
+
+    try:
+        return CartItem.objects.create(
+            cart=cart,
+            addon=addon,
+            quantity=qty,
+        )
+    except IntegrityError:
+        item = cart.items.select_for_update().get(addon=addon)
+        _validate_addon_stock(addon, item.quantity + qty)
+        item.quantity += qty
+        item.save(update_fields=["quantity"])
+        return item
+
+
 def _resolve_voucher_scope(
     voucher: Voucher | None,
 ) -> tuple[set[int] | None, set[int] | None]:
@@ -473,12 +506,7 @@ def _build_line_summaries(
     applicable_line_totals: list[tuple[int, Decimal]] = []
 
     for item in items:
-        if item.ticket_type is not None:
-            description = item.ticket_type.name
-        else:
-            # CartItem DB constraint guarantees exactly one of ticket_type/addon.
-            assert item.addon is not None
-            description = item.addon.name
+        description = _cart_item_description(item)
         line_total = item.line_total
         subtotal += line_total
 
@@ -502,6 +530,15 @@ def _build_line_summaries(
         )
 
     return line_summaries, subtotal, applicable_line_totals
+
+
+def _cart_item_description(item: CartItem) -> str:
+    """Return a safe cart item description without type ignores/asserts."""
+    if item.ticket_type is not None:
+        return item.ticket_type.name
+    if item.addon is not None:
+        return item.addon.name
+    return "Unknown item"
 
 
 def _apply_voucher_discounts(
