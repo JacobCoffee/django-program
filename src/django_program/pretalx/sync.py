@@ -2,8 +2,8 @@
 
 Provides :class:`PretalxSyncService` which orchestrates the import of speakers,
 talks, and schedule slots from a Pretalx event into the corresponding Django
-models.  Each sync method is idempotent and uses ``update_or_create`` so it can
-be run repeatedly without producing duplicates.
+models.  Each sync method is idempotent and uses bulk operations for
+performance.
 """
 
 import logging
@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 from django_program.pretalx.client import PretalxClient, _localized
@@ -18,11 +19,15 @@ from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.settings import get_config
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from django_program.conference.models import Conference
 
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
+
+_PROGRESS_CHUNK = 50
 
 
 class PretalxSyncService:
@@ -89,11 +94,6 @@ class PretalxSyncService:
     def sync_rooms(self) -> int:
         """Fetch rooms from Pretalx and upsert into the database.
 
-        Populates the :class:`~django_program.pretalx.models.Room` table with
-        full room metadata including name, description, capacity, and position.
-        After syncing, refreshes the in-memory room cache so that subsequent
-        talk and schedule syncs can resolve room FKs.
-
         Returns:
             The number of rooms synced.
         """
@@ -135,56 +135,171 @@ class PretalxSyncService:
     def sync_speakers(self) -> int:
         """Fetch speakers from Pretalx and upsert into the database.
 
-        For each speaker, attempts to link the ``user`` field to a Django user
-        by case-insensitive email match.  The user link is only set when a match
-        is found and the field is currently ``None``.
+        Uses bulk operations for performance and delegates to
+        :meth:`sync_speakers_iter` which yields progress dicts.
 
         Returns:
             The number of speakers synced.
         """
-        api_speakers = self.client.fetch_speakers()
-        now = timezone.now()
         count = 0
+        for progress in self.sync_speakers_iter():
+            if "count" in progress:
+                count = progress["count"]
+        return count
+
+    def _prepare_speaker_batches(
+        self,
+        api_speakers: list[object],
+        existing: dict[str, Speaker],
+        users_by_email: dict[str, object],
+        now: datetime,
+    ) -> tuple[list[Speaker], list[Speaker]]:
+        """Sort API speakers into create and update batches.
+
+        Args:
+            api_speakers: Speaker DTOs fetched from the Pretalx API.
+            existing: Map of pretalx_code to existing Speaker instances.
+            users_by_email: Map of lowercased email to Django User instances.
+            now: Timestamp to set as ``synced_at``.
+
+        Returns:
+            A tuple of ``(to_create, to_update)`` Speaker lists.
+        """
+        to_create: list[Speaker] = []
+        to_update: list[Speaker] = []
 
         for api_speaker in api_speakers:
-            speaker, created = Speaker.objects.update_or_create(
-                conference=self.conference,
-                pretalx_code=api_speaker.code,
-                defaults={
-                    "name": api_speaker.name,
-                    "biography": api_speaker.biography,
-                    "avatar_url": api_speaker.avatar_url,
-                    "email": api_speaker.email,
-                    "synced_at": now,
-                },
+            if api_speaker.code in existing:
+                speaker = existing[api_speaker.code]
+                speaker.name = api_speaker.name
+                speaker.biography = api_speaker.biography
+                speaker.avatar_url = api_speaker.avatar_url
+                speaker.email = api_speaker.email
+                speaker.synced_at = now
+                if api_speaker.email and speaker.user is None:
+                    matched = users_by_email.get(api_speaker.email.lower())
+                    if matched:
+                        speaker.user = matched
+                to_update.append(speaker)
+            else:
+                user = users_by_email.get(api_speaker.email.lower()) if api_speaker.email else None
+                to_create.append(
+                    Speaker(
+                        conference=self.conference,
+                        pretalx_code=api_speaker.code,
+                        name=api_speaker.name,
+                        biography=api_speaker.biography,
+                        avatar_url=api_speaker.avatar_url,
+                        email=api_speaker.email,
+                        synced_at=now,
+                        user=user,
+                    )
+                )
+
+        return to_create, to_update
+
+    def sync_speakers_iter(self) -> Iterator[dict[str, int]]:
+        """Bulk sync speakers from Pretalx, yielding progress updates.
+
+        Yields:
+            Dicts with ``current``/``total`` keys during processing,
+            and a final dict with ``count`` when complete.
+        """
+        api_speakers = self.client.fetch_speakers()
+        total = len(api_speakers)
+        if total == 0:
+            yield {"count": 0}
+            return
+
+        now = timezone.now()
+        yield {"current": 0, "total": total}
+
+        existing = {s.pretalx_code: s for s in Speaker.objects.filter(conference=self.conference)}
+
+        emails = {s.email.lower() for s in api_speakers if s.email}
+        users_by_email = {}
+        if emails:
+            for u in User.objects.annotate(
+                email_lower=Lower("email"),
+            ).filter(email_lower__in=emails):
+                users_by_email[u.email_lower] = u
+
+        to_create, to_update = self._prepare_speaker_batches(api_speakers, existing, users_by_email, now)
+
+        for i in range(total):
+            if (i + 1) % _PROGRESS_CHUNK == 0 or (i + 1) == total:
+                yield {"current": i + 1, "total": total}
+
+        if to_create:
+            Speaker.objects.bulk_create(to_create, batch_size=500)
+        if to_update:
+            Speaker.objects.bulk_update(
+                to_update,
+                fields=["name", "biography", "avatar_url", "email", "synced_at", "user"],
+                batch_size=500,
             )
 
-            if api_speaker.email and speaker.user is None:
-                try:
-                    matched_user = User.objects.get(email__iexact=api_speaker.email)
-                    speaker.user = matched_user
-                    speaker.save(update_fields=["user"])
-                except User.DoesNotExist:
-                    pass
-
-            action = "Created" if created else "Updated"
-            logger.debug("%s speaker %s (%s)", action, speaker.name, speaker.pretalx_code)
-            count += 1
-
-        logger.info("Synced %d speakers for %s", count, self.conference.slug)
-        return count
+        count = len(to_create) + len(to_update)
+        logger.info(
+            "Synced %d speakers (%d new, %d updated) for %s",
+            count,
+            len(to_create),
+            len(to_update),
+            self.conference.slug,
+        )
+        yield {"count": count}
 
     def sync_talks(self) -> int:
         """Fetch talks from Pretalx and upsert into the database.
 
-        Pre-fetches ID-to-name mappings for submission types, tracks, and
-        rooms so that integer IDs from the real API are resolved to display
-        names.  After upserting each talk, sets its speakers M2M from the
-        Pretalx speaker codes.  ISO 8601 datetime strings for slot start/end
-        are parsed with ``datetime.fromisoformat``.
+        Uses bulk operations for performance and delegates to
+        :meth:`sync_talks_iter` which yields progress dicts.
 
         Returns:
             The number of talks synced.
+        """
+        count = 0
+        for progress in self.sync_talks_iter():
+            if "count" in progress:
+                count = progress["count"]
+        return count
+
+    def _bulk_set_talk_speakers(self, m2m_map: dict[str, list[int]]) -> None:
+        """Replace M2M speaker relationships for synced talks in bulk.
+
+        Args:
+            m2m_map: Mapping of talk pretalx_code to lists of speaker PKs.
+        """
+        if not m2m_map:
+            return
+
+        all_talk_pks = dict(
+            Talk.objects.filter(
+                conference=self.conference,
+            ).values_list("pretalx_code", "pk")
+        )
+        TalkSpeaker = Talk.speakers.through  # noqa: N806
+        TalkSpeaker.objects.filter(
+            talk_id__in=all_talk_pks.values(),
+        ).delete()
+        through_entries = []
+        for talk_code, spk_pks in m2m_map.items():
+            talk_pk = all_talk_pks.get(talk_code)
+            if talk_pk:
+                through_entries.extend(TalkSpeaker(talk_id=talk_pk, speaker_id=spk_pk) for spk_pk in spk_pks)
+        if through_entries:
+            TalkSpeaker.objects.bulk_create(
+                through_entries,
+                ignore_conflicts=True,
+                batch_size=500,
+            )
+
+    def sync_talks_iter(self) -> Iterator[dict[str, int]]:
+        """Bulk sync talks from Pretalx, yielding progress updates.
+
+        Yields:
+            Dicts with ``current``/``total`` keys during processing,
+            and a final dict with ``count`` when complete.
         """
         self._ensure_mappings()
         api_talks = self.client.fetch_talks(
@@ -192,60 +307,97 @@ class PretalxSyncService:
             tracks=self._tracks,
             rooms=self._room_names,
         )
+        total = len(api_talks)
+        if total == 0:
+            yield {"count": 0}
+            return
+
         now = timezone.now()
-        count = 0
+        yield {"current": 0, "total": total}
 
-        for api_talk in api_talks:
+        existing = {t.pretalx_code: t for t in Talk.objects.filter(conference=self.conference)}
+        speaker_pk_map = {s.pretalx_code: s.pk for s in Speaker.objects.filter(conference=self.conference)}
+
+        to_create: list[Talk] = []
+        to_update: list[Talk] = []
+        m2m_map: dict[str, list[int]] = {}
+
+        for i, api_talk in enumerate(api_talks):
             room = self._resolve_room(api_talk.room)
+            fields = {
+                "title": api_talk.title,
+                "abstract": api_talk.abstract,
+                "description": api_talk.description,
+                "submission_type": api_talk.submission_type,
+                "track": api_talk.track,
+                "duration": api_talk.duration,
+                "state": api_talk.state,
+                "room": room,
+                "slot_start": _parse_iso_datetime(api_talk.slot_start),
+                "slot_end": _parse_iso_datetime(api_talk.slot_end),
+                "synced_at": now,
+            }
 
-            talk, created = Talk.objects.update_or_create(
-                conference=self.conference,
-                pretalx_code=api_talk.code,
-                defaults={
-                    "title": api_talk.title,
-                    "abstract": api_talk.abstract,
-                    "description": api_talk.description,
-                    "submission_type": api_talk.submission_type,
-                    "track": api_talk.track,
-                    "duration": api_talk.duration,
-                    "state": api_talk.state,
-                    "room": room,
-                    "slot_start": _parse_iso_datetime(api_talk.slot_start),
-                    "slot_end": _parse_iso_datetime(api_talk.slot_end),
-                    "synced_at": now,
-                },
-            )
-
-            speakers = (
-                Speaker.objects.filter(
-                    conference=self.conference,
-                    pretalx_code__in=api_talk.speaker_codes,
+            if api_talk.code in existing:
+                talk = existing[api_talk.code]
+                for k, v in fields.items():
+                    setattr(talk, k, v)
+                to_update.append(talk)
+            else:
+                to_create.append(
+                    Talk(
+                        conference=self.conference,
+                        pretalx_code=api_talk.code,
+                        **fields,
+                    )
                 )
-                if api_talk.speaker_codes
-                else Speaker.objects.none()
+
+            if api_talk.speaker_codes:
+                m2m_map[api_talk.code] = [
+                    speaker_pk_map[code] for code in api_talk.speaker_codes if code in speaker_pk_map
+                ]
+
+            if (i + 1) % _PROGRESS_CHUNK == 0 or (i + 1) == total:
+                yield {"current": i + 1, "total": total}
+
+        if to_create:
+            Talk.objects.bulk_create(to_create, batch_size=500)
+        if to_update:
+            Talk.objects.bulk_update(
+                to_update,
+                fields=[
+                    "title",
+                    "abstract",
+                    "description",
+                    "submission_type",
+                    "track",
+                    "duration",
+                    "state",
+                    "room",
+                    "slot_start",
+                    "slot_end",
+                    "synced_at",
+                ],
+                batch_size=500,
             )
-            talk.speakers.set(speakers)
 
-            action = "Created" if created else "Updated"
-            logger.debug("%s talk %s (%s)", action, talk.title, talk.pretalx_code)
-            count += 1
+        self._bulk_set_talk_speakers(m2m_map)
 
-        logger.info("Synced %d talks for %s", count, self.conference.slug)
-        return count
+        count = len(to_create) + len(to_update)
+        logger.info(
+            "Synced %d talks (%d new, %d updated) for %s",
+            count,
+            len(to_create),
+            len(to_update),
+            self.conference.slug,
+        )
+        yield {"count": count}
 
     def sync_schedule(self) -> int:
         """Fetch schedule slots from Pretalx and upsert into the database.
 
-        Pre-fetches room mappings so that integer room IDs from the real API
-        are resolved to display names.  Talk-linked slots use the talk's title
-        and ``SlotType.TALK``.  Non-talk slots are classified by title
-        heuristics: titles containing "break" or "lunch" become ``BREAK``,
-        "social" or "party" become ``SOCIAL``, and everything else becomes
-        ``OTHER``.
-
-        Slots that no longer appear in the Pretalx schedule (e.g. because a
-        slot was rescheduled to a different time or room) are deleted after the
-        sync completes.
+        Slots that no longer appear in the Pretalx schedule are deleted
+        after the sync completes.
 
         Returns:
             The number of schedule slots synced.
@@ -328,10 +480,6 @@ class PretalxSyncService:
     def sync_all(self) -> dict[str, int]:
         """Run all sync operations in dependency order.
 
-        Syncs rooms first (talks and slots reference them), then speakers
-        (talks reference them), then talks (schedule slots reference them),
-        then schedule slots.
-
         Returns:
             A mapping of entity type to the number synced.
         """
@@ -344,14 +492,7 @@ class PretalxSyncService:
 
 
 def _parse_iso_datetime(value: str) -> datetime | None:
-    """Parse an ISO 8601 string into a datetime, returning ``None`` on failure.
-
-    Args:
-        value: An ISO 8601 formatted datetime string.
-
-    Returns:
-        A ``datetime`` instance, or ``None`` if the string is empty or invalid.
-    """
+    """Parse an ISO 8601 string into a datetime, returning ``None`` on failure."""
     if not value:
         return None
     try:
@@ -361,15 +502,7 @@ def _parse_iso_datetime(value: str) -> datetime | None:
 
 
 def _classify_slot(title: str, code: str) -> str:
-    """Determine the slot type from a Pretalx slot's title and code.
-
-    Args:
-        title: The display title of the slot.
-        code: The submission code, non-empty when the slot holds a talk.
-
-    Returns:
-        A :class:`~django_program.pretalx.models.ScheduleSlot.SlotType` value.
-    """
+    """Determine the slot type from a Pretalx slot's title and code."""
     if code:
         return ScheduleSlot.SlotType.TALK
 
