@@ -47,6 +47,8 @@ class ProgramConfig:
     stripe: StripeConfig = field(default_factory=StripeConfig)
     pretalx: PretalxConfig = field(default_factory=PretalxConfig)
     cart_expiry_minutes: int = 30
+    pending_order_expiry_minutes: int = 15
+    order_reference_prefix: str = "ORD"
     currency: str = "USD"
     currency_symbol: str = "$"
 
@@ -88,6 +90,9 @@ def _validate_program_config(config: ProgramConfig) -> None:
     """Validate high-impact configuration values with clear error messages."""
     if not isinstance(config.cart_expiry_minutes, int) or config.cart_expiry_minutes <= 0:
         msg = "DJANGO_PROGRAM['cart_expiry_minutes'] must be a positive integer"
+        raise ValueError(msg)
+    if not isinstance(config.pending_order_expiry_minutes, int) or config.pending_order_expiry_minutes <= 0:
+        msg = "DJANGO_PROGRAM['pending_order_expiry_minutes'] must be a positive integer"
         raise ValueError(msg)
     if not isinstance(config.currency, str) or not config.currency.strip():
         msg = "DJANGO_PROGRAM['currency'] must be a non-empty string"

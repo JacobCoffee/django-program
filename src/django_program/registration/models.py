@@ -52,18 +52,20 @@ class TicketType(models.Model):
     def remaining_quantity(self) -> int | None:
         """Return the number of tickets still available for purchase.
 
+        Counts tickets in paid/partially-refunded orders plus pending orders
+        with an active inventory hold (``hold_expires_at`` in the future).
+
         Returns:
             The remaining count, or ``None`` if this ticket type has unlimited
             quantity (``total_quantity == 0``).
         """
         if self.total_quantity == 0:
             return None
+        now = timezone.now()
         sold = (
             self.order_line_items.filter(
-                order__status__in=[
-                    Order.Status.PAID,
-                    Order.Status.PARTIALLY_REFUNDED,
-                ],
+                models.Q(order__status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED])
+                | models.Q(order__status=Order.Status.PENDING, order__hold_expires_at__gt=now),
             ).aggregate(total=models.Sum("quantity"))["total"]
             or 0
         )
@@ -216,7 +218,8 @@ class Cart(models.Model):
     """A user's shopping cart for a conference.
 
     Carts hold ticket and add-on selections before checkout. They transition
-    through statuses from ``OPEN`` to ``CHECKED_OUT`` on successful payment,
+    through statuses from ``OPEN`` to ``CHECKED_OUT`` when submitted to
+    checkout and converted to an order (which may still be pending payment),
     or to ``EXPIRED`` / ``ABANDONED`` when the session times out.
     """
 
@@ -385,6 +388,11 @@ class Order(models.Model):
         unique=True,
         help_text='Unique order reference, e.g. "ORD-A1B2C3".',
     )
+    hold_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When set on pending orders, inventory is reserved until this timestamp.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -523,6 +531,12 @@ class Credit(models.Model):
         related_name="credits",
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    remaining_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Unspent credit balance that can be applied to future orders.",
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -551,6 +565,13 @@ class Credit(models.Model):
 
     def __str__(self) -> str:
         return f"Credit {self.amount} for {self.user} ({self.status})"
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        """Initialize remaining balance for newly created available credits."""
+        remaining = getattr(self, "remaining_amount", Decimal("0.00"))
+        if self._state.adding and self.status == Credit.Status.AVAILABLE and remaining == 0:
+            self.remaining_amount = self.amount
+        super().save(*args, **kwargs)
 
 
 class StripeCustomer(models.Model):

@@ -327,6 +327,11 @@ class CartService:
             A CartSummary with line items, subtotal, discount, and total.
         """
         items = list(cart.items.select_related("ticket_type", "addon"))
+        return CartService.get_summary_from_items(cart, items)
+
+    @staticmethod
+    def get_summary_from_items(cart: Cart, items: list[CartItem]) -> CartSummary:
+        """Compute pricing summary using a pre-fetched cart-item snapshot."""
         voucher = cart.voucher
 
         applicable_ticket_ids, applicable_addon_ids = _resolve_voucher_scope(voucher)
