@@ -128,6 +128,27 @@ class TestGetOrCreateCustomer:
         assert result.conference == conference
         mock_instance.customers.create.assert_called_once()
 
+    def test_create_customer_handles_race_condition(self, conference, user, mock_stripe_client_cls):
+        _, mock_instance = mock_stripe_client_cls
+        mock_instance.customers.create.return_value = MagicMock(id="cus_race_loser")
+
+        existing = StripeCustomer.objects.create(
+            user=user,
+            conference=conference,
+            stripe_customer_id="cus_race_winner",
+        )
+
+        with patch.object(
+            StripeCustomer.objects,
+            "filter",
+            return_value=StripeCustomer.objects.none(),
+        ):
+            client = StripeClient(conference)
+            result = client.get_or_create_customer(user)
+
+        assert result.pk == existing.pk
+        assert result.stripe_customer_id == "cus_race_winner"
+
     def test_create_customer_stores_stripe_id(self, conference, user, mock_stripe_client_cls):
         _, mock_instance = mock_stripe_client_cls
         mock_instance.customers.create.return_value = MagicMock(id="cus_persisted_789")
