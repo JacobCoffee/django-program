@@ -9,6 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import stripe
+from django.db import IntegrityError, transaction
 
 from django_program.registration.models import StripeCustomer
 from django_program.registration.stripe_utils import convert_amount_for_api
@@ -98,11 +99,18 @@ class StripeClient:
             },
         )
 
-        return StripeCustomer.objects.create(
-            user=user,
-            conference=self.conference,
-            stripe_customer_id=customer.id,
-        )
+        try:
+            with transaction.atomic():
+                return StripeCustomer.objects.create(
+                    user=user,
+                    conference=self.conference,
+                    stripe_customer_id=customer.id,
+                )
+        except IntegrityError:
+            return StripeCustomer.objects.get(
+                user=user,
+                conference=self.conference,
+            )
 
     def create_payment_intent(self, order: Order, customer_id: str) -> str:
         """Create a Stripe PaymentIntent for the given order.
