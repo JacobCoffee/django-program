@@ -6,9 +6,21 @@ from uuid import uuid4
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.dispatch import Signal
 
-from django_program.conference.models import Conference
-from django_program.registration.models import Order, OrderLineItem, TicketType, Voucher
+from django_program.conference.models import Conference, Section
+from django_program.registration.models import (
+    AddOn,
+    Cart,
+    CartItem,
+    Credit,
+    Order,
+    OrderLineItem,
+    Payment,
+    TicketType,
+    Voucher,
+)
+from django_program.registration.signals import order_paid
 
 User = get_user_model()
 
@@ -208,3 +220,231 @@ def test_voucher_is_valid_respects_time_window_boundaries(conference: Conference
 
     monkeypatch.setattr("django_program.registration.models.timezone.now", lambda: now + timedelta(hours=1, seconds=1))
     assert voucher.is_valid is False
+
+
+# ---------------------------------------------------------------------------
+# Tests for previously uncovered lines
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_ticket_is_available_false_when_inactive(conference: Conference):
+    """Line 84: TicketType.is_available returns False when is_active=False."""
+    ticket = TicketType.objects.create(
+        conference=conference,
+        name="Inactive Ticket",
+        slug="inactive-ticket",
+        price=Decimal("25.00"),
+        total_quantity=0,
+        is_active=False,
+    )
+
+    assert ticket.is_available is False
+
+
+@pytest.mark.django_db
+def test_cart_item_str_with_ticket_type(conference: Conference, user):
+    """Lines 305-307: CartItem.__str__ displays ticket_type info."""
+    ticket = TicketType.objects.create(
+        conference=conference,
+        name="General Admission",
+        slug="general-admission",
+        price=Decimal("100.00"),
+    )
+    cart = Cart.objects.create(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+    )
+    item = CartItem.objects.create(
+        cart=cart,
+        ticket_type=ticket,
+        quantity=2,
+    )
+
+    result = str(item)
+
+    assert result == f"2x {ticket}"
+
+
+@pytest.mark.django_db
+def test_cart_item_str_with_addon(conference: Conference, user):
+    """Lines 305-307: CartItem.__str__ displays addon info."""
+    addon = AddOn.objects.create(
+        conference=conference,
+        name="Workshop Pass",
+        slug="workshop-pass",
+        price=Decimal("30.00"),
+    )
+    cart = Cart.objects.create(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+    )
+    item = CartItem.objects.create(
+        cart=cart,
+        addon=addon,
+        quantity=3,
+    )
+
+    result = str(item)
+
+    assert result == f"3x {addon}"
+
+
+@pytest.mark.django_db
+def test_cart_item_unit_price_from_ticket_type(conference: Conference, user):
+    """Lines 312-313: CartItem.unit_price returns ticket_type.price."""
+    ticket = TicketType.objects.create(
+        conference=conference,
+        name="Standard",
+        slug="standard",
+        price=Decimal("75.50"),
+    )
+    cart = Cart.objects.create(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+    )
+    item = CartItem.objects.create(
+        cart=cart,
+        ticket_type=ticket,
+        quantity=1,
+    )
+
+    assert item.unit_price == Decimal("75.50")
+
+
+@pytest.mark.django_db
+def test_cart_item_unit_price_from_addon(conference: Conference, user):
+    """Lines 314-315: CartItem.unit_price returns addon.price."""
+    addon = AddOn.objects.create(
+        conference=conference,
+        name="T-Shirt",
+        slug="t-shirt",
+        price=Decimal("20.00"),
+    )
+    cart = Cart.objects.create(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+    )
+    item = CartItem.objects.create(
+        cart=cart,
+        addon=addon,
+        quantity=1,
+    )
+
+    assert item.unit_price == Decimal("20.00")
+
+
+@pytest.mark.django_db
+def test_cart_item_line_total(conference: Conference, user):
+    """Line 321: CartItem.line_total returns unit_price * quantity."""
+    ticket = TicketType.objects.create(
+        conference=conference,
+        name="VIP",
+        slug="vip",
+        price=Decimal("150.00"),
+    )
+    cart = Cart.objects.create(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+    )
+    item = CartItem.objects.create(
+        cart=cart,
+        ticket_type=ticket,
+        quantity=4,
+    )
+
+    assert item.line_total == Decimal("600.00")
+
+
+@pytest.mark.django_db
+def test_order_line_item_str(conference: Conference, user):
+    """Line 427: OrderLineItem.__str__ formats as 'Nx description'."""
+    order = _create_order(conference=conference, user=user, status=Order.Status.PAID)
+    line_item = OrderLineItem.objects.create(
+        order=order,
+        description="Early Bird Ticket",
+        quantity=3,
+        unit_price=Decimal("50.00"),
+        line_total=Decimal("150.00"),
+    )
+
+    assert str(line_item) == "3x Early Bird Ticket"
+
+
+@pytest.mark.django_db
+def test_payment_str(conference: Conference, user):
+    """Line 474: Payment.__str__ formats as 'method amount for reference'."""
+    order = _create_order(conference=conference, user=user, status=Order.Status.PAID)
+    payment = Payment.objects.create(
+        order=order,
+        method=Payment.Method.STRIPE,
+        amount=Decimal("200.00"),
+    )
+
+    assert str(payment) == f"stripe 200.00 for {order.reference}"
+
+
+@pytest.mark.django_db
+def test_conference_str(conference: Conference):
+    assert str(conference) == "PropCon"
+
+
+@pytest.mark.django_db
+def test_section_str(conference: Conference):
+    section = Section.objects.create(
+        conference=conference,
+        name="Talks",
+        slug="talks",
+        start_date=date(2027, 5, 1),
+        end_date=date(2027, 5, 2),
+    )
+    assert str(section) == "Talks (propcon)"
+
+
+@pytest.mark.django_db
+def test_voucher_str(conference: Conference):
+    voucher = Voucher.objects.create(
+        conference=conference,
+        code="EARLY-50",
+        voucher_type=Voucher.VoucherType.PERCENTAGE,
+        max_uses=10,
+    )
+    assert str(voucher) == "EARLY-50 (propcon)"
+
+
+@pytest.mark.django_db
+def test_cart_str(conference: Conference, user):
+    cart = Cart.objects.create(user=user, conference=conference, status=Cart.Status.OPEN)
+    assert str(cart) == f"Cart {cart.pk} ({user}, open)"
+
+
+@pytest.mark.django_db
+def test_order_str(conference: Conference, user):
+    order = _create_order(conference=conference, user=user, status=Order.Status.PAID)
+    assert str(order) == f"{order.reference} (paid)"
+
+
+@pytest.mark.django_db
+def test_credit_str(conference: Conference, user):
+    credit = Credit.objects.create(
+        user=user,
+        conference=conference,
+        amount=Decimal("25.00"),
+        status=Credit.Status.AVAILABLE,
+    )
+    assert str(credit) == f"Credit 25.00 for {user} (available)"
+
+
+def test_cart_item_unit_price_fallback_zero():
+    item = CartItem(ticket_type=None, addon=None, quantity=1)
+    assert item.unit_price == Decimal("0.00")
+
+
+def test_order_paid_signal_is_importable():
+    """Verify the order_paid signal is importable and is a Signal instance."""
+    assert isinstance(order_paid, Signal)
