@@ -1,0 +1,23 @@
+# Keep this repo-specific; move editor/OS/language-wide ignores to global gitignore.
+
+# Local planning artifacts
+refcode/
+plan.json
+
+# Local environments
+.venv/
+venv/
+
+# Django project runtime data
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+
+# Generated docs/build outputs
+docs/_build/
+dist/
+build/
+
+# Local worktrees
+.worktrees/
