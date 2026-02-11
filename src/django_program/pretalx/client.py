@@ -234,7 +234,7 @@ def _parse_datetime(value: str) -> datetime | None:
         return None
     try:
         return datetime.fromisoformat(value)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):  # fmt: skip
         return None
 
 
@@ -313,6 +313,9 @@ class PretalxClient:
                 except httpx.HTTPStatusError as exc:
                     msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
                     raise RuntimeError(msg) from exc
+                except httpx.RequestError as exc:
+                    msg = f"Pretalx API connection error for URL {current_url}: {exc}"
+                    raise RuntimeError(msg) from exc
 
                 data = response.json()
                 results.extend(data.get("results", []))
@@ -379,6 +382,9 @@ class PretalxClient:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
+                raise RuntimeError(msg) from exc
+            except httpx.RequestError as exc:
+                msg = f"Pretalx API connection error for URL {url}: {exc}"
                 raise RuntimeError(msg) from exc
 
         data = response.json()
