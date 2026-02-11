@@ -127,6 +127,9 @@ class TestGetOrCreateCustomer:
         assert result.user == user
         assert result.conference == conference
         mock_instance.customers.create.assert_called_once()
+        call_kwargs = mock_instance.customers.create.call_args
+        options = call_kwargs.kwargs["options"]
+        assert options["idempotency_key"] == f"customer-{conference.pk}-{user.pk}"
 
     def test_create_customer_handles_race_condition(self, conference, user, mock_stripe_client_cls):
         _, mock_instance = mock_stripe_client_cls
@@ -201,6 +204,15 @@ class TestCreatePaymentIntent:
         options = call_kwargs.kwargs["options"]
         assert options["idempotency_key"] == "ORD-ABCD1234"
 
+    def test_create_payment_intent_raises_on_none_client_secret(self, conference, order, mock_stripe_client_cls):
+        _, mock_instance = mock_stripe_client_cls
+        mock_instance.payment_intents.create.return_value = MagicMock(client_secret=None)
+
+        client = StripeClient(conference)
+
+        with pytest.raises(ValueError, match="no client_secret"):
+            client.create_payment_intent(order, "cus_123")
+
 
 # =============================================================================
 # TestCapturePaymentIntent
@@ -242,6 +254,8 @@ class TestCreateRefund:
         assert params["reason"] == "requested_by_customer"
         assert "amount" not in params
         assert result.id == "re_full_001"
+        options = call_kwargs.kwargs["options"]
+        assert options["idempotency_key"] == "refund-pi_abc123-full-requested_by_customer"
 
     def test_create_refund_with_amount(self, conference, mock_stripe_client_cls):
         _, mock_instance = mock_stripe_client_cls
@@ -255,6 +269,8 @@ class TestCreateRefund:
         params = call_kwargs.kwargs["params"]
         assert params["amount"] == 550  # Decimal("5.50") -> 550 cents
         assert result.id == "re_partial_002"
+        options = call_kwargs.kwargs["options"]
+        assert options["idempotency_key"] == "refund-pi_abc123-5.50-requested_by_customer"
 
     def test_create_refund_with_custom_reason(self, conference, mock_stripe_client_cls):
         _, mock_instance = mock_stripe_client_cls
