@@ -1,0 +1,1 @@
+"""Pretalx management commands."""
