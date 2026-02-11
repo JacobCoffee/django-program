@@ -10,8 +10,7 @@ UV            ?= uv $(UV_OPTS)
 .PHONY: type-check ruff security
 .PHONY: docs-serve docs-clean
 .PHONY: install-uv install-prek upgrade
-.PHONY: wt worktree wt-ls worktree-list wt-j worktree-jump worktree-prune
-.PHONY: ci ci-install
+.PHONY: ci
 .PHONY: act act-ci act-docs act-list
 .PHONY: test-cov test-fast build destroy
 
