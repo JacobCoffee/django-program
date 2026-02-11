@@ -5,6 +5,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from django_program.conference.models import Conference, Section
+from django_program.registration.models import AddOn
 
 
 def _write_config(path, contents):
@@ -143,3 +144,75 @@ end = 2027-05-08
         Section.objects.filter(conference=conference).order_by("order", "start_date").values_list("slug", flat=True),
     )
     assert ordered_slugs == ["tutorials", "sprints", "talks"]
+
+
+@pytest.mark.django_db
+def test_bootstrap_sets_addon_availability_window(tmp_path):
+    config_path = _write_config(
+        tmp_path / "addons.toml",
+        """[conference]
+name = "PyCon Test"
+start = 2027-05-01
+end = 2027-05-03
+timezone = "UTC"
+
+[[conference.sections]]
+name = "Talks"
+start = 2027-05-02
+end = 2027-05-02
+
+[[conference.tickets]]
+name = "Individual"
+price = 100.00
+quantity = 100
+
+[[conference.addons]]
+name = "Workshop"
+price = 50.00
+quantity = 25
+available = { opens = 2027-04-01, closes = 2027-04-15 }
+""",
+    )
+
+    call_command("bootstrap_conference", config=config_path)
+
+    conference = Conference.objects.get(slug="pycon-test")
+    addon = AddOn.objects.get(conference=conference, slug="workshop")
+    assert addon.available_from is not None
+    assert addon.available_until is not None
+    assert addon.available_from.date() == datetime.date(2027, 4, 1)
+    assert addon.available_until.date() == datetime.date(2027, 4, 15)
+    assert addon.available_from.tzinfo is not None
+    assert addon.available_until.tzinfo is not None
+
+
+@pytest.mark.django_db
+def test_bootstrap_fails_when_addon_requires_unknown_ticket_slug(tmp_path):
+    config_path = _write_config(
+        tmp_path / "bad_requires.toml",
+        """[conference]
+name = "PyCon Test"
+start = 2027-05-01
+end = 2027-05-03
+timezone = "UTC"
+
+[[conference.sections]]
+name = "Talks"
+start = 2027-05-02
+end = 2027-05-02
+
+[[conference.tickets]]
+name = "Individual"
+price = 100.00
+quantity = 100
+
+[[conference.addons]]
+name = "Workshop"
+price = 50.00
+quantity = 25
+requires = ["individual", "missing-ticket"]
+""",
+    )
+
+    with pytest.raises(CommandError, match=r"unknown required ticket slug\(s\): missing-ticket"):
+        call_command("bootstrap_conference", config=config_path)

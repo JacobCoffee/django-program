@@ -42,8 +42,20 @@ install: ## Install package
 	@$(UV) sync
 	@echo "=> Installation complete"
 
-dev: ## Placeholder; will run example app later to test the library
-	@echo "=> not ready yet"
+dev: ## Run the example Django dev server (clean slate + migrate + bootstrap + runserver)
+	@echo "=> Cleaning previous database"
+	@rm -f examples/db.sqlite3
+	@echo "=> Migrating database"
+	@$(UV) run python examples/manage.py migrate --run-syncdb
+	@echo "=> Bootstrapping conference data"
+	@$(UV) run python examples/manage.py bootstrap_conference --config conference.example.toml --update --seed-demo || true
+	@echo "=> Setting up permission groups"
+	@$(UV) run python examples/manage.py setup_groups
+	@echo "=> Creating default admin user (admin/admin)"
+	@DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_EMAIL=admin@localhost DJANGO_SUPERUSER_PASSWORD=admin \
+		$(UV) run python examples/manage.py createsuperuser --noinput 2>/dev/null || true
+	@echo "=> Starting dev server at http://localhost:8000/admin/  (login: admin/admin)"
+	@$(UV) run python examples/manage.py runserver
 
 upgrade: ## Upgrade all dependencies to the latest stable versions
 	@echo "=> Upgrading prek"
