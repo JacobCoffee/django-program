@@ -1,0 +1,58 @@
+{% extends "django_program/manage/base.html" %}
+{% load tz %}
+
+{% block title %}Schedule{% endblock %}
+
+{% block page_title %}
+<h1>Schedule</h1>
+<p>Schedule slots grouped by date</p>
+{% endblock %}
+
+{% block content %}
+{% if grouped_slots %}
+  {% for day, slots in grouped_slots %}
+  <h3 class="date-header">{{ day|date:"l, N j, Y" }}</h3>
+  <table class="data-table" style="margin-bottom: 1.5rem;">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Room</th>
+        <th>Title</th>
+        <th>Type</th>
+        <th>Talk</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for slot in slots %}
+      <tr>
+        <td><span class="mono">{{ slot.start|time:"H:i" }} &ndash; {{ slot.end|time:"H:i" }}</span></td>
+        <td>{% if slot.room %}{{ slot.room.name }}{% else %}&mdash;{% endif %}</td>
+        <td>{{ slot.display_title }}</td>
+        <td>
+          <span class="badge badge--{{ slot.slot_type }}">{{ slot.get_slot_type_display }}</span>
+        </td>
+        <td>
+          {% if slot.talk %}
+          <a href="{% url 'manage:talk-edit' conference.slug slot.talk.pk %}">{{ slot.talk.title|truncatewords:6 }}</a>
+          {% else %}
+          &mdash;
+          {% endif %}
+        </td>
+        <td>
+          <a href="{% url 'manage:slot-edit' conference.slug slot.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+
+  {% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>No schedule slots defined for this conference.</p>
+</div>
+{% endif %}
+{% endblock %}

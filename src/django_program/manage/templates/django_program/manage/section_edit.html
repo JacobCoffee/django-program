@@ -1,0 +1,45 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Edit Section{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:section-list' conference.slug %}">Sections</a>
+  <span class="breadcrumb-separator"></span>
+  <span>Edit</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Edit Section: {{ section.name }}</h1>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-group">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}
+      <span class="helptext">{{ field.help_text }}</span>
+      {% endif %}
+      {% if field.errors %}
+      <ul class="errorlist">
+        {% for error in field.errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+      <a href="{% url 'manage:section-list' conference.slug %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

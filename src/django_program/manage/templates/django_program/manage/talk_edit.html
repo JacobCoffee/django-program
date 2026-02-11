@@ -1,0 +1,69 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Edit Talk{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:talk-list' conference.slug %}">Talks</a>
+  <span class="breadcrumb-separator"></span>
+  <span>Edit</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Edit Talk: {{ talk.title }}</h1>
+{% endblock %}
+
+{% block content %}
+{% if is_synced %}
+<div class="sync-banner">
+  <span>&#128274;</span>
+  This talk was synced from Pretalx on {{ talk.synced_at|date:"N j, Y, P" }}.
+  Synced fields are locked and cannot be edited here. Run a new sync to update Pretalx data.
+</div>
+{% endif %}
+
+{% if talk.speakers.exists %}
+<div style="margin-bottom: 1.5rem;">
+  <h2 class="section-heading">Speakers</h2>
+  <div class="readonly-field">
+    {% for speaker in talk.speakers.all %}{{ speaker.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="form-container">
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    {% if field.name != 'speakers' %}
+    <div class="form-group {% if is_synced and field.name in synced_fields %}form-group--locked{% endif %}">
+      <label for="{{ field.id_for_label }}">
+        {{ field.label }}
+        {% if is_synced and field.name in synced_fields %}<span class="lock-icon" title="Synced from Pretalx">&#128274;</span>{% endif %}
+      </label>
+      {{ field }}
+      {% if field.help_text %}
+      <span class="helptext">{{ field.help_text }}</span>
+      {% endif %}
+      {% if field.errors %}
+      <ul class="errorlist">
+        {% for error in field.errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+    <div class="form-actions">
+      {% if not is_synced %}
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+      {% endif %}
+      <a href="{% url 'manage:talk-list' conference.slug %}" class="btn btn-secondary">{% if is_synced %}Back to Talks{% else %}Cancel{% endif %}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

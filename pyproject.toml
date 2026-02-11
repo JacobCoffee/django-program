@@ -227,6 +227,13 @@ known-first-party = ["django_program", "pretalx_client", "tests"]
   "PLC0415", # Import not at top level (Django manage.py pattern)
   "S105",   # Hardcoded secret key (dev-only)
 ]
+"scripts/**/*.*" = [
+  "D",        # Docstrings (utility scripts)
+  "INP001",   # Implicit namespace package
+  "S",        # Security (local dev scripts)
+  "T201",     # Print statements (CLI scripts)
+  "ANN",      # Type annotations (utility scripts)
+]
 "packages/**/tests/**/*.*" = [
   "A",
   "ANN",
@@ -307,7 +314,7 @@ unsupported-operator = "warn"
 invalid-argument-type = "warn"
 
 [tool.ty.src]
-exclude = ["docs/conf.py", "tests/", "refcode/", "packages/*/tests/"]
+exclude = ["docs/conf.py", "tests/", "refcode/", "packages/*/tests/", "scripts/"]
 
 [tool.uv]
 default-groups = ["dev"]

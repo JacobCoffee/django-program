@@ -1,0 +1,43 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Sections{% endblock %}
+
+{% block page_title %}
+<h1>Sections</h1>
+<p>Conference sections and time blocks</p>
+{% endblock %}
+
+{% block content %}
+{% if sections %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Slug</th>
+      <th>Start Date</th>
+      <th>End Date</th>
+      <th>Order</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for section in sections %}
+    <tr>
+      <td>{{ section.name }}</td>
+      <td><span class="mono">{{ section.slug }}</span></td>
+      <td>{{ section.start_date|date:"N j, Y" }}</td>
+      <td>{{ section.end_date|date:"N j, Y" }}</td>
+      <td>{{ section.order }}</td>
+      <td>
+        <a href="{% url 'manage:section-edit' conference.slug section.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No sections defined for this conference.</p>
+</div>
+{% endif %}
+{% endblock %}

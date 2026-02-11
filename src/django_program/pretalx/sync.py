@@ -78,7 +78,7 @@ class PretalxSyncService:
         if self._rooms is None:
             logger.debug("Fetching room mappings for %s", self.conference.slug)
             self._rooms = {room.pretalx_id: room for room in Room.objects.filter(conference=self.conference)}
-            self._room_names = {pid: room.name for pid, room in self._rooms.items()}
+            self._room_names = {pid: str(room.name) for pid, room in self._rooms.items()}
         if self._submission_types is None:
             logger.debug("Fetching submission type mappings for %s", self.conference.slug)
             self._submission_types = self.client.fetch_submission_types()

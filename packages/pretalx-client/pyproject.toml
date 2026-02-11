@@ -73,6 +73,17 @@ select = ["ALL"]
 known-first-party = ["pretalx_client"]
 
 [tool.ruff.lint.per-file-ignores]
+"**/generated/**/*.*" = [
+  "ANN",      # Type annotations (auto-generated)
+  "D",        # Docstrings (auto-generated)
+  "N",        # Naming conventions (auto-generated camelCase etc.)
+  "TC",       # Type-checking imports (auto-generated)
+  "UP",       # pyupgrade (auto-generated patterns)
+  "FBT",      # Boolean trap (auto-generated signatures)
+  "PLR0913",  # Too many arguments (auto-generated dataclasses)
+  "A003",     # Shadowing builtins (auto-generated field names like 'id', 'type')
+  "RUF009",   # Mutable default in dataclass (auto-generated)
+]
 "tests/**/*.*" = [
   "A",
   "ANN",

@@ -1,0 +1,58 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Speakers{% endblock %}
+
+{% block page_title %}
+<h1>Speakers</h1>
+<p>Speaker profiles synced from Pretalx</p>
+{% endblock %}
+
+{% block content %}
+<div class="info-banner">
+  Speaker data is synced from Pretalx and is read-only.
+</div>
+
+<form method="get" class="filter-bar">
+  <input type="text" name="q" value="{{ search_query|default:'' }}" placeholder="Search by name or email...">
+  <button type="submit" class="btn btn-sm btn-primary">Search</button>
+  {% if search_query %}
+  <a href="{% url 'manage:speaker-list' conference.slug %}" class="btn btn-sm btn-secondary">Clear</a>
+  {% endif %}
+</form>
+
+{% if speakers %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Email</th>
+      <th>Talks</th>
+      <th>Synced</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for speaker in speakers %}
+    <tr>
+      <td>{{ speaker.name }}</td>
+      <td>{% if speaker.email %}{{ speaker.email }}{% else %}&mdash;{% endif %}</td>
+      <td>{{ speaker.talks.count }}</td>
+      <td>
+        {% if speaker.synced_at %}
+        {{ speaker.synced_at|date:"N j, Y" }}
+        {% else %}
+        &mdash;
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>{% if search_query %}No speakers match your search.{% else %}No speakers synced for this conference.{% endif %}</p>
+</div>
+{% endif %}
+{% endblock %}
