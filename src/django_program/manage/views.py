@@ -8,6 +8,7 @@ and enforces access control.
 
 import itertools
 import json
+import logging
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -40,6 +41,8 @@ from django_program.pretalx.sync import PretalxSyncService
 from django_program.settings import get_config
 from pretalx_client.adapters.normalization import localized as _localized
 from pretalx_client.client import PretalxClient
+
+logger = logging.getLogger(__name__)
 
 
 class ManagePermissionMixin(LoginRequiredMixin):
@@ -1326,7 +1329,8 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
                 count,
                 False,
             )
-        except (RuntimeError, ValueError) as exc:
+        except RuntimeError, ValueError:
+            logger.exception("Sync step %d (%s) failed", step_idx, entity_name)
             yield (
                 self._sse(
                     {
@@ -1334,7 +1338,7 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
                         "total": total,
                         "label": f"Failed: {entity_name}",
                         "status": "step_error",
-                        "detail": str(exc),
+                        "detail": f"Sync failed for {entity_name}. Check server logs for details.",
                     }
                 ),
                 None,
@@ -1479,8 +1483,11 @@ class PretalxEventSearchView(LoginRequiredMixin, View):
 
         try:
             events = self._get_events(base_url, api_token)
-        except (RuntimeError, ValueError, OSError) as exc:
-            return JsonResponse({"error": str(exc)}, status=502)
+        except RuntimeError, ValueError, OSError:
+            logger.exception("Failed to fetch Pretalx events")
+            return JsonResponse(
+                {"error": "Failed to fetch events from Pretalx. Check server logs for details."}, status=502
+            )
 
         if q:
             filtered = [
