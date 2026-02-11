@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.utils import timezone
 
 from django_program.conference.models import Conference
@@ -23,7 +24,11 @@ from django_program.registration.models import (
     Voucher,
 )
 from django_program.registration.services.cart import CartService, CartSummary, LineItemSummary
-from django_program.registration.services.checkout import CheckoutService
+from django_program.registration.services.checkout import (
+    CheckoutService,
+    _expire_stale_pending_orders,
+    _increment_voucher_usage,
+)
 from django_program.registration.signals import order_paid
 
 User = get_user_model()
@@ -331,30 +336,27 @@ class TestCheckout:
         with pytest.raises(ValidationError, match="no longer valid"):
             CheckoutService.checkout(cart)
 
-    def test_rejects_cart_item_id_mismatch(self, cart_with_ticket):
-        """Defensive check: summary item_id not in fetched items raises ValidationError."""
-        fake_summary = CartSummary(
-            items=[
-                LineItemSummary(
-                    item_id=999999,
-                    description="Ghost",
-                    quantity=1,
-                    unit_price=Decimal("10.00"),
-                    discount=Decimal("0.00"),
-                    line_total=Decimal("10.00"),
-                ),
-            ],
-            subtotal=Decimal("10.00"),
-            discount=Decimal("0.00"),
-            total=Decimal("10.00"),
-        )
-        with patch.object(CartService, "get_summary_from_items", return_value=fake_summary):
-            with pytest.raises(ValidationError, match="Cart changed during checkout"):
-                CheckoutService.checkout(cart_with_ticket)
+    def test_retries_on_reference_collision(self, cart_with_ticket):
+        """IntegrityError on duplicate reference triggers retry with new reference."""
+        real_create = Order.objects.create
+        call_count = 0
 
-    def test_voucher_race_condition_at_update(self, cart, ticket_type, conference):
-        """Voucher passes is_valid but DB update returns 0 due to concurrent change."""
-        CartService.add_ticket(cart, ticket_type, qty=1)
+        def create_with_collision(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise IntegrityError("duplicate key")
+            return real_create(**kwargs)
+
+        with patch.object(Order.objects, "create", side_effect=create_with_collision):
+            order = CheckoutService.checkout(cart_with_ticket)
+
+        assert order.status == Order.Status.PENDING
+        assert call_count == 2
+
+    def test_voucher_race_condition_at_update(self, conference, user):
+        """Voucher passes is_valid in-memory but DB update returns 0."""
+
         voucher = Voucher.objects.create(
             conference=conference,
             code="RACE",
@@ -363,17 +365,43 @@ class TestCheckout:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "RACE")
+        # Deactivate in DB so the atomic update filter returns 0
+        Voucher.objects.filter(pk=voucher.pk).update(is_active=False)
 
-        original_save = Cart.save
+        with pytest.raises(ValidationError, match="no longer valid"):
+            _increment_voucher_usage(voucher=voucher, now=timezone.now())
 
-        def save_and_deactivate(self, *args, **kwargs):
-            original_save(self, *args, **kwargs)
-            Voucher.objects.filter(pk=voucher.pk).update(is_active=False)
+    def test_revalidates_addon_available_from_at_checkout(self, cart, conference):
+        addon = AddOn.objects.create(
+            conference=conference,
+            name="Future Swag",
+            slug="future-swag",
+            price=Decimal("10.00"),
+            is_active=True,
+        )
+        CartService.add_addon(cart, addon, qty=1)
 
-        with patch.object(Cart, "save", save_and_deactivate):
-            with pytest.raises(ValidationError, match="no longer valid"):
-                CheckoutService.checkout(cart)
+        addon.available_from = timezone.now() + timedelta(days=30)
+        addon.save(update_fields=["available_from", "updated_at"])
+
+        with pytest.raises(ValidationError, match="not yet available"):
+            CheckoutService.checkout(cart)
+
+    def test_revalidates_addon_available_until_at_checkout(self, cart, conference):
+        addon = AddOn.objects.create(
+            conference=conference,
+            name="Expired Swag",
+            slug="expired-swag",
+            price=Decimal("10.00"),
+            is_active=True,
+        )
+        CartService.add_addon(cart, addon, qty=1)
+
+        addon.available_until = timezone.now() - timedelta(days=1)
+        addon.save(update_fields=["available_until", "updated_at"])
+
+        with pytest.raises(ValidationError, match="no longer available"):
+            CheckoutService.checkout(cart)
 
     def test_rejects_non_open_cart(self, cart_with_ticket):
         cart_with_ticket.status = Cart.Status.CHECKED_OUT
@@ -503,6 +531,27 @@ class TestCheckout:
         assert Order.objects.count() == order_count_before
         cart.refresh_from_db()
         assert cart.status == Cart.Status.OPEN
+
+    def test_rejects_summary_item_id_mismatch(self, cart_with_ticket):
+        """Defensive check: summary item_id not in fetched items raises ValidationError."""
+        fake_summary = CartSummary(
+            items=[
+                LineItemSummary(
+                    item_id=999999,
+                    description="Ghost",
+                    quantity=1,
+                    unit_price=Decimal("10.00"),
+                    discount=Decimal("0.00"),
+                    line_total=Decimal("10.00"),
+                ),
+            ],
+            subtotal=Decimal("10.00"),
+            discount=Decimal("0.00"),
+            total=Decimal("10.00"),
+        )
+        with patch.object(CartService, "get_summary_from_items", return_value=fake_summary):
+            with pytest.raises(ValidationError, match="Cart changed during checkout"):
+                CheckoutService.checkout(cart_with_ticket)
 
 
 # =============================================================================
@@ -703,6 +752,46 @@ class TestApplyCredit:
         finally:
             order_paid.disconnect(handler)
 
+    def test_rejects_credit_with_zero_remaining_amount(self, conference, user):
+        order = _make_order(conference=conference, user=user, status=Order.Status.PENDING)
+        order.total = Decimal("100.00")
+        order.save(update_fields=["total"])
+
+        credit = Credit.objects.create(
+            user=user,
+            conference=conference,
+            amount=Decimal("50.00"),
+            status=Credit.Status.AVAILABLE,
+        )
+        # Bypass Credit.save() auto-init by updating directly
+        Credit.objects.filter(pk=credit.pk).update(remaining_amount=Decimal("0.00"))
+        credit.refresh_from_db()
+
+        with pytest.raises(ValidationError, match="no remaining balance"):
+            CheckoutService.apply_credit(order, credit)
+
+    def test_fully_paid_without_hold_expires_at(self, conference, user):
+        """When _order_has_hold_expires_at returns False, order saves without hold field."""
+        order = _make_order(conference=conference, user=user, status=Order.Status.PENDING)
+        order.total = Decimal("50.00")
+        order.save(update_fields=["total"])
+
+        credit = Credit.objects.create(
+            user=user,
+            conference=conference,
+            amount=Decimal("50.00"),
+            status=Credit.Status.AVAILABLE,
+        )
+
+        with patch(
+            "django_program.registration.services.checkout._order_has_hold_expires_at",
+            return_value=False,
+        ):
+            CheckoutService.apply_credit(order, credit)
+
+        order.refresh_from_db()
+        assert order.status == Order.Status.PAID
+
 
 # =============================================================================
 # TestCancelOrder
@@ -822,3 +911,51 @@ class TestCancelOrder:
 
         payment = order.payments.first()
         assert payment.status == Payment.Status.REFUNDED
+
+    def test_cancel_without_hold_expires_at(self, conference, user):
+        """When _order_has_hold_expires_at returns False, cancel saves without hold field."""
+        order = _make_order(conference=conference, user=user, status=Order.Status.PENDING)
+
+        with patch(
+            "django_program.registration.services.checkout._order_has_hold_expires_at",
+            return_value=False,
+        ):
+            result = CheckoutService.cancel_order(order)
+
+        assert result.status == Order.Status.CANCELLED
+
+    def test_reverse_credit_payment_without_linked_credit(self, conference, user):
+        """Credit payment exists but no Credit record linked -- skips reversal."""
+        order = _make_order(conference=conference, user=user, status=Order.Status.PENDING)
+        order.total = Decimal("100.00")
+        order.save(update_fields=["total"])
+
+        Payment.objects.create(
+            order=order,
+            method=Payment.Method.CREDIT,
+            status=Payment.Status.SUCCEEDED,
+            amount=Decimal("25.00"),
+        )
+
+        result = CheckoutService.cancel_order(order)
+
+        assert result.status == Order.Status.CANCELLED
+        payment = order.payments.first()
+        assert payment.status == Payment.Status.REFUNDED
+
+
+# =============================================================================
+# TestExpireStaleOrders
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestExpireStaleOrders:
+    def test_expire_skipped_without_hold_field(self, conference):
+        """When _order_has_hold_expires_at returns False, no orders are expired."""
+
+        with patch(
+            "django_program.registration.services.checkout._order_has_hold_expires_at",
+            return_value=False,
+        ):
+            _expire_stale_pending_orders(conference_id=conference.pk, now=timezone.now())
