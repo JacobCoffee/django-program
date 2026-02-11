@@ -71,22 +71,17 @@ Django app's import namespace.
 make pretalx-sync-schema
 ```
 
-This single command chains three steps:
+This is an alias for ``make pretalx-codegen``, which chains three steps:
 
-1. **Fetch** (`make pretalx-fetch-schema`) -- Downloads the OpenAPI schema from
-   `https://docs.pretalx.org/schema.yml` into `schemas/pretalx/schema.yml` and
-   writes a SHA256 checksum to `schemas/pretalx/schema.sha256`.
+1. **Validate** -- Runs ``scripts/pretalx/validate_schema.py`` to verify the
+   OpenAPI schema integrity (required top-level keys, structure checks).
 
-2. **Validate** (`make pretalx-validate-schema`) -- Verifies the SHA256
-   checksum matches, checks for required OpenAPI 3.x top-level keys (`openapi`,
-   `info`, `paths`), and prints a summary of the schema contents.
+2. **Generate models** -- Runs ``scripts/pretalx/generate_client.py`` against
+   the schema and writes Python dataclass models to
+   ``packages/pretalx-client/src/pretalx_client/generated/models.py``.
 
-3. **Generate** (`make pretalx-generate-client`) -- Runs
-   `datamodel-code-generator` against the downloaded schema and writes Python
-   dataclass models to
-   `packages/pretalx-client/src/pretalx_client/generated/models.py`. Generator
-   options include `--target-python-version 3.14`, `--use-union-operator`, and
-   `--output-model-type dataclasses.dataclass`.
+3. **Generate HTTP client** (``make pretalx-generate-http-client``) -- Runs
+   ``scripts/pretalx/generate_http_client.py`` to produce the typed HTTP client.
 
 ### Automated Schema Drift Detection
 
