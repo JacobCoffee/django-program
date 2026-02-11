@@ -495,6 +495,32 @@ class TestCheckout:
         with pytest.raises(ValidationError, match="no longer active"):
             CheckoutService.checkout(cart)
 
+    def test_revalidates_addon_prerequisites_at_checkout(self, cart, ticket_type, conference):
+        other_ticket = TicketType.objects.create(
+            conference=conference,
+            name="VIP",
+            slug="vip-prereq",
+            price=Decimal("500.00"),
+            total_quantity=0,
+            limit_per_user=10,
+            is_active=True,
+        )
+        addon = AddOn.objects.create(
+            conference=conference,
+            name="Workshop",
+            slug="workshop-prereq",
+            price=Decimal("50.00"),
+            is_active=True,
+        )
+        CartService.add_ticket(cart, ticket_type, qty=1)
+        CartService.add_addon(cart, addon, qty=1)
+
+        # Admin adds a prerequisite after the cart was assembled
+        addon.requires_ticket_types.add(other_ticket)
+
+        with pytest.raises(ValidationError, match="requires a ticket type"):
+            CheckoutService.checkout(cart)
+
     def test_order_has_no_voucher_when_cart_has_none(self, cart_with_ticket):
         order = CheckoutService.checkout(cart_with_ticket)
 

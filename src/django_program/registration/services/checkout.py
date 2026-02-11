@@ -343,14 +343,15 @@ def _revalidate_stock(items: list[object]) -> None:
     """Re-validate stock availability for all cart items at checkout time.
 
     Raises:
-        ValidationError: If any item has insufficient stock.
+        ValidationError: If any item has insufficient stock or missing prerequisites.
     """
     now = timezone.now()
+    ticket_type_ids = {item.ticket_type_id for item in items if item.ticket_type_id is not None}
     for item in items:
         if item.ticket_type is not None:
             _revalidate_ticket_stock(item)
         elif item.addon is not None:
-            _revalidate_addon_stock(item, now)
+            _revalidate_addon_stock(item, now, ticket_type_ids)
 
 
 def _revalidate_ticket_stock(item: object) -> None:
@@ -363,9 +364,12 @@ def _revalidate_ticket_stock(item: object) -> None:
         raise ValidationError(f"Only {remaining} tickets of type '{tt.name}' remaining, but {item.quantity} requested.")
 
 
-def _revalidate_addon_stock(item: object, now: object) -> None:
-    """Validate an add-on is still available within its window and has stock."""
+def _revalidate_addon_stock(item: object, now: object, ticket_type_ids: set[int]) -> None:
+    """Validate an add-on is still available within its window, has stock, and prerequisites are met."""
     addon = item.addon
+    required_ids = set(addon.requires_ticket_types.values_list("pk", flat=True))
+    if required_ids and not required_ids & ticket_type_ids:
+        raise ValidationError(f"Add-on '{addon.name}' requires a ticket type that is not in your cart.")
     if not addon.is_active:
         raise ValidationError(f"Add-on '{addon.name}' is no longer active.")
     if addon.available_from and now < addon.available_from:
