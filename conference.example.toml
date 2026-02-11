@@ -1,0 +1,90 @@
+[conference]
+name = "PyCon US 2027"
+start = 2027-05-14
+end = 2027-05-22
+timezone = "America/New_York"
+venue = "David L. Lawrence Convention Center, Pittsburgh PA"
+pretalx_event_slug = "pycon-us-2027"
+website_url = "https://us.pycon.org/2027/"
+
+[[conference.sections]]
+name = "Tutorials"
+start = 2027-05-14
+end = 2027-05-15
+
+[[conference.sections]]
+name = "Talks"
+start = 2027-05-16
+end = 2027-05-18
+
+[[conference.sections]]
+name = "Sprints"
+start = 2027-05-19
+end = 2027-05-22
+
+[[conference.tickets]]
+name = "Individual"
+price = 100.00
+quantity = 2500
+per_user = 1
+available = { opens = 2027-01-15, closes = 2027-05-13 }
+
+[[conference.tickets]]
+name = "Corporate"
+price = 350.00
+quantity = 1000
+per_user = 1
+available = { opens = 2027-01-15, closes = 2027-05-13 }
+
+[[conference.tickets]]
+name = "Student"
+price = 25.00
+quantity = 500
+per_user = 1
+voucher_required = true
+available = { opens = 2027-01-15, closes = 2027-05-13 }
+
+[[conference.tickets]]
+name = "Speaker"
+price = 0.00
+quantity = 200
+per_user = 1
+voucher_required = true
+available = { opens = 2027-01-01, closes = 2027-05-18 }
+
+[[conference.addons]]
+name = "Tutorial: Intro to Django"
+price = 150.00
+quantity = 40
+requires = ["individual", "corporate", "student", "speaker"]
+
+[[conference.addons]]
+name = "PyCon T-Shirt"
+price = 25.00
+quantity = 3000
+requires = ["individual", "corporate", "student", "speaker"]
+
+[[conference.sponsor_levels]]
+name = "Visionary"
+cost = 150_000.00
+comp_tickets = 25
+
+[[conference.sponsor_levels]]
+name = "Sustainability"
+cost = 90_000.00
+comp_tickets = 15
+
+[[conference.sponsor_levels]]
+name = "Maintaining"
+cost = 60_000.00
+comp_tickets = 10
+
+[[conference.sponsor_levels]]
+name = "Contributing"
+cost = 30_000.00
+comp_tickets = 5
+
+[[conference.sponsor_levels]]
+name = "Participating"
+cost = 7_500.00
+comp_tickets = 2

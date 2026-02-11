@@ -1,0 +1,42 @@
+import pytest
+from django.test import override_settings
+
+from django_program.settings import get_config
+
+
+def test_get_config_rejects_non_mapping_root() -> None:
+    with override_settings(DJANGO_PROGRAM=["bad"]):
+        with pytest.raises(TypeError, match="must be a mapping"):
+            get_config()
+
+
+def test_get_config_rejects_non_mapping_nested_sections() -> None:
+    with override_settings(DJANGO_PROGRAM={"stripe": ["bad"]}):
+        with pytest.raises(TypeError, match=r"DJANGO_PROGRAM\['stripe'\] must be a mapping"):
+            get_config()
+
+    with override_settings(DJANGO_PROGRAM={"pretalx": ["bad"]}):
+        with pytest.raises(TypeError, match=r"DJANGO_PROGRAM\['pretalx'\] must be a mapping"):
+            get_config()
+
+
+def test_get_config_validates_primitive_values() -> None:
+    with override_settings(DJANGO_PROGRAM={"cart_expiry_minutes": 0}):
+        with pytest.raises(ValueError, match="positive integer"):
+            get_config()
+
+    with override_settings(DJANGO_PROGRAM={"currency": ""}):
+        with pytest.raises(ValueError, match="currency"):
+            get_config()
+
+    with override_settings(DJANGO_PROGRAM={"currency_symbol": ""}):
+        with pytest.raises(ValueError, match="currency_symbol"):
+            get_config()
+
+
+def test_get_config_cache_clears_on_setting_changed() -> None:
+    with override_settings(DJANGO_PROGRAM={"currency": "USD"}):
+        assert get_config().currency == "USD"
+
+    with override_settings(DJANGO_PROGRAM={"currency": "EUR"}):
+        assert get_config().currency == "EUR"
