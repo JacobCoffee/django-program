@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 
 import httpx
 import pytest
+import yaml
 
 # ---------------------------------------------------------------------------
 # Helpers: import scripts by file path
@@ -551,3 +552,141 @@ class TestGenerateClient:
         assert call_args[1]["capture_output"] is True
         assert call_args[1]["text"] is True
         assert call_args[1]["check"] is False
+
+
+# ---------------------------------------------------------------------------
+# generate_http_client.py
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateHttpClient:
+    """Tests for scripts/pretalx/generate_http_client.py."""
+
+    @pytest.fixture
+    def gen_mod(self):
+        return _import_script("generate_http_client")
+
+    @pytest.mark.unit
+    def test_sanitize_operation_id_basic(self, gen_mod):
+        assert gen_mod.sanitize_operation_id("speakers_list") == "speakers_list"
+
+    @pytest.mark.unit
+    def test_sanitize_operation_id_spaces(self, gen_mod):
+        assert gen_mod.sanitize_operation_id("File upload") == "file_upload"
+
+    @pytest.mark.unit
+    def test_sanitize_operation_id_special_chars(self, gen_mod):
+        assert gen_mod.sanitize_operation_id("foo-bar.baz") == "foo_bar_baz"
+
+    @pytest.mark.unit
+    def test_sanitize_operation_id_keyword(self, gen_mod):
+        assert gen_mod.sanitize_operation_id("class") == "class_"
+
+    @pytest.mark.unit
+    def test_patch_schema_fixes_type_str(self, gen_mod):
+        schema = {"paths": {}, "components": {"schemas": {"Foo": {"properties": {"bar": {"type": "str"}}}}}}
+        patched = gen_mod._patch_schema(schema)
+        assert patched["components"]["schemas"]["Foo"]["properties"]["bar"]["type"] == "string"
+
+    @pytest.mark.unit
+    def test_patch_schema_preserves_type_string(self, gen_mod):
+        schema = {"paths": {}, "components": {"schemas": {"Foo": {"properties": {"bar": {"type": "string"}}}}}}
+        patched = gen_mod._patch_schema(schema)
+        assert patched["components"]["schemas"]["Foo"]["properties"]["bar"]["type"] == "string"
+
+    @pytest.mark.unit
+    def test_is_paginated_detects_paginated_list(self, gen_mod):
+        responses = {
+            "200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/PaginatedSpeakerList"}}}}
+        }
+        assert gen_mod._is_paginated(responses) is True
+
+    @pytest.mark.unit
+    def test_is_paginated_rejects_non_paginated(self, gen_mod):
+        responses = {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Speaker"}}}}}
+        assert gen_mod._is_paginated(responses) is False
+
+    @pytest.mark.unit
+    def test_extract_operations_count(self, gen_mod):
+        """Verify correct method count from the real schema."""
+        schema_path = REPO_ROOT / "schemas" / "pretalx" / "schema.yml"
+        if not schema_path.exists():
+            pytest.skip("Real schema not available")
+
+        with schema_path.open() as f:
+            schema = yaml.safe_load(f)
+
+        schema = gen_mod._patch_schema(schema)
+        ops = gen_mod.extract_operations(schema)
+        assert len(ops) == 129
+
+    @pytest.mark.unit
+    def test_main_writes_output(self, tmp_path):
+        """Mocked schema produces output file."""
+        schema_dir = tmp_path / "schemas" / "pretalx"
+        schema_dir.mkdir(parents=True)
+        schema_file = schema_dir / "schema.yml"
+
+        # Minimal valid schema with one operation
+        schema_content = """
+openapi: '3.0.3'
+info:
+  title: Test
+  version: '1.0'
+paths:
+  /api/events/:
+    get:
+      operationId: api_events_list
+      tags:
+        - events
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+          description: ''
+"""
+        schema_file.write_text(schema_content)
+
+        output_dir = tmp_path / "output"
+
+        mod = _import_script("generate_http_client")
+        mod.SCHEMA_FILE = schema_file
+        mod.OUTPUT_DIR = output_dir
+        mod.OUTPUT_FILE = output_dir / "http_client.py"
+        mod.PROJECT_ROOT = tmp_path
+
+        mod.main()
+
+        assert (output_dir / "http_client.py").exists()
+        content = (output_dir / "http_client.py").read_text()
+        assert "class GeneratedPretalxClient" in content
+        assert "def api_events_list" in content
+
+    @pytest.mark.unit
+    def test_main_missing_schema_exits(self, tmp_path):
+        """SystemExit(1) when the schema file does not exist."""
+        schema_file = tmp_path / "schemas" / "pretalx" / "schema.yml"
+        output_dir = tmp_path / "output"
+
+        mod = _import_script("generate_http_client")
+        mod.SCHEMA_FILE = schema_file
+        mod.OUTPUT_DIR = output_dir
+        mod.OUTPUT_FILE = output_dir / "http_client.py"
+        mod.PROJECT_ROOT = tmp_path
+
+        with pytest.raises(SystemExit) as exc_info:
+            mod.main()
+
+        assert exc_info.value.code == 1
+
+    @pytest.mark.unit
+    def test_query_param_type_mapping(self, gen_mod):
+        assert gen_mod._query_param_type({"type": "string"}) == "str | None"
+        assert gen_mod._query_param_type({"type": "integer"}) == "int | None"
+        assert gen_mod._query_param_type({"type": "boolean"}) == "bool | None"
+        assert gen_mod._query_param_type({"type": "array"}) == "list[str] | None"
+        assert gen_mod._query_param_type({}) == "str | None"

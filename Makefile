@@ -13,6 +13,7 @@ UV            ?= uv $(UV_OPTS)
 .PHONY: ci
 .PHONY: act act-ci act-docs act-list
 .PHONY: test-cov test-fast build destroy
+.PHONY: pretalx-generate-http-client pretalx-codegen
 .PHONY: test-pretalx-client
 
 help: ## Display this help text for Makefile
@@ -106,6 +107,20 @@ test-fast: ## Run tests without coverage (faster)
 
 test-pretalx-client: ## Run pretalx-client package tests
 	@PYTHONDONTWRITEBYTECODE=1 $(UV) run --no-sync pytest packages/pretalx-client/tests/ -v
+
+# =============================================================================
+# Pretalx Codegen
+# =============================================================================
+
+##@ Pretalx Codegen
+
+pretalx-generate-http-client: ## Generate HTTP client from OpenAPI schema
+	@$(UV) run python scripts/pretalx/generate_http_client.py
+
+pretalx-codegen: ## Full codegen pipeline (validate + models + HTTP client)
+	@$(UV) run python scripts/pretalx/validate_schema.py
+	@$(UV) run python scripts/pretalx/generate_client.py
+	@$(UV) run python scripts/pretalx/generate_http_client.py
 
 # =============================================================================
 # Documentation

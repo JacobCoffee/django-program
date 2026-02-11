@@ -233,6 +233,9 @@ known-first-party = ["django_program", "pretalx_client", "tests"]
   "S",        # Security (local dev scripts)
   "T201",     # Print statements (CLI scripts)
   "ANN",      # Type annotations (utility scripts)
+  "C901",     # Complexity (codegen functions are inherently complex)
+  "PLR0912",  # Too many branches (codegen)
+  "PLR0915",  # Too many statements (codegen)
 ]
 "packages/**/tests/**/*.*" = [
   "A",

@@ -9,14 +9,12 @@ API response data is returned as typed dataclasses (:class:`PretalxSpeaker`,
 the pytanis pattern with stdlib dataclasses instead of pydantic.
 """
 
-import http
 import logging
 from typing import Any
 
-import httpx
-
 from pretalx_client.adapters.normalization import localized
 from pretalx_client.adapters.talks import fetch_talks_with_fallback
+from pretalx_client.generated.http_client import GeneratedPretalxClient
 from pretalx_client.models import (
     PretalxSlot,
     PretalxSpeaker,
@@ -33,6 +31,9 @@ class PretalxClient:
     Pretalx event. Handles pagination automatically and supports both
     authenticated and public access. Returns typed dataclasses rather
     than raw dicts.
+
+    Delegates low-level HTTP operations to the auto-generated
+    :class:`~pretalx_client.generated.http_client.GeneratedPretalxClient`.
 
     Args:
         event_slug: The Pretalx event slug (e.g. ``"pycon-us-2026"``).
@@ -74,11 +75,16 @@ class PretalxClient:
         if self.api_token:
             self.headers["Authorization"] = f"Token {self.api_token}"
 
+        self._http = GeneratedPretalxClient(
+            base_url=self.base_url,
+            api_token=self.api_token,
+        )
+
     def _get_paginated(self, url: str) -> list[dict[str, Any]]:
         """Fetch all pages from a paginated Pretalx API endpoint.
 
         Follows the ``next`` link in each response until all pages have been
-        collected.
+        collected.  Delegates to the generated client's ``_paginate()`` method.
 
         Args:
             url: The initial URL to fetch.
@@ -89,28 +95,14 @@ class PretalxClient:
         Raises:
             RuntimeError: If the API returns an HTTP error status.
         """
-        results: list[dict[str, Any]] = []
-        current_url: str | None = url
+        # Strip the base_url prefix to get the path for the generated client.
+        # If the URL doesn't start with base_url (e.g. it's already a full
+        # ``next`` URL from pagination), pass it through as a path.
+        path = url
+        if url.startswith(self.base_url):
+            path = url[len(self.base_url) :]
 
-        with httpx.Client(timeout=30, headers=self.headers) as client:
-            while current_url is not None:
-                logger.debug("Fetching %s", current_url)
-                try:
-                    response = client.get(current_url)
-                    response.raise_for_status()
-                except httpx.HTTPStatusError as exc:
-                    msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
-                    raise RuntimeError(msg) from exc
-                except httpx.RequestError as exc:
-                    msg = f"Pretalx API connection error for URL {current_url}: {exc}"
-                    raise RuntimeError(msg) from exc
-
-                data = response.json()
-                results.extend(data.get("results", []))
-                current_url = data.get("next")
-
-        logger.debug("Collected %d results from paginated endpoint", len(results))
-        return results
+        return self._http._paginate(path)  # noqa: SLF001
 
     def _get_paginated_or_none(self, url: str) -> list[dict[str, Any]] | None:
         """Fetch a paginated endpoint, returning ``None`` on HTTP 404.
@@ -129,31 +121,11 @@ class PretalxClient:
         Raises:
             RuntimeError: If the API returns a non-404 HTTP error status.
         """
-        results: list[dict[str, Any]] = []
-        current_url: str | None = url
+        path = url
+        if url.startswith(self.base_url):
+            path = url[len(self.base_url) :]
 
-        with httpx.Client(timeout=30, headers=self.headers) as client:
-            while current_url is not None:
-                logger.debug("Fetching %s", current_url)
-                try:
-                    response = client.get(current_url)
-                    response.raise_for_status()
-                except httpx.HTTPStatusError as exc:
-                    if exc.response.status_code == http.HTTPStatus.NOT_FOUND:
-                        logger.debug("Got 404 for %s, endpoint unavailable", url)
-                        return None
-                    msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
-                    raise RuntimeError(msg) from exc
-                except httpx.RequestError as exc:
-                    msg = f"Pretalx API connection error for URL {current_url}: {exc}"
-                    raise RuntimeError(msg) from exc
-
-                data = response.json()
-                results.extend(data.get("results", []))
-                current_url = data.get("next")
-
-        logger.debug("Collected %d results from paginated endpoint", len(results))
-        return results
+        return self._http._paginate_or_none(path)  # noqa: SLF001
 
     def fetch_event(self) -> dict[str, Any]:
         """Fetch metadata for this event.
@@ -167,17 +139,7 @@ class PretalxClient:
         Raises:
             RuntimeError: If the API returns an HTTP error status.
         """
-        with httpx.Client(timeout=30, headers=self.headers) as client:
-            try:
-                response = client.get(self.api_url)
-                response.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
-                raise RuntimeError(msg) from exc
-            except httpx.RequestError as exc:
-                msg = f"Pretalx API connection error for URL {self.api_url}: {exc}"
-                raise RuntimeError(msg) from exc
-        return response.json()
+        return self._http.root_retrieve(event=self.event_slug)
 
     def _fetch_id_name_mapping(self, endpoint: str) -> dict[int, str]:
         """Fetch a lookup table from a Pretalx endpoint that returns ID+name objects.
@@ -219,8 +181,7 @@ class PretalxClient:
         Returns:
             A list of raw room dicts from the Pretalx API.
         """
-        url = f"{self.api_url}rooms/"
-        return self._get_paginated(url)
+        return self._http.rooms_list(event=self.event_slug)
 
     def fetch_submission_types(self) -> dict[int, str]:
         """Fetch submission type ID-to-name mappings for the event.
@@ -244,8 +205,8 @@ class PretalxClient:
         Returns:
             A list of :class:`PretalxSpeaker` instances.
         """
-        url = f"{self.api_url}speakers/"
-        return [PretalxSpeaker.from_api(item) for item in self._get_paginated(url)]
+        raw = self._http.speakers_list(event=self.event_slug)
+        return [PretalxSpeaker.from_api(item) for item in raw]
 
     def fetch_talks(
         self,
@@ -332,37 +293,8 @@ class PretalxClient:
         Returns:
             A list of raw event dicts from the Pretalx API.
         """
-        normalized = base_url.rstrip("/").removesuffix("/api")
-        url: str | None = f"{normalized}/api/events/"
-
-        headers: dict[str, str] = {"Accept": "application/json"}
-        if api_token:
-            headers["Authorization"] = f"Token {api_token}"
-
-        results: list[dict[str, Any]] = []
-        with httpx.Client(timeout=30, headers=headers) as client:
-            while url is not None:
-                logger.debug("Fetching %s", url)
-                try:
-                    response = client.get(url)
-                    response.raise_for_status()
-                except httpx.HTTPStatusError as exc:
-                    msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
-                    raise RuntimeError(msg) from exc
-                except httpx.RequestError as exc:
-                    msg = f"Pretalx API connection error for URL {url}: {exc}"
-                    raise RuntimeError(msg) from exc
-
-                data = response.json()
-                if isinstance(data, list):
-                    results.extend(data)
-                    url = None
-                else:
-                    results.extend(data.get("results", []))
-                    url = data.get("next")
-
-        logger.debug("Collected %d events", len(results))
-        return results
+        http = GeneratedPretalxClient(base_url=base_url, api_token=api_token)
+        return http._paginate("/api/events/")  # noqa: SLF001
 
     def fetch_schedule(
         self,
@@ -381,7 +313,6 @@ class PretalxClient:
         Returns:
             A list of :class:`PretalxSlot` instances.
         """
-        url = f"{self.api_url}slots/"
-        raw_slots = self._get_paginated(url)
+        raw_slots = self._http.slots_list(event=self.event_slug)
         logger.debug("Fetched %d schedule slots", len(raw_slots))
         return [PretalxSlot.from_api(slot, rooms=rooms) for slot in raw_slots]
