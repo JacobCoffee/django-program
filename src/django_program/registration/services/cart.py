@@ -10,7 +10,7 @@ from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from django_program.registration.models import (
@@ -130,12 +130,8 @@ class CartService:
         if not ticket_type.is_available:
             raise ValidationError(f"Ticket type '{ticket_type.name}' is not available.")
 
-        existing_in_cart = (
-            cart.items.filter(ticket_type=ticket_type).aggregate(
-                total=models.Sum("quantity"),
-            )["total"]
-            or 0
-        )
+        item = cart.items.select_for_update().filter(ticket_type=ticket_type).first()
+        existing_in_cart = item.quantity if item is not None else 0
 
         remaining = ticket_type.remaining_quantity
         if remaining is not None and remaining < existing_in_cart + qty:
@@ -166,16 +162,31 @@ class CartService:
             if applicable_ids and ticket_type.pk not in applicable_ids:
                 raise ValidationError(f"The applied voucher does not cover ticket type '{ticket_type.name}'.")
 
-        item = cart.items.filter(ticket_type=ticket_type).first()
         if item is not None:
             item.quantity += qty
             item.save(update_fields=["quantity"])
         else:
-            item = CartItem.objects.create(
-                cart=cart,
-                ticket_type=ticket_type,
-                quantity=qty,
-            )
+            try:
+                item = CartItem.objects.create(
+                    cart=cart,
+                    ticket_type=ticket_type,
+                    quantity=qty,
+                )
+            except IntegrityError:
+                # Another transaction inserted the same cart/ticket row.
+                item = cart.items.select_for_update().get(ticket_type=ticket_type)
+                remaining = ticket_type.remaining_quantity
+                if remaining is not None and remaining < item.quantity + qty:
+                    raise ValidationError(f"Only {remaining} tickets of type '{ticket_type.name}' remaining.") from None
+
+                if item.quantity + existing_in_orders + qty > ticket_type.limit_per_user:
+                    raise ValidationError(
+                        f"Adding {qty} would exceed the per-user limit of "
+                        f"{ticket_type.limit_per_user} for '{ticket_type.name}'."
+                    ) from None
+
+                item.quantity += qty
+                item.save(update_fields=["quantity"])
 
         _extend_cart_expiry(cart)
         return item
@@ -225,12 +236,8 @@ class CartService:
                     f"{', '.join(str(pk) for pk in sorted(required_ticket_ids))}."
                 )
 
-        existing_in_cart = (
-            cart.items.filter(addon=addon).aggregate(
-                total=models.Sum("quantity"),
-            )["total"]
-            or 0
-        )
+        item = cart.items.select_for_update().filter(addon=addon).first()
+        existing_in_cart = item.quantity if item is not None else 0
 
         if addon.total_quantity > 0:
             sold = (
@@ -247,16 +254,36 @@ class CartService:
             if remaining < existing_in_cart + qty:
                 raise ValidationError(f"Only {remaining} of add-on '{addon.name}' remaining.")
 
-        item = cart.items.filter(addon=addon).first()
         if item is not None:
             item.quantity += qty
             item.save(update_fields=["quantity"])
         else:
-            item = CartItem.objects.create(
-                cart=cart,
-                addon=addon,
-                quantity=qty,
-            )
+            try:
+                item = CartItem.objects.create(
+                    cart=cart,
+                    addon=addon,
+                    quantity=qty,
+                )
+            except IntegrityError:
+                # Another transaction inserted the same cart/add-on row.
+                item = cart.items.select_for_update().get(addon=addon)
+                if addon.total_quantity > 0:
+                    sold = (
+                        OrderLineItem.objects.filter(
+                            addon=addon,
+                            order__status__in=[
+                                Order.Status.PAID,
+                                Order.Status.PARTIALLY_REFUNDED,
+                            ],
+                        ).aggregate(total=models.Sum("quantity"))["total"]
+                        or 0
+                    )
+                    remaining = addon.total_quantity - sold
+                    if remaining < item.quantity + qty:
+                        raise ValidationError(f"Only {remaining} of add-on '{addon.name}' remaining.") from None
+
+                item.quantity += qty
+                item.save(update_fields=["quantity"])
 
         _extend_cart_expiry(cart)
         return item
@@ -446,9 +473,12 @@ def _build_line_summaries(
     applicable_line_totals: list[tuple[int, Decimal]] = []
 
     for item in items:
-        description = (
-            item.ticket_type.name if item.ticket_type is not None else item.addon.name  # type: ignore[union-attr]
-        )
+        if item.ticket_type is not None:
+            description = item.ticket_type.name
+        else:
+            # CartItem DB constraint guarantees exactly one of ticket_type/addon.
+            assert item.addon is not None
+            description = item.addon.name
         line_total = item.line_total
         subtotal += line_total
 
