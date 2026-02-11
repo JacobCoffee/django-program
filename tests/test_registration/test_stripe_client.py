@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django_program.conference.models import Conference
 from django_program.registration.models import Order, StripeCustomer
 from django_program.registration.stripe_client import StripeClient
+from django_program.settings import get_config
 
 User = get_user_model()
 
@@ -88,7 +89,7 @@ class TestInit:
         assert client.conference == conference
         mock_cls.assert_called_once_with(
             "sk_test_abc123",
-            stripe_version="2024-12-18",
+            stripe_version=get_config().stripe.api_version,
         )
 
 
