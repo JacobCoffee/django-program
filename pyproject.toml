@@ -44,7 +44,11 @@ classifiers = [
   "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = ["django>=5.2", "stripe>=12.0.0"]
+dependencies = [
+    "django>=5.2",
+    "django-fernet-encrypted-fields>=0.3.1",
+    "stripe>=12.0.0",
+]
 description = "Modern conference management plugin for Django"
 keywords = [
   "django",
@@ -207,6 +211,7 @@ known-first-party = ["django_program", "tests"]
 "**/management/**/*.*" = [
   "ANN401",  # Any in management command signatures (Django convention)
   "ARG002",  # Unused *args in handle() (Django convention)
+  "N806",    # User = get_user_model() (Django convention)
   "PLR2004", # Magic values in verbosity checks
 ]
 "docs/conf.py" = [
@@ -214,6 +219,11 @@ known-first-party = ["django_program", "tests"]
   "INP001", # Implicit namespace package
   "PTH",    # Use pathlib
   "DTZ",    # Datetime timezone
+]
+"examples/**/*.*" = [
+  "INP001", # Implicit namespace package (standalone Django project)
+  "PLC0415", # Import not at top level (Django manage.py pattern)
+  "S105",   # Hardcoded secret key (dev-only)
 ]
 "tests/**/*.*" = [
   "A",
@@ -260,6 +270,9 @@ deprecated = "warn"
 unresolved-attribute = "warn"
 # Django field types (CharField etc.) don't resolve to Python builtins
 invalid-return-type = "warn"
+# Django field descriptors don't implement SupportsInt/SupportsIndex protocols
+unsupported-operator = "warn"
+invalid-argument-type = "warn"
 
 [tool.ty.src]
 exclude = ["docs/conf.py", "tests/", "refcode/"]

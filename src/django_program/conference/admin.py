@@ -1,8 +1,27 @@
 """Django admin configuration for the conference app."""
 
+from django import forms
 from django.contrib import admin
 
 from django_program.conference.models import Conference, Section
+
+
+class ConferenceForm(forms.ModelForm):
+    """Custom form that masks Stripe secret fields in the admin.
+
+    Uses ``PasswordInput`` widgets so values are never displayed in the
+    browser. Setting ``render_value=True`` lets admins see that a value
+    is present (as dots) without exposing the plaintext.
+    """
+
+    class Meta:
+        model = Conference
+        exclude: list[str] = []
+        widgets = {
+            "stripe_secret_key": forms.PasswordInput(attrs={"autocomplete": "off"}, render_value=True),
+            "stripe_publishable_key": forms.PasswordInput(attrs={"autocomplete": "off"}, render_value=True),
+            "stripe_webhook_secret": forms.PasswordInput(attrs={"autocomplete": "off"}, render_value=True),
+        }
 
 
 class SectionInline(admin.TabularInline):
@@ -27,6 +46,7 @@ class ConferenceAdmin(admin.ModelAdmin):
     Sections are editable inline via ``SectionInline``.
     """
 
+    form = ConferenceForm
     list_display = ("name", "slug", "start_date", "end_date", "is_active")
     list_filter = ("is_active",)
     search_fields = ("name", "slug")

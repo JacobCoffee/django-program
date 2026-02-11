@@ -1,1 +1,1 @@
-"""Registration, ticketing, and checkout for django-program."""
+"""Registration, ticketing, and payment management for django-program."""
