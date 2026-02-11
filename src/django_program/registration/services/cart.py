@@ -86,6 +86,9 @@ class CartService:
         ).first()
 
         if cart is not None:
+            if cart.expires_at is None:
+                cart.expires_at = now + timedelta(minutes=config.cart_expiry_minutes)
+                cart.save(update_fields=["expires_at", "updated_at"])
             return cart
 
         return Cart.objects.create(

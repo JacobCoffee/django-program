@@ -163,6 +163,25 @@ class TestGetOrCreateCart:
         assert result.pk != stale.pk
         assert result.status == Cart.Status.OPEN
 
+    def test_sets_expiry_when_existing_open_cart_has_no_expiration(self, conference, user, settings):
+        settings.DJANGO_PROGRAM = {"cart_expiry_minutes": 30}
+        existing = Cart.objects.create(
+            user=user,
+            conference=conference,
+            status=Cart.Status.OPEN,
+            expires_at=None,
+        )
+        before = timezone.now()
+
+        result = CartService.get_or_create_cart(user, conference)
+        after = timezone.now()
+
+        assert result.pk == existing.pk
+        assert result.expires_at is not None
+        expected_min = before + timedelta(minutes=30)
+        expected_max = after + timedelta(minutes=30)
+        assert expected_min <= result.expires_at <= expected_max
+
     def test_sets_correct_expires_at_from_config(self, conference, user, settings):
         settings.DJANGO_PROGRAM = {"cart_expiry_minutes": 45}
 
