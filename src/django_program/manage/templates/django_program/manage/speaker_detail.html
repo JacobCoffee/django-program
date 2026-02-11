@@ -1,0 +1,367 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}{{ speaker.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ---- Speaker Profile Hero ---- */
+  .speaker-hero {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    padding: 2rem 2rem 1.75rem;
+    background:
+      linear-gradient(135deg, rgba(67, 56, 202, 0.04) 0%, rgba(13, 148, 136, 0.03) 100%),
+      var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .speaker-hero::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  }
+
+  .speaker-avatar {
+    flex-shrink: 0;
+  }
+
+  .speaker-avatar img,
+  .speaker-avatar-fallback {
+    width: 120px;
+    height: 120px;
+    border-radius: 14px;
+    object-fit: cover;
+    border: 2px solid var(--color-border);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .speaker-avatar-fallback {
+    background: linear-gradient(135deg, var(--color-primary) 0%, #6366f1 100%);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 2.5rem;
+    letter-spacing: -0.02em;
+    border: none;
+  }
+
+  .speaker-identity {
+    min-width: 0;
+    flex: 1;
+    padding-top: 0.15rem;
+  }
+
+  .speaker-name {
+    font-size: 1.75rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    color: var(--color-text);
+    line-height: 1.2;
+    margin-bottom: 0.35rem;
+  }
+
+  .speaker-email {
+    font-size: 0.92rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 1rem;
+  }
+
+  .speaker-email a {
+    color: var(--color-text-secondary);
+    transition: color 0.15s ease;
+  }
+  .speaker-email a:hover {
+    color: var(--color-primary);
+  }
+
+  .speaker-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .speaker-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+
+  .speaker-meta-chip strong {
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .speaker-meta-chip .mono {
+    font-size: 0.75rem;
+  }
+
+  .speaker-meta-chip--accent {
+    background: var(--color-accent-light);
+    border-color: transparent;
+    color: var(--color-accent);
+  }
+
+  .speaker-meta-chip--accent strong {
+    color: var(--color-accent);
+  }
+
+  /* ---- Biography Section ---- */
+  .speaker-bio {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .speaker-bio .section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .speaker-bio-text {
+    font-size: 0.95rem;
+    line-height: 1.75;
+    color: var(--color-text);
+  }
+
+  .speaker-bio-text p {
+    margin-bottom: 0.75rem;
+  }
+  .speaker-bio-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* ---- Talks Section ---- */
+  .speaker-talks {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 1.5rem 1.75rem;
+  }
+
+  .speaker-talks .section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .talk-card-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .talk-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    padding: 0.85rem 1rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .talk-card:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 1px 6px rgba(67, 56, 202, 0.06);
+  }
+
+  .talk-card-indicator {
+    flex-shrink: 0;
+    width: 3px;
+    height: 2.4rem;
+    border-radius: 2px;
+    background: var(--color-primary);
+    margin-top: 0.15rem;
+  }
+
+  .talk-card-content {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .talk-card-title {
+    font-weight: 600;
+    font-size: 0.92rem;
+    line-height: 1.35;
+    color: var(--color-primary);
+  }
+
+  .talk-card-title:hover {
+    color: var(--color-primary-hover);
+  }
+
+  .talk-card-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.8rem;
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+  }
+
+  .talk-card-detail {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 768px) {
+    .speaker-hero {
+      flex-direction: column;
+      gap: 1.25rem;
+      padding: 1.5rem 1.25rem;
+      align-items: center;
+      text-align: center;
+    }
+
+    .speaker-avatar img,
+    .speaker-avatar-fallback {
+      width: 96px;
+      height: 96px;
+    }
+
+    .speaker-name {
+      font-size: 1.4rem;
+    }
+
+    .speaker-meta {
+      justify-content: center;
+    }
+
+    .speaker-bio,
+    .speaker-talks {
+      padding: 1.25rem 1rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:speaker-list' conference.slug %}">Speakers</a>
+  <span class="breadcrumb-separator"></span>
+  <span>{{ speaker.name }}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>{{ speaker.name }}</h1>
+<p>Speaker profile</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:speaker-list' conference.slug %}" class="btn btn-secondary">Back to Speakers</a>
+{% endblock %}
+
+{% block content %}
+<div class="speaker-hero">
+  <div class="speaker-avatar">
+    {% if speaker.avatar_url %}
+    <img src="{{ speaker.avatar_url }}" alt="{{ speaker.name }}">
+    {% else %}
+    <div class="speaker-avatar-fallback" aria-hidden="true">
+      {{ speaker.name|slice:":1"|upper }}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="speaker-identity">
+    <div class="speaker-name">{{ speaker.name }}</div>
+    {% if speaker.email %}
+    <div class="speaker-email"><a href="mailto:{{ speaker.email }}">{{ speaker.email }}</a></div>
+    {% endif %}
+
+    <div class="speaker-meta">
+      <span class="speaker-meta-chip--accent speaker-meta-chip">
+        <strong>{{ speaker.talk_count }}</strong> talk{{ speaker.talk_count|pluralize }}
+      </span>
+      <span class="speaker-meta-chip">
+        Code: <span class="mono">{{ speaker.pretalx_code }}</span>
+      </span>
+      {% if speaker.synced_at %}
+      <span class="speaker-meta-chip">
+        Synced {{ speaker.synced_at|date:"N j, Y" }}
+      </span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if speaker.biography %}
+<div class="speaker-bio">
+  <div class="section-label">Biography</div>
+  <div class="speaker-bio-text">{{ speaker.biography|linebreaks }}</div>
+</div>
+{% endif %}
+
+<div class="speaker-talks">
+  <div class="section-label">Talks</div>
+  {% if speaker_talks %}
+  <ul class="talk-card-list">
+    {% for talk in speaker_talks %}
+    <li class="talk-card">
+      <div class="talk-card-indicator"></div>
+      <div class="talk-card-content">
+        <a href="{% url 'manage:talk-detail' conference.slug talk.pk %}" class="talk-card-title">{{ talk.title }}</a>
+        <div class="talk-card-details">
+          {% if talk.slot_start %}
+          <span class="talk-card-detail">{{ talk.slot_start|date:"N j, H:i" }}</span>
+          {% endif %}
+          {% if talk.room %}
+          <span class="talk-card-detail">{{ talk.room.name }}</span>
+          {% endif %}
+          {% if not talk.slot_start %}
+          <span class="talk-card-detail">Unscheduled</span>
+          {% endif %}
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="empty-state" style="margin-top: 0.5rem;">
+    <p>No talks linked to this speaker.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

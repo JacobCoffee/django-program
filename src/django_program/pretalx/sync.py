@@ -147,13 +147,15 @@ class PretalxSyncService:
                 count = progress["count"]
         return count
 
-    def sync_speakers_iter(self) -> Iterator[dict[str, int]]:
+    def sync_speakers_iter(self) -> Iterator[dict[str, int | str]]:
         """Bulk sync speakers from Pretalx, yielding progress updates.
 
         Yields:
-            Dicts with ``current``/``total`` keys during processing,
+            A ``{"phase": "fetching"}`` dict before the API call,
+            dicts with ``current``/``total`` keys during processing,
             and a final dict with ``count`` when complete.
         """
+        yield {"phase": "fetching"}
         api_speakers = self.client.fetch_speakers()
         total = len(api_speakers)
         if total == 0:
@@ -221,12 +223,13 @@ class PretalxSyncService:
     def _bulk_set_talk_speakers(self, m2m_map: dict[str, list[int]]) -> None:
         """Replace M2M speaker relationships for synced talks in bulk.
 
+        Clears all existing speaker associations for the synced talks, then
+        re-creates only the relationships present in *m2m_map*.  Talks with
+        empty speaker lists will have their associations cleared.
+
         Args:
             m2m_map: Mapping of talk pretalx_code to lists of speaker PKs.
         """
-        if not m2m_map:
-            return
-
         all_talk_pks = dict(
             Talk.objects.filter(
                 conference=self.conference,
@@ -248,14 +251,16 @@ class PretalxSyncService:
                 batch_size=500,
             )
 
-    def sync_talks_iter(self) -> Iterator[dict[str, int]]:
+    def sync_talks_iter(self) -> Iterator[dict[str, int | str]]:
         """Bulk sync talks from Pretalx, yielding progress updates.
 
         Yields:
-            Dicts with ``current``/``total`` keys during processing,
+            A ``{"phase": "fetching"}`` dict before the API call,
+            dicts with ``current``/``total`` keys during processing,
             and a final dict with ``count`` when complete.
         """
         self._ensure_mappings()
+        yield {"phase": "fetching"}
         api_talks = self.client.fetch_talks(
             submission_types=self._submission_types,
             tracks=self._tracks,
@@ -306,10 +311,7 @@ class PretalxSyncService:
                     )
                 )
 
-            if api_talk.speaker_codes:
-                m2m_map[api_talk.code] = [
-                    speaker_pk_map[code] for code in api_talk.speaker_codes if code in speaker_pk_map
-                ]
+            m2m_map[api_talk.code] = [speaker_pk_map[code] for code in api_talk.speaker_codes if code in speaker_pk_map]
 
             if (i + 1) % _PROGRESS_CHUNK == 0 or (i + 1) == total:
                 yield {"current": i + 1, "total": total}
@@ -412,7 +414,39 @@ class PretalxSyncService:
             logger.info("Removed %d stale schedule slots for %s", stale_count, self.conference.slug)
 
         logger.info("Synced %d schedule slots for %s", count, self.conference.slug)
+
+        self._backfill_talks_from_schedule()
+
         return count
+
+    def _backfill_talks_from_schedule(self) -> None:
+        """Populate talk room/slot fields from linked schedule slots.
+
+        When talks are synced from the ``/submissions/`` fallback endpoint,
+        room and slot times are absent.  This method fills them from the
+        schedule slots that reference each talk.
+        """
+        slots = ScheduleSlot.objects.filter(conference=self.conference, talk__isnull=False).select_related(
+            "talk", "room"
+        )
+        to_update: list[Talk] = []
+        for slot in slots:
+            talk = slot.talk
+            changed = False
+            if talk.room_id != slot.room_id:
+                talk.room = slot.room
+                changed = True
+            if talk.slot_start != slot.start:
+                talk.slot_start = slot.start
+                changed = True
+            if talk.slot_end != slot.end:
+                talk.slot_end = slot.end
+                changed = True
+            if changed:
+                to_update.append(talk)
+        if to_update:
+            Talk.objects.bulk_update(to_update, fields=["room", "slot_start", "slot_end"], batch_size=500)
+            logger.info("Back-filled room/slot data for %d talks from schedule", len(to_update))
 
     def _resolve_room(self, room_name: str) -> Room | None:
         """Look up a Room instance by its display name.

@@ -143,7 +143,13 @@
       margin-bottom: 2.5rem;
     }
 
+    .schedule-day-disclosure {
+      border: 0;
+    }
+
     .schedule-day-heading {
+      list-style: none;
+      cursor: pointer;
       font-size: 1.15rem;
       font-weight: 700;
       color: var(--color-text);
@@ -153,6 +159,7 @@
       align-items: center;
       gap: 0.6rem;
     }
+    .schedule-day-heading::-webkit-details-marker { display: none; }
     .schedule-day-heading::before {
       content: "";
       display: inline-block;
@@ -160,6 +167,25 @@
       height: 1.15em;
       background: var(--color-primary);
       border-radius: 2px;
+    }
+    .schedule-day-heading::after {
+      content: "\25BE";
+      margin-left: auto;
+      font-size: 0.9rem;
+      color: var(--color-text-muted);
+      transition: transform 0.15s ease;
+    }
+    .schedule-day-disclosure:not([open]) .schedule-day-heading::after {
+      transform: rotate(-90deg);
+    }
+    .schedule-day-meta {
+      margin-left: auto;
+      margin-right: 0.5rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--color-text-muted);
     }
 
     .schedule-table {
@@ -211,6 +237,11 @@
 
     .schedule-session a { font-weight: 600; }
 
+    .schedule-type {
+      width: 1%;
+      white-space: nowrap;
+    }
+
     .slot-badge {
       display: inline-block;
       padding: 0.15rem 0.55rem;
@@ -219,9 +250,16 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+      white-space: nowrap;
     }
 
     .slot-badge--talk { background: var(--color-primary-light); color: var(--color-primary); }
+    .slot-badge--tutorial { background: #ccfbf1; color: #0f766e; }
+    .slot-badge--talk-sub { background: #e0e7ff; color: #4338ca; }
+    .slot-badge--poster { background: #fef3c7; color: #92400e; }
+    .slot-badge--charlas { background: #ffe4e6; color: #be123c; }
+    .slot-badge--sponsor-pres { background: #f1f5f9; color: #475569; }
+    .slot-badge--education { background: #dbeafe; color: #1d4ed8; }
     .slot-badge--break { background: var(--color-break-bg); color: var(--color-break-text); }
     .slot-badge--social { background: var(--color-social-bg); color: var(--color-social-text); }
     .slot-badge--other { background: var(--color-border-light); color: var(--color-text-muted); }

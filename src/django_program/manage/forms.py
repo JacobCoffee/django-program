@@ -84,6 +84,10 @@ class SectionForm(forms.ModelForm):
     class Meta:
         model = Section
         fields = ["name", "slug", "start_date", "end_date", "order"]
+        widgets = {
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
+        }
 
 
 class RoomForm(forms.ModelForm):

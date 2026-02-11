@@ -17,13 +17,14 @@ if TYPE_CHECKING:
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q, QuerySet
+from django.db.models import Count, Q, QuerySet
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils.text import slugify
 from django.utils.timezone import localdate
 from django.views import View
-from django.views.generic import ListView, TemplateView, UpdateView
+from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from django_program.conference.models import Conference, Section
 from django_program.manage.forms import (
@@ -56,6 +57,19 @@ class ManagePermissionMixin(LoginRequiredMixin):
     conference: Conference
     kwargs: dict[str, str]
 
+    def get_submission_type_nav(self) -> list[dict[str, str | int]]:
+        """Build sidebar navigation data for talk submission types."""
+        types = (
+            Talk.objects.filter(conference=self.conference)
+            .exclude(submission_type="")
+            .values("submission_type")
+            .annotate(count=Count("id"))
+            .order_by("submission_type")
+        )
+        return [
+            {"slug": slugify(t["submission_type"]), "name": t["submission_type"], "count": t["count"]} for t in types
+        ]
+
     def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
         """Resolve the conference and enforce permissions before dispatch.
 
@@ -87,7 +101,10 @@ class ManagePermissionMixin(LoginRequiredMixin):
         return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add the conference to the template context.
+        """Add the conference and sidebar metadata to the template context.
+
+        Includes ``submission_type_nav`` for the sidebar's dynamic Talks
+        sub-menu.
 
         Args:
             **kwargs: Additional context data.
@@ -97,7 +114,23 @@ class ManagePermissionMixin(LoginRequiredMixin):
         """
         context: dict[str, object] = super().get_context_data(**kwargs)  # type: ignore[misc]
         context["conference"] = self.conference
+        context["submission_type_nav"] = self.get_submission_type_nav()
+        context["last_synced"] = self._get_last_synced()
         return context
+
+    def _get_last_synced(self) -> object:
+        """Find the most recent synced_at timestamp across all synced models."""
+        latest_values = []
+        for model in (Room, Speaker, Talk, ScheduleSlot):
+            latest = (
+                model.objects.filter(conference=self.conference, synced_at__isnull=False)
+                .order_by("-synced_at")
+                .values_list("synced_at", flat=True)
+                .first()
+            )
+            if latest:
+                latest_values.append(latest)
+        return max(latest_values) if latest_values else None
 
 
 class ConferenceListView(LoginRequiredMixin, ListView):
@@ -476,7 +509,16 @@ class ImportPretalxStreamView(LoginRequiredMixin, View):
                     count = 0
                     for progress in iter_fn():
                         if "count" in progress:
-                            count = progress["count"]
+                            count = int(progress["count"])
+                        elif progress.get("phase") == "fetching":
+                            yield self._sse(
+                                {
+                                    "step": step_num,
+                                    "total": total,
+                                    "label": f"Fetching {entity_name} from API...",
+                                    "status": "in_progress",
+                                }
+                            )
                         else:
                             yield self._sse(
                                 {
@@ -548,20 +590,6 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             "schedule_slots": ScheduleSlot.objects.filter(conference=conference).count(),
             "sections": Section.objects.filter(conference=conference).count(),
         }
-
-        # Find the most recent synced_at across synced models.
-        latest_synced_values = []
-        for model in (Room, Speaker, Talk, ScheduleSlot):
-            latest = (
-                model.objects.filter(conference=conference, synced_at__isnull=False)
-                .order_by("-synced_at")
-                .values_list("synced_at", flat=True)
-                .first()
-            )
-            if latest:
-                latest_synced_values.append(latest)
-        if latest_synced_values:
-            context["last_synced"] = max(latest_synced_values)
 
         return context
 
@@ -680,6 +708,30 @@ class SectionEditView(ManagePermissionMixin, UpdateView):
         return super().form_valid(form)
 
 
+class SectionCreateView(ManagePermissionMixin, CreateView):
+    """Create a new section for the current conference."""
+
+    template_name = "django_program/manage/section_edit.html"
+    form_class = SectionForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and ``is_create`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "sections"
+        context["is_create"] = True
+        return context
+
+    def form_valid(self, form: SectionForm) -> HttpResponse:
+        """Assign the conference before saving."""
+        form.instance.conference = self.conference
+        messages.success(self.request, "Section created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the section list after creation."""
+        return reverse("manage:section-list", kwargs={"conference_slug": self.conference.slug})
+
+
 class RoomListView(ManagePermissionMixin, ListView):
     """List rooms for the current conference, ordered by position."""
 
@@ -759,6 +811,37 @@ class RoomEditView(ManagePermissionMixin, UpdateView):
         return super().form_valid(form)
 
 
+class RoomCreateView(ManagePermissionMixin, CreateView):
+    """Create a new room for the current conference."""
+
+    template_name = "django_program/manage/room_edit.html"
+    form_class = RoomForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and ``is_create`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "rooms"
+        context["is_create"] = True
+        context["is_synced"] = False
+        return context
+
+    def get_form_kwargs(self) -> dict[str, Any]:
+        """Pass is_synced=False so all fields are editable."""
+        kwargs = super().get_form_kwargs()
+        kwargs["is_synced"] = False
+        return kwargs
+
+    def form_valid(self, form: RoomForm) -> HttpResponse:
+        """Assign the conference before saving."""
+        form.instance.conference = self.conference
+        messages.success(self.request, "Room created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the room list after creation."""
+        return reverse("manage:room-list", kwargs={"conference_slug": self.conference.slug})
+
+
 class SpeakerListView(ManagePermissionMixin, ListView):
     """List speakers for the current conference.
 
@@ -777,11 +860,11 @@ class SpeakerListView(ManagePermissionMixin, ListView):
         Returns:
             A queryset of Speaker instances for this conference.
         """
-        qs = Speaker.objects.filter(conference=self.conference).order_by("name")
+        qs = Speaker.objects.filter(conference=self.conference).annotate(talk_count=Count("talks", distinct=True))
         query = self.request.GET.get("q", "").strip()
         if query:
             qs = qs.filter(Q(name__icontains=query) | Q(email__icontains=query))
-        return qs
+        return qs.order_by("-talk_count", "name")
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Add the search query and active nav to the template context.
@@ -795,19 +878,64 @@ class SpeakerListView(ManagePermissionMixin, ListView):
         return context
 
 
+class SpeakerDetailView(ManagePermissionMixin, DetailView):
+    """Read-only detail view for a speaker in the current conference."""
+
+    template_name = "django_program/manage/speaker_detail.html"
+    context_object_name = "speaker"
+
+    def get_queryset(self) -> QuerySet[Speaker]:
+        """Scope speaker lookup to the current conference and preload talks."""
+        return (
+            Speaker.objects.filter(conference=self.conference)
+            .prefetch_related("talks")
+            .annotate(talk_count=Count("talks", distinct=True))
+        )
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add active nav and related talks ordered by schedule/title."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "speakers"
+        context["speaker_talks"] = self.object.talks.select_related("room").order_by("slot_start", "title")
+        return context
+
+
 class TalkListView(ManagePermissionMixin, ListView):
     """List talks for the current conference.
 
-    Supports search via ``q`` (title search) and filtering via ``state``
-    GET parameters.
+    Supports search via ``q`` (title search), filtering via ``state``
+    GET parameter, and filtering by submission type via URL slug.
     """
 
     template_name = "django_program/manage/talk_list.html"
     context_object_name = "talks"
     paginate_by = 50
 
+    def _get_type_filter(self) -> str:
+        """Resolve the submission type filter from the URL slug.
+
+        Matches the URL ``type_slug`` against slugified submission type
+        names for this conference.
+
+        Returns:
+            The original submission_type string, or empty if no match.
+        """
+        type_slug = self.kwargs.get("type_slug", "")
+        if not type_slug:
+            return ""
+        types = (
+            Talk.objects.filter(conference=self.conference)
+            .exclude(submission_type="")
+            .values_list("submission_type", flat=True)
+            .distinct()
+        )
+        for sub_type in types:
+            if slugify(sub_type) == type_slug:
+                return sub_type
+        return ""
+
     def get_queryset(self) -> QuerySet[Talk]:
-        """Return talks filtered by optional search and state parameters.
+        """Return talks filtered by optional search, state, and type parameters.
 
         Returns:
             A queryset of Talk instances for this conference.
@@ -818,6 +946,9 @@ class TalkListView(ManagePermissionMixin, ListView):
             .prefetch_related("speakers")
             .order_by("slot_start", "title")
         )
+        type_filter = self._get_type_filter()
+        if type_filter:
+            qs = qs.filter(submission_type=type_filter)
         query = self.request.GET.get("q", "").strip()
         if query:
             qs = qs.filter(title__icontains=query)
@@ -827,18 +958,43 @@ class TalkListView(ManagePermissionMixin, ListView):
         return qs
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add search query, state filter, and available states to context.
+        """Add search query, state filter, type filter, and available states to context.
 
         Returns:
             Context dict with filter parameters included.
         """
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "talks"
+        type_filter = self._get_type_filter()
+        context["current_type"] = type_filter
+        context["current_type_slug"] = self.kwargs.get("type_slug", "")
         context["search_query"] = self.request.GET.get("q", "")
         context["current_state"] = self.request.GET.get("state", "")
         context["available_states"] = (
             Talk.objects.filter(conference=self.conference).values_list("state", flat=True).distinct().order_by("state")
         )
+        return context
+
+
+class TalkDetailView(ManagePermissionMixin, DetailView):
+    """Read-only detail view for a talk in the current conference."""
+
+    template_name = "django_program/manage/talk_detail.html"
+    context_object_name = "talk"
+
+    def get_queryset(self) -> QuerySet[Talk]:
+        """Scope talk lookup to conference and preload related speaker/room data."""
+        return (
+            Talk.objects.filter(conference=self.conference)
+            .select_related("room")
+            .prefetch_related("speakers", "schedule_slots")
+        )
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add active nav and ordered schedule slots for this talk."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "talks"
+        context["talk_slots"] = self.object.schedule_slots.select_related("room").order_by("start")
         return context
 
 
@@ -1092,7 +1248,7 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
         total: int,
         entity_name: str,
         sync_fn: Callable[[], int],
-        iter_fn: Callable[[], Iterator[dict[str, int]]] | None,
+        iter_fn: Callable[[], Iterator[dict[str, int | str]]] | None,
     ) -> Iterator[tuple[str, int | None, bool]]:
         """Execute a single sync step and yield SSE events with its result.
 
@@ -1128,7 +1284,20 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
                 count = 0
                 for progress in iter_fn():
                     if "count" in progress:
-                        count = progress["count"]
+                        count = int(progress["count"])
+                    elif progress.get("phase") == "fetching":
+                        yield (
+                            self._sse(
+                                {
+                                    "step": step_idx,
+                                    "total": total,
+                                    "label": f"Fetching {entity_name} from API...",
+                                    "status": "in_progress",
+                                }
+                            ),
+                            None,
+                            False,
+                        )
                     else:
                         yield (
                             self._sse(

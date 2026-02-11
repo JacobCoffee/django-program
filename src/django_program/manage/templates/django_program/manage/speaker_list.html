@@ -33,9 +33,9 @@
   <tbody>
     {% for speaker in speakers %}
     <tr>
-      <td>{{ speaker.name }}</td>
+      <td><a href="{% url 'manage:speaker-detail' conference.slug speaker.pk %}">{{ speaker.name }}</a></td>
       <td>{% if speaker.email %}{{ speaker.email }}{% else %}&mdash;{% endif %}</td>
-      <td>{{ speaker.talks.count }}</td>
+      <td>{{ speaker.talk_count }}</td>
       <td>
         {% if speaker.synced_at %}
         {{ speaker.synced_at|date:"N j, Y" }}

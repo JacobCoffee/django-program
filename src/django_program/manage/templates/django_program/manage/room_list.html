@@ -7,6 +7,10 @@
 <p>Venue rooms and spaces</p>
 {% endblock %}
 
+{% block page_actions %}
+<a href="{% url 'manage:room-add' conference.slug %}" class="btn btn-primary">Add Room</a>
+{% endblock %}
+
 {% block content %}
 {% if rooms %}
 <table class="data-table">

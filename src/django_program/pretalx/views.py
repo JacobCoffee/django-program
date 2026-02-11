@@ -7,9 +7,11 @@ the URL and return a 404 if the slug does not match.
 
 import itertools
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
@@ -100,6 +102,11 @@ class ScheduleView(ConferenceMixin, TemplateView):
         ]
 
         context["days"] = days
+        try:
+            conference_tz = ZoneInfo(self.conference.timezone)
+        except ZoneInfoNotFoundError, ValueError:
+            conference_tz = timezone.utc
+        context["today"] = timezone.localdate(timezone=conference_tz)
         return context
 
 

@@ -1,6 +1,6 @@
 {% extends "django_program/manage/base.html" %}
 
-{% block title %}Edit Room{% endblock %}
+{% block title %}{% if is_create %}Add Room{% else %}Edit Room{% endif %}{% endblock %}
 
 {% block breadcrumb %}
 <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -8,12 +8,12 @@
   <span class="breadcrumb-separator"></span>
   <a href="{% url 'manage:room-list' conference.slug %}">Rooms</a>
   <span class="breadcrumb-separator"></span>
-  <span>Edit</span>
+  <span>{% if is_create %}Add{% else %}Edit{% endif %}</span>
 </nav>
 {% endblock %}
 
 {% block page_title %}
-<h1>Edit Room: {{ room.name }}</h1>
+<h1>{% if is_create %}Add Room{% else %}Edit Room: {{ room.name }}{% endif %}</h1>
 {% endblock %}
 
 {% block content %}
@@ -49,7 +49,7 @@
     {% endfor %}
     <div class="form-actions">
       {% if not is_synced %}
-      <button type="submit" class="btn btn-primary">Save Changes</button>
+      <button type="submit" class="btn btn-primary">{% if is_create %}Create Room{% else %}Save Changes{% endif %}</button>
       {% endif %}
       <a href="{% url 'manage:room-list' conference.slug %}" class="btn btn-secondary">{% if is_synced %}Back to Rooms{% else %}Cancel{% endif %}</a>
     </div>

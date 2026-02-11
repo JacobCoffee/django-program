@@ -29,7 +29,7 @@
 <div style="margin-bottom: 1.5rem;">
   <h2 class="section-heading">Linked Talk</h2>
   <div class="readonly-field">
-    <a href="{% url 'manage:talk-edit' conference.slug slot.talk.pk %}">{{ slot.talk.title }}</a>
+    <a href="{% url 'manage:talk-detail' conference.slug slot.talk.pk %}">{{ slot.talk.title }}</a>
   </div>
 </div>
 {% endif %}

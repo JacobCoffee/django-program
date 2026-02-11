@@ -7,6 +7,10 @@
 <p>Conference sections and time blocks</p>
 {% endblock %}
 
+{% block page_actions %}
+<a href="{% url 'manage:section-add' conference.slug %}" class="btn btn-primary">Add Section</a>
+{% endblock %}
+
 {% block content %}
 {% if sections %}
 <table class="data-table">

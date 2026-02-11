@@ -127,12 +127,6 @@
       {% endif %}
     </div>
   </div>
-  {% if last_synced %}
-  <div class="info-item">
-    <div class="info-item-label">Last Synced</div>
-    <div class="info-item-value">{{ last_synced|date:"N j, Y, P" }}</div>
-  </div>
-  {% endif %}
 </div>
 
 {% if conference.pretalx_event_slug %}

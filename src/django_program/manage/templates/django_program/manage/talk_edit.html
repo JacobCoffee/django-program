@@ -29,7 +29,9 @@
 <div style="margin-bottom: 1.5rem;">
   <h2 class="section-heading">Speakers</h2>
   <div class="readonly-field">
-    {% for speaker in talk.speakers.all %}{{ speaker.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    {% for speaker in talk.speakers.all %}
+      <a href="{% url 'manage:speaker-detail' conference.slug speaker.pk %}">{{ speaker.name }}</a>{% if not forloop.last %}, {% endif %}
+    {% endfor %}
   </div>
 </div>
 {% endif %}

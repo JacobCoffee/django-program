@@ -120,6 +120,13 @@
       background: rgba(255, 255, 255, 0.2);
     }
 
+    .top-bar-synced {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.45);
+      font-family: var(--font-mono);
+      cursor: default;
+    }
+
     /* ---- Layout Shell ---- */
     .layout {
       display: flex;
@@ -187,6 +194,113 @@
       text-align: center;
       font-size: 0.9rem;
       opacity: 0.7;
+    }
+
+    /* ---- Expandable Nav Item ---- */
+    .sidebar-nav-expandable {
+      display: flex;
+      align-items: center;
+    }
+    .sidebar-nav-expandable > a {
+      flex: 1;
+    }
+    .sidebar-nav-expand-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      color: var(--color-text-muted);
+      transition: background 0.15s ease, color 0.15s ease;
+      flex-shrink: 0;
+      margin-right: 0.4rem;
+    }
+    .sidebar-nav-expand-btn:hover {
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+    .sidebar-nav-expand-btn svg {
+      width: 14px;
+      height: 14px;
+      transition: transform 0.2s ease;
+    }
+    .sidebar-nav-expand-btn.open svg {
+      transform: rotate(90deg);
+    }
+
+    /* ---- Sidebar Subnav ---- */
+    .sidebar-subnav {
+      list-style: none;
+      margin: 0.15rem 0 0.25rem;
+      padding: 0;
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.25s ease;
+    }
+    .sidebar-subnav.open {
+      max-height: 500px;
+    }
+    .sidebar-subnav li a {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.75rem 0.3rem 2.4rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 450;
+      color: var(--color-text-muted);
+      transition: background 0.15s ease, color 0.15s ease;
+      position: relative;
+    }
+    .sidebar-subnav li a::before {
+      content: "";
+      position: absolute;
+      left: 1.45rem;
+      top: 50%;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--color-border);
+      transform: translateY(-50%);
+      transition: background 0.15s ease;
+    }
+    .sidebar-subnav li a:hover {
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      text-decoration: none;
+    }
+    .sidebar-subnav li a:hover::before {
+      background: var(--color-primary);
+    }
+    .sidebar-subnav li a.active {
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      font-weight: 600;
+    }
+    .sidebar-subnav li a.active::before {
+      background: var(--color-primary);
+      width: 5px;
+      height: 5px;
+    }
+    .sidebar-subnav-count {
+      margin-left: auto;
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      font-family: var(--font-mono);
+      background: var(--color-bg);
+      padding: 0 0.35rem;
+      border-radius: 3px;
+      line-height: 1.5;
+    }
+    .sidebar-subnav li a:hover .sidebar-subnav-count,
+    .sidebar-subnav li a.active .sidebar-subnav-count {
+      background: rgba(67, 56, 202, 0.08);
+      color: var(--color-primary);
     }
 
     /* ---- Main Content Area ---- */
@@ -846,6 +960,10 @@
       {% endif %}
     </div>
     <div class="top-bar-right">
+      {% if last_synced %}
+        <span class="top-bar-synced" title="Last Pretalx sync: {{ last_synced|date:'N j, Y, P' }}">Synced {{ last_synced|timesince }} ago</span>
+        <span class="top-bar-separator"></span>
+      {% endif %}
       {% if user.is_authenticated %}
         <span class="top-bar-user">{{ user.get_short_name|default:user.username }}</span>
         <span class="top-bar-separator"></span>
@@ -891,9 +1009,30 @@
             </a>
           </li>
           <li>
+            {% if submission_type_nav %}
+            <div class="sidebar-nav-expandable">
+              <a href="{% url 'manage:talk-list' conference.slug %}" class="{% if active_nav == 'talks' and not current_type_slug %}active{% endif %}">
+                <span class="sidebar-nav-icon">&#9998;</span> Talks
+              </a>
+              <button type="button" class="sidebar-nav-expand-btn{% if current_type_slug %} open{% endif %}" id="talks-expand-btn" aria-expanded="{% if current_type_slug %}true{% else %}false{% endif %}" aria-controls="talk-type-subnav" onclick="this.classList.toggle('open');var s=document.getElementById('talk-type-subnav');s.classList.toggle('open');this.setAttribute('aria-expanded',s.classList.contains('open'))">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4l4 4-4 4"/></svg>
+              </button>
+            </div>
+            <ul class="sidebar-subnav{% if current_type_slug %} open{% endif %}" id="talk-type-subnav">
+              {% for stype in submission_type_nav %}
+              <li>
+                <a href="{% url 'manage:talk-list-by-type' conference.slug stype.slug %}" class="{% if current_type_slug == stype.slug %}active{% endif %}">
+                  {{ stype.name }}
+                  <span class="sidebar-subnav-count">{{ stype.count }}</span>
+                </a>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
             <a href="{% url 'manage:talk-list' conference.slug %}" class="{% if active_nav == 'talks' %}active{% endif %}">
               <span class="sidebar-nav-icon">&#9998;</span> Talks
             </a>
+            {% endif %}
           </li>
           <li>
             <a href="{% url 'manage:schedule-list' conference.slug %}" class="{% if active_nav == 'schedule' %}active{% endif %}">

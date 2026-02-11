@@ -2,15 +2,17 @@
 
 Provides :class:`PretalxSpeaker`, :class:`PretalxTalk`, and :class:`PretalxSlot`
 as frozen dataclasses that parse raw API dicts into well-typed Python objects.
-Also includes :class:`SubmissionState` for the submission lifecycle and helper
-functions for resolving Pretalx multilingual fields.
+Each ``from_api()`` classmethod validates the raw dict through the corresponding
+OpenAPI-generated dataclass before adapting it into the consumer-friendly shape.
 
 The normalization helpers live in :mod:`pretalx_client.adapters.normalization`
 and the datetime/slot helpers in :mod:`pretalx_client.adapters.schedule`.  This
 module re-exports the underscore-prefixed aliases for backward compatibility.
 """
 
+import dataclasses as _dc
 import enum
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime  # noqa: TC003 -- used at runtime by dataclass fields
 from typing import Any
@@ -20,6 +22,15 @@ from pretalx_client.adapters.normalization import (
     resolve_id_or_localized,
 )
 from pretalx_client.adapters.schedule import normalize_slot, parse_datetime
+from pretalx_client.generated import (
+    GeneratedSpeaker,
+    GeneratedSpeakerOrga,
+    GeneratedSubmission,
+    GeneratedTalkSlot,
+    StateEnum,
+)
+
+logger = logging.getLogger(__name__)
 
 # Backward-compatible aliases -- existing consumers import these underscore
 # names from ``pretalx_client.models``.  Keep them available here.
@@ -28,15 +39,45 @@ _resolve_id_or_localized = resolve_id_or_localized
 _parse_datetime = parse_datetime
 
 
-class SubmissionState(enum.StrEnum):
-    """Pretalx submission lifecycle states."""
+def _parse_generated[T](cls: type[T], data: dict[str, Any]) -> T | None:
+    """Construct a generated dataclass from a raw API dict.
 
-    SUBMITTED = "submitted"
-    ACCEPTED = "accepted"
-    REJECTED = "rejected"
-    CONFIRMED = "confirmed"
-    WITHDRAWN = "withdrawn"
-    CANCELED = "canceled"
+    Filters the input dict to only fields declared by the target dataclass,
+    then attempts construction.  Returns ``None`` on failure so callers can
+    fall back to manual dict parsing for API shape variations not captured
+    by the OpenAPI schema.
+
+    Args:
+        cls: The generated dataclass type to construct.
+        data: Raw API response dict.
+
+    Returns:
+        An instance of *cls*, or ``None`` if construction fails.
+    """
+    try:
+        field_names = {f.name for f in _dc.fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in field_names}
+        return cls(**filtered)
+    except TypeError, ValueError, KeyError:
+        logger.debug("Failed to parse %s from API dict, using fallback", cls.__name__)
+        return None
+
+
+class SubmissionState(enum.StrEnum):
+    """Pretalx submission lifecycle states.
+
+    Values are sourced from the OpenAPI-generated :class:`StateEnum` where
+    available, with ``DELETED`` added for states observed in practice but
+    absent from the published schema.
+    """
+
+    SUBMITTED = StateEnum.submitted
+    ACCEPTED = StateEnum.accepted
+    REJECTED = StateEnum.rejected
+    CONFIRMED = StateEnum.confirmed
+    WITHDRAWN = StateEnum.withdrawn
+    CANCELED = StateEnum.canceled
+    DRAFT = StateEnum.draft
     DELETED = "deleted"
 
 
@@ -64,8 +105,10 @@ class PretalxSpeaker:
     def from_api(cls, data: dict[str, Any]) -> PretalxSpeaker:
         """Construct a ``PretalxSpeaker`` from a raw Pretalx API dict.
 
-        Checks both ``avatar_url`` and ``avatar`` keys since different Pretalx
-        instances use different field names.
+        Parses through the generated ``Speaker`` or ``SpeakerOrga`` model
+        for field validation, then adapts into the consumer-friendly shape.
+        Falls back to direct dict extraction when the generated model
+        cannot handle the API response (e.g. ``avatar`` vs ``avatar_url``).
 
         Args:
             data: A single speaker object from the Pretalx speakers endpoint.
@@ -73,7 +116,33 @@ class PretalxSpeaker:
         Returns:
             A populated ``PretalxSpeaker`` instance.
         """
+        # Avatar key varies across Pretalx instances; generated model only
+        # knows about avatar_url, so we resolve this before parsing.
         avatar = data.get("avatar_url") or data.get("avatar") or ""
+
+        if "email" in data and data.get("email") is not None:
+            raw = _parse_generated(GeneratedSpeakerOrga, data)
+            if raw is not None:
+                return cls(
+                    code=raw.code,
+                    name=raw.name,
+                    biography=raw.biography or "",
+                    avatar_url=avatar,
+                    email=raw.email,
+                    submissions=list(raw.submissions),
+                )
+        else:
+            raw = _parse_generated(GeneratedSpeaker, data)
+            if raw is not None:
+                return cls(
+                    code=raw.code,
+                    name=raw.name,
+                    biography=raw.biography or "",
+                    avatar_url=avatar,
+                    email="",
+                    submissions=list(raw.submissions),
+                )
+
         return cls(
             code=data.get("code", ""),
             name=data.get("name", ""),
@@ -127,10 +196,10 @@ class PretalxTalk:
     ) -> PretalxTalk:
         """Construct a ``PretalxTalk`` from a raw Pretalx API dict.
 
-        Handles multilingual fields for ``submission_type``, ``track``, and
-        slot data which may be nested objects with language keys.  When the
-        real API returns integer IDs instead of objects, the optional mapping
-        dicts are used to resolve human-readable names.
+        Parses through the generated ``Submission`` model for field
+        validation, then resolves integer IDs to display names via the
+        adapter layer.  Falls back to direct dict extraction when the
+        generated model cannot handle the API response shape.
 
         Args:
             data: A single submission or talk object from the Pretalx API.
@@ -144,15 +213,8 @@ class PretalxTalk:
         Returns:
             A populated ``PretalxTalk`` instance.
         """
-        speakers_raw = data.get("speakers") or []
-        speaker_codes = [s["code"] if isinstance(s, dict) else str(s) for s in speakers_raw]
-
-        sub_type_raw = data.get("submission_type")
-        submission_type = resolve_id_or_localized(sub_type_raw, submission_types)
-
-        track_raw = data.get("track")
-        track = resolve_id_or_localized(track_raw, tracks)
-
+        # Slot data lives outside the generated Submission model — it comes
+        # from a nested "slot" dict in the /talks/ endpoint response.
         slot = data.get("slot") or {}
         room = ""
         slot_start = ""
@@ -162,6 +224,34 @@ class PretalxTalk:
             room = resolve_id_or_localized(room_raw, rooms)
             slot_start = slot.get("start") or ""
             slot_end = slot.get("end") or ""
+
+        raw = _parse_generated(GeneratedSubmission, data)
+        if raw is not None:
+            return cls(
+                code=raw.code,
+                title=raw.title,
+                abstract=raw.abstract or "",
+                description=raw.description or "",
+                submission_type=resolve_id_or_localized(raw.submission_type, submission_types),
+                track=resolve_id_or_localized(raw.track, tracks),
+                duration=raw.duration,
+                state=raw.state.value if raw.state else "",
+                speaker_codes=list(raw.speakers),
+                room=room,
+                slot_start=slot_start,
+                slot_end=slot_end,
+            )
+
+        # Fallback: dict-based extraction for API shapes the generated
+        # model can't handle (e.g. speakers as dicts instead of strings).
+        speakers_raw = data.get("speakers") or []
+        speaker_codes = [s["code"] if isinstance(s, dict) else str(s) for s in speakers_raw]
+
+        sub_type_raw = data.get("submission_type")
+        submission_type = resolve_id_or_localized(sub_type_raw, submission_types)
+
+        track_raw = data.get("track")
+        track = resolve_id_or_localized(track_raw, tracks)
 
         return cls(
             code=data.get("code", ""),
@@ -210,8 +300,9 @@ class PretalxSlot:
     ) -> PretalxSlot:
         """Construct a ``PretalxSlot`` from a raw Pretalx schedule slot dict.
 
-        Delegates to :func:`~pretalx_client.adapters.schedule.normalize_slot`
-        for field extraction and normalization, then builds the dataclass.
+        Validates the raw dict through the generated ``TalkSlot`` model,
+        then delegates to :func:`~pretalx_client.adapters.schedule.normalize_slot`
+        for field extraction and normalization.
 
         Handles both the legacy format (string ``room``, ``code``, ``title``
         keys) and the real paginated ``/slots/`` format (integer ``room`` ID,
@@ -225,6 +316,9 @@ class PretalxSlot:
         Returns:
             A populated ``PretalxSlot`` instance.
         """
+        # Validate through generated model (logs on failure but doesn't block)
+        _parse_generated(GeneratedTalkSlot, data)
+
         normalized = normalize_slot(data, rooms=rooms)
         return cls(
             room=normalized["room"],

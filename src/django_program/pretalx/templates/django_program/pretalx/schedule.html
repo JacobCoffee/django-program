@@ -9,7 +9,11 @@
 
 {% for day, slots in days %}
 <section class="schedule-day">
-  <h3 class="schedule-day-heading">{{ day|date:"l, N j, Y" }}</h3>
+  <details class="schedule-day-disclosure" {% if day >= today %}open{% endif %}>
+  <summary class="schedule-day-heading">
+    <span>{{ day|date:"l, N j, Y" }}</span>
+    <span class="schedule-day-meta">{{ slots|length }} slot{{ slots|length|pluralize }}</span>
+  </summary>
   <table class="schedule-table">
     <thead>
       <tr>
@@ -31,9 +35,25 @@
           {{ slot.display_title }}
           {% endif %}
         </td>
-        <td>
+        <td class="schedule-type">
           {% if slot.talk and slot.talk.submission_type %}
-          <span class="slot-badge slot-badge--{{ slot.slot_type }}">{{ slot.talk.submission_type }}</span>
+            {% with sub_type=slot.talk.submission_type %}
+              {% if "Tutorial" in sub_type %}
+              <span class="slot-badge slot-badge--tutorial">Tutorial</span>
+              {% elif "Poster" in sub_type %}
+              <span class="slot-badge slot-badge--poster">Poster</span>
+              {% elif "Charlas" in sub_type %}
+              <span class="slot-badge slot-badge--charlas">Charlas</span>
+              {% elif "Sponsor" in sub_type %}
+              <span class="slot-badge slot-badge--sponsor-pres">Sponsor Presentation</span>
+              {% elif "Education" in sub_type %}
+              <span class="slot-badge slot-badge--education">Education Summit</span>
+              {% elif "Talk" in sub_type %}
+              <span class="slot-badge slot-badge--talk-sub">{{ sub_type }}</span>
+              {% else %}
+              <span class="slot-badge slot-badge--talk-sub">{{ sub_type }}</span>
+              {% endif %}
+            {% endwith %}
           {% else %}
           <span class="slot-badge slot-badge--{{ slot.slot_type }}">{{ slot.get_slot_type_display }}</span>
           {% endif %}
@@ -42,6 +62,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </details>
 </section>
 {% empty %}
 <p class="schedule-empty">No schedule data available yet.</p>

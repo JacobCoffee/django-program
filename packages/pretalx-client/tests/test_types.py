@@ -180,7 +180,7 @@ class TestSubmissionState:
 
     @pytest.mark.unit
     def test_expected_members(self):
-        expected = {"submitted", "accepted", "rejected", "confirmed", "withdrawn", "canceled", "deleted"}
+        expected = {"submitted", "accepted", "rejected", "confirmed", "withdrawn", "canceled", "deleted", "draft"}
         actual = {s.value for s in SubmissionState}
         assert actual == expected
 
