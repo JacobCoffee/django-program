@@ -165,6 +165,12 @@ class ScheduleSlot(models.Model):
 
     class Meta:
         ordering = ["start", "room"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["conference", "start", "room"],
+                name="uniq_schedule_slot_conference_start_room",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.display_title
