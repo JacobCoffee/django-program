@@ -1,4 +1,4 @@
-from django_program.pretalx.client import PretalxClient
+from pretalx_client.client import PretalxClient
 
 
 def test_client_normalizes_base_url_with_api_suffix() -> None:

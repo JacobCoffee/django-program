@@ -35,10 +35,11 @@ from django_program.manage.forms import (
     SectionForm,
     TalkForm,
 )
-from django_program.pretalx.client import PretalxClient, _localized
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.pretalx.sync import PretalxSyncService
 from django_program.settings import get_config
+from pretalx_client.adapters.normalization import localized as _localized
+from pretalx_client.client import PretalxClient
 
 
 class ManagePermissionMixin(LoginRequiredMixin):

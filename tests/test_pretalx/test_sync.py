@@ -4,9 +4,9 @@ from unittest.mock import patch
 import pytest
 
 from django_program.conference.models import Conference
-from django_program.pretalx.client import PretalxTalk
 from django_program.pretalx.models import Room, Speaker, Talk
 from django_program.pretalx.sync import PretalxSyncService
+from pretalx_client.models import PretalxTalk
 
 
 @pytest.mark.django_db

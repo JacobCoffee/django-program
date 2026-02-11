@@ -14,9 +14,10 @@ from django.contrib.auth import get_user_model
 from django.db.models.functions import Lower
 from django.utils import timezone
 
-from django_program.pretalx.client import PretalxClient, _localized
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.settings import get_config
+from pretalx_client.adapters.normalization import localized as _localized
+from pretalx_client.client import PretalxClient
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
