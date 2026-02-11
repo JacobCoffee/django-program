@@ -58,7 +58,7 @@ def _parse_generated[T](cls: type[T], data: dict[str, Any]) -> T | None:
         field_names = {f.name for f in _dc.fields(cls)}
         filtered = {k: v for k, v in data.items() if k in field_names}
         return cls(**filtered)
-    except TypeError, ValueError, KeyError:
+    except (TypeError, ValueError, KeyError):  # fmt: skip
         logger.debug("Failed to parse %s from API dict, using fallback", cls.__name__)
         return None
 
@@ -235,7 +235,7 @@ class PretalxTalk:
                 submission_type=resolve_id_or_localized(raw.submission_type, submission_types),
                 track=resolve_id_or_localized(raw.track, tracks),
                 duration=raw.duration,
-                state=raw.state.value if raw.state else "",
+                state=raw.state.value if raw.state and not isinstance(raw.state, str) else (raw.state or ""),
                 speaker_codes=list(raw.speakers),
                 room=room,
                 slot_start=slot_start,

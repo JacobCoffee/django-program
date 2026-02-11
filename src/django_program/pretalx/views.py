@@ -104,7 +104,7 @@ class ScheduleView(ConferenceMixin, TemplateView):
         context["days"] = days
         try:
             conference_tz = ZoneInfo(self.conference.timezone)
-        except ZoneInfoNotFoundError, ValueError:
+        except (ZoneInfoNotFoundError, ValueError):  # fmt: skip
             conference_tz = timezone.utc
         context["today"] = timezone.localdate(timezone=conference_tz)
         return context
