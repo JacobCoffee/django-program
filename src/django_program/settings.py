@@ -36,7 +36,7 @@ class StripeConfig:
 class PretalxConfig:
     """Pretalx schedule API configuration."""
 
-    base_url: str = "https://pretalx.com/api"
+    base_url: str = "https://pretalx.com"
     token: str | None = None
 
 

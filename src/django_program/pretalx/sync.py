@@ -10,12 +10,12 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from django.conf import settings as django_settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from django_program.pretalx.client import PretalxClient
 from django_program.pretalx.models import ScheduleSlot, Speaker, Talk
+from django_program.settings import get_config
 
 if TYPE_CHECKING:
     from django_program.conference.models import Conference
@@ -53,8 +53,9 @@ class PretalxSyncService:
             raise ValueError(msg)
 
         self.conference = conference
-        base_url = getattr(django_settings, "PROGRAM_PRETALX_BASE_URL", "https://pretalx.com")
-        api_token = getattr(django_settings, "PROGRAM_PRETALX_API_TOKEN", "")
+        config = get_config()
+        base_url = config.pretalx.base_url
+        api_token = config.pretalx.token or ""
         self.client = PretalxClient(
             conference.pretalx_event_slug,
             base_url=base_url,
@@ -136,12 +137,11 @@ class PretalxSyncService:
                 },
             )
 
-            if api_talk.speaker_codes:
-                speakers = Speaker.objects.filter(
-                    conference=self.conference,
-                    pretalx_code__in=api_talk.speaker_codes,
-                )
-                talk.speakers.set(speakers)
+            speakers = Speaker.objects.filter(
+                conference=self.conference,
+                pretalx_code__in=api_talk.speaker_codes,
+            )
+            talk.speakers.set(speakers)
 
             action = "Created" if created else "Updated"
             logger.debug("%s talk %s (%s)", action, talk.title, talk.pretalx_code)

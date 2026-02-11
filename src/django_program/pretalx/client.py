@@ -276,7 +276,9 @@ class PretalxClient:
             api_token: Optional API token for authenticated access.
         """
         self.event_slug = event_slug
-        self.base_url = base_url.rstrip("/")
+        normalized_base_url = base_url.rstrip("/")
+        normalized_base_url = normalized_base_url.removesuffix("/api")
+        self.base_url = normalized_base_url
         self.api_token = api_token
         self.api_url = f"{self.base_url}/api/events/{self.event_slug}/"
 
