@@ -3,34 +3,37 @@
 {% block title %}{{ speaker.name }}{% endblock %}
 
 {% block content %}
+<a href="{% url 'pretalx:speaker-list' conference.slug %}" class="back-link">Back to speakers</a>
+
 <article>
-  <h2>{{ speaker.name }}</h2>
-
-  {% if speaker.avatar_url %}
-  <img src="{{ speaker.avatar_url }}" alt="{{ speaker.name }}" width="200" height="200">
-  {% endif %}
-
-  {% if speaker.biography %}
-  <section>
-    <h3>Biography</h3>
-    {{ speaker.biography|linebreaks }}
-  </section>
-  {% endif %}
+  <div class="speaker-profile">
+    {% if speaker.avatar_url %}
+    <img src="{{ speaker.avatar_url }}" alt="{{ speaker.name }}" class="speaker-profile-avatar">
+    {% else %}
+    <span class="speaker-profile-placeholder" aria-hidden="true">{{ speaker.name|first }}</span>
+    {% endif %}
+    <div class="speaker-profile-body">
+      <h2>{{ speaker.name }}</h2>
+      {% if speaker.biography %}
+      <div class="speaker-bio">
+        {{ speaker.biography|linebreaks }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
 
   {% if talks %}
-  <section>
-    <h3>Talk{{ talks|length|pluralize }}</h3>
-    <ul>
-      {% for talk in talks %}
-      <li>
-        <a href="{% url 'pretalx:talk-detail' conference.slug talk.pretalx_code %}">{{ talk.title }}</a>
-        {% if talk.submission_type %}
-        <span>({{ talk.submission_type }})</span>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-  </section>
+  <h3 class="section-heading">Talk{{ talks|length|pluralize }}</h3>
+  <ul class="talk-list">
+    {% for talk in talks %}
+    <li class="talk-list-item">
+      <a href="{% url 'pretalx:talk-detail' conference.slug talk.pretalx_code %}">{{ talk.title }}</a>
+      {% if talk.submission_type %}
+      <span class="talk-list-type">{{ talk.submission_type }}</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
   {% endif %}
 </article>
 {% endblock %}

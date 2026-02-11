@@ -3,12 +3,14 @@
 {% block title %}Schedule{% endblock %}
 
 {% block content %}
-<h2>Schedule</h2>
+<div class="page-header">
+  <h2>Schedule</h2>
+</div>
 
 {% for day, slots in days %}
-<section>
-  <h3>{{ day|date:"l, N j, Y" }}</h3>
-  <table>
+<section class="schedule-day">
+  <h3 class="schedule-day-heading">{{ day|date:"l, N j, Y" }}</h3>
+  <table class="schedule-table">
     <thead>
       <tr>
         <th>Time</th>
@@ -20,22 +22,24 @@
     <tbody>
       {% for slot in slots %}
       <tr>
-        <td>{{ slot.start|time:"H:i" }}–{{ slot.end|time:"H:i" }}</td>
-        <td>{{ slot.room }}</td>
-        <td>
+        <td class="schedule-time">{{ slot.start|time:"H:i" }} &ndash; {{ slot.end|time:"H:i" }}</td>
+        <td class="schedule-room">{{ slot.room }}</td>
+        <td class="schedule-session">
           {% if slot.talk %}
           <a href="{% url 'pretalx:talk-detail' conference.slug slot.talk.pretalx_code %}">{{ slot.display_title }}</a>
           {% else %}
           {{ slot.display_title }}
           {% endif %}
         </td>
-        <td>{{ slot.get_slot_type_display }}</td>
+        <td>
+          <span class="slot-badge slot-badge--{{ slot.slot_type }}">{{ slot.get_slot_type_display }}</span>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </section>
 {% empty %}
-<p>No schedule data available yet.</p>
+<p class="schedule-empty">No schedule data available yet.</p>
 {% endfor %}
 {% endblock %}
