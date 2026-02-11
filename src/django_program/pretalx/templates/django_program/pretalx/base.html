@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} — {{ conference.name }}</title>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="{% url 'pretalx:schedule' conference.slug %}">Schedule</a>
+      <a href="{% url 'pretalx:speaker-list' conference.slug %}">Speakers</a>
+    </nav>
+    <h1>{{ conference.name }}</h1>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

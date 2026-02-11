@@ -1,0 +1,36 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}{{ speaker.name }}{% endblock %}
+
+{% block content %}
+<article>
+  <h2>{{ speaker.name }}</h2>
+
+  {% if speaker.avatar_url %}
+  <img src="{{ speaker.avatar_url }}" alt="{{ speaker.name }}" width="200" height="200">
+  {% endif %}
+
+  {% if speaker.biography %}
+  <section>
+    <h3>Biography</h3>
+    {{ speaker.biography|linebreaks }}
+  </section>
+  {% endif %}
+
+  {% if talks %}
+  <section>
+    <h3>Talk{{ talks|length|pluralize }}</h3>
+    <ul>
+      {% for talk in talks %}
+      <li>
+        <a href="{% url 'pretalx:talk-detail' conference.slug talk.pretalx_code %}">{{ talk.title }}</a>
+        {% if talk.submission_type %}
+        <span>({{ talk.submission_type }})</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</article>
+{% endblock %}

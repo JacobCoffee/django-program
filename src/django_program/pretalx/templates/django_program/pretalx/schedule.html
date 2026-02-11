@@ -1,0 +1,41 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Schedule{% endblock %}
+
+{% block content %}
+<h2>Schedule</h2>
+
+{% for day, slots in days %}
+<section>
+  <h3>{{ day|date:"l, N j, Y" }}</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Room</th>
+        <th>Session</th>
+        <th>Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for slot in slots %}
+      <tr>
+        <td>{{ slot.start|time:"H:i" }}–{{ slot.end|time:"H:i" }}</td>
+        <td>{{ slot.room }}</td>
+        <td>
+          {% if slot.talk %}
+          <a href="{% url 'pretalx:talk-detail' conference.slug slot.talk.pretalx_code %}">{{ slot.display_title }}</a>
+          {% else %}
+          {{ slot.display_title }}
+          {% endif %}
+        </td>
+        <td>{{ slot.get_slot_type_display }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% empty %}
+<p>No schedule data available yet.</p>
+{% endfor %}
+{% endblock %}

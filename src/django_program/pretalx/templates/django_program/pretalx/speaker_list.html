@@ -1,0 +1,17 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Speakers{% endblock %}
+
+{% block content %}
+<h2>Speakers</h2>
+
+<ul>
+  {% for speaker in speakers %}
+  <li>
+    <a href="{% url 'pretalx:speaker-detail' conference.slug speaker.pretalx_code %}">{{ speaker.name }}</a>
+  </li>
+  {% empty %}
+  <li>No speakers synced yet.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

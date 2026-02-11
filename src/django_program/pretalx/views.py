@@ -8,7 +8,7 @@ the URL and return a 404 if the slug does not match.
 import itertools
 from typing import TYPE_CHECKING
 
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from datetime import date
 
     from django.db.models import QuerySet
-    from django.http import HttpRequest
 
 
 class ConferenceMixin:

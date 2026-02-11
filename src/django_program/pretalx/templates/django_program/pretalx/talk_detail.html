@@ -1,0 +1,63 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}{{ talk.title }}{% endblock %}
+
+{% block content %}
+<article>
+  <h2>{{ talk.title }}</h2>
+
+  <dl>
+    {% if talk.submission_type %}
+    <dt>Type</dt>
+    <dd>{{ talk.submission_type }}</dd>
+    {% endif %}
+
+    {% if talk.track %}
+    <dt>Track</dt>
+    <dd>{{ talk.track }}</dd>
+    {% endif %}
+
+    {% if talk.duration %}
+    <dt>Duration</dt>
+    <dd>{{ talk.duration }} minutes</dd>
+    {% endif %}
+
+    {% if talk.room %}
+    <dt>Room</dt>
+    <dd>{{ talk.room }}</dd>
+    {% endif %}
+
+    {% if talk.slot_start %}
+    <dt>Scheduled</dt>
+    <dd>{{ talk.slot_start|date:"l, N j" }} {{ talk.slot_start|time:"H:i" }}–{{ talk.slot_end|time:"H:i" }}</dd>
+    {% endif %}
+  </dl>
+
+  {% if talk.abstract %}
+  <section>
+    <h3>Abstract</h3>
+    <p>{{ talk.abstract }}</p>
+  </section>
+  {% endif %}
+
+  {% if talk.description %}
+  <section>
+    <h3>Description</h3>
+    {{ talk.description|linebreaks }}
+  </section>
+  {% endif %}
+
+  {% if speakers %}
+  <section>
+    <h3>Speaker{{ speakers|length|pluralize }}</h3>
+    <ul>
+      {% for speaker in speakers %}
+      <li>
+        <a href="{% url 'pretalx:speaker-detail' conference.slug speaker.pretalx_code %}">{{ speaker.name }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</article>
+{% endblock %}
