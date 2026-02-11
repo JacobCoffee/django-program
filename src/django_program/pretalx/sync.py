@@ -62,6 +62,28 @@ class PretalxSyncService:
             api_token=api_token,
         )
 
+        self._rooms: dict[int, str] | None = None
+        self._submission_types: dict[int, str] | None = None
+        self._tracks: dict[int, str] | None = None
+
+    def _ensure_mappings(self) -> None:
+        """Pre-fetch room, submission type, and track ID-to-name mappings.
+
+        Fetches each mapping once and caches it on the instance so that
+        subsequent sync methods can resolve integer IDs from the real Pretalx
+        API into human-readable names.  Safe to call multiple times; only
+        fetches on the first call.
+        """
+        if self._rooms is None:
+            logger.debug("Fetching room mappings for %s", self.conference.slug)
+            self._rooms = self.client.fetch_rooms()
+        if self._submission_types is None:
+            logger.debug("Fetching submission type mappings for %s", self.conference.slug)
+            self._submission_types = self.client.fetch_submission_types()
+        if self._tracks is None:
+            logger.debug("Fetching track mappings for %s", self.conference.slug)
+            self._tracks = self.client.fetch_tracks()
+
     def sync_speakers(self) -> int:
         """Fetch speakers from Pretalx and upsert into the database.
 
@@ -107,14 +129,21 @@ class PretalxSyncService:
     def sync_talks(self) -> int:
         """Fetch talks from Pretalx and upsert into the database.
 
-        After upserting each talk, sets its speakers M2M from the Pretalx
-        speaker codes.  ISO 8601 datetime strings for slot start/end are parsed
-        with ``datetime.fromisoformat``.
+        Pre-fetches ID-to-name mappings for submission types, tracks, and
+        rooms so that integer IDs from the real API are resolved to display
+        names.  After upserting each talk, sets its speakers M2M from the
+        Pretalx speaker codes.  ISO 8601 datetime strings for slot start/end
+        are parsed with ``datetime.fromisoformat``.
 
         Returns:
             The number of talks synced.
         """
-        api_talks = self.client.fetch_talks()
+        self._ensure_mappings()
+        api_talks = self.client.fetch_talks(
+            submission_types=self._submission_types,
+            tracks=self._tracks,
+            rooms=self._rooms,
+        )
         now = timezone.now()
         count = 0
 
@@ -157,10 +186,12 @@ class PretalxSyncService:
     def sync_schedule(self) -> int:
         """Fetch schedule slots from Pretalx and upsert into the database.
 
-        Talk-linked slots use the talk's title and ``SlotType.TALK``.  Non-talk
-        slots are classified by title heuristics: titles containing "break" or
-        "lunch" become ``BREAK``, "social" or "party" become ``SOCIAL``, and
-        everything else becomes ``OTHER``.
+        Pre-fetches room mappings so that integer room IDs from the real API
+        are resolved to display names.  Talk-linked slots use the talk's title
+        and ``SlotType.TALK``.  Non-talk slots are classified by title
+        heuristics: titles containing "break" or "lunch" become ``BREAK``,
+        "social" or "party" become ``SOCIAL``, and everything else becomes
+        ``OTHER``.
 
         Slots that no longer appear in the Pretalx schedule (e.g. because a
         slot was rescheduled to a different time or room) are deleted after the
@@ -169,7 +200,8 @@ class PretalxSyncService:
         Returns:
             The number of schedule slots synced.
         """
-        api_slots = self.client.fetch_schedule()
+        self._ensure_mappings()
+        api_slots = self.client.fetch_schedule(rooms=self._rooms)
         now = timezone.now()
         count = 0
 
@@ -227,12 +259,14 @@ class PretalxSyncService:
     def sync_all(self) -> dict[str, int]:
         """Run all sync operations in dependency order.
 
-        Speakers are synced first (talks reference them), then talks (schedule
-        slots reference them), then schedule slots.
+        Pre-fetches all ID-to-name mappings once, then syncs speakers first
+        (talks reference them), then talks (schedule slots reference them),
+        then schedule slots.
 
         Returns:
             A mapping of entity type to the number synced.
         """
+        self._ensure_mappings()
         return {
             "speakers": self.sync_speakers(),
             "talks": self.sync_talks(),

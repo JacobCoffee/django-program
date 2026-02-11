@@ -4,6 +4,7 @@ Extends the test settings pattern with a persistent SQLite database,
 static file serving, and DEBUG mode for local development.
 """
 
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -65,3 +66,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+DJANGO_PROGRAM = {
+    "pretalx": {
+        "base_url": os.environ.get("PRETALX_BASE_URL", "https://pretalx.com"),
+        "token": os.environ.get("PRETALX_TOKEN", ""),
+    },
+}

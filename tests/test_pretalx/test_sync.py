@@ -60,7 +60,10 @@ def test_sync_talks_clears_speakers_when_api_returns_none(settings):
     talk.speakers.add(speaker)
 
     service = PretalxSyncService(conference)
-    service.client.fetch_talks = lambda: [
+    service._rooms = {}
+    service._submission_types = {}
+    service._tracks = {}
+    service.client.fetch_talks = lambda **kwargs: [
         PretalxTalk(
             code="TALK1",
             title="Updated Title",

@@ -10,6 +10,7 @@ the pytanis pattern with stdlib dataclasses instead of pydantic.
 """
 
 import enum
+import http
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -49,6 +50,33 @@ def _localized(value: str | dict[str, object] | None) -> str:
     return next((v for v in value.values() if isinstance(v, str)), "")
 
 
+def _resolve_id_or_localized(
+    value: int | str | dict[str, object] | None,
+    mapping: dict[int, str] | None = None,
+) -> str:
+    """Resolve a Pretalx field that may be an integer ID or a localized value.
+
+    When the real API returns an integer ID (e.g. for ``submission_type``,
+    ``track``, or ``room``), the optional mapping dict is used to look up the
+    human-readable name.  Falls back to :func:`_localized` for string/dict
+    values, or ``str(value)`` for unmapped integers.
+
+    Args:
+        value: An integer ID, a string, a multilingual dict, or ``None``.
+        mapping: Optional ``{id: name}`` dict for resolving integer IDs.
+
+    Returns:
+        The resolved display string, or empty string for ``None``.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, int):
+        if mapping and value in mapping:
+            return mapping[value]
+        return str(value)
+    return _localized(value)
+
+
 class SubmissionState(enum.StrEnum):
     """Pretalx submission lifecycle states."""
 
@@ -85,17 +113,21 @@ class PretalxSpeaker:
     def from_api(cls, data: dict[str, Any]) -> PretalxSpeaker:
         """Construct a ``PretalxSpeaker`` from a raw Pretalx API dict.
 
+        Checks both ``avatar_url`` and ``avatar`` keys since different Pretalx
+        instances use different field names.
+
         Args:
             data: A single speaker object from the Pretalx speakers endpoint.
 
         Returns:
             A populated ``PretalxSpeaker`` instance.
         """
+        avatar = data.get("avatar_url") or data.get("avatar") or ""
         return cls(
             code=data.get("code", ""),
             name=data.get("name", ""),
             biography=data.get("biography") or "",
-            avatar_url=data.get("avatar") or "",
+            avatar_url=avatar,
             email=data.get("email") or "",
             submissions=data.get("submissions") or [],
         )
@@ -134,14 +166,29 @@ class PretalxTalk:
     slot_end: str = ""
 
     @classmethod
-    def from_api(cls, data: dict[str, Any]) -> PretalxTalk:
+    def from_api(
+        cls,
+        data: dict[str, Any],
+        *,
+        submission_types: dict[int, str] | None = None,
+        tracks: dict[int, str] | None = None,
+        rooms: dict[int, str] | None = None,
+    ) -> PretalxTalk:
         """Construct a ``PretalxTalk`` from a raw Pretalx API dict.
 
         Handles multilingual fields for ``submission_type``, ``track``, and
-        slot data which may be nested objects with language keys.
+        slot data which may be nested objects with language keys.  When the
+        real API returns integer IDs instead of objects, the optional mapping
+        dicts are used to resolve human-readable names.
 
         Args:
             data: A single submission or talk object from the Pretalx API.
+            submission_types: Optional ``{id: name}`` mapping for resolving
+                integer submission type IDs.
+            tracks: Optional ``{id: name}`` mapping for resolving integer
+                track IDs.
+            rooms: Optional ``{id: name}`` mapping for resolving integer
+                room IDs.
 
         Returns:
             A populated ``PretalxTalk`` instance.
@@ -149,12 +196,19 @@ class PretalxTalk:
         speakers_raw = data.get("speakers") or []
         speaker_codes = [s["code"] if isinstance(s, dict) else str(s) for s in speakers_raw]
 
+        sub_type_raw = data.get("submission_type")
+        submission_type = _resolve_id_or_localized(sub_type_raw, submission_types)
+
+        track_raw = data.get("track")
+        track = _resolve_id_or_localized(track_raw, tracks)
+
         slot = data.get("slot") or {}
         room = ""
         slot_start = ""
         slot_end = ""
         if slot and isinstance(slot, dict):
-            room = _localized(slot.get("room"))
+            room_raw = slot.get("room")
+            room = _resolve_id_or_localized(room_raw, rooms)
             slot_start = slot.get("start") or ""
             slot_end = slot.get("end") or ""
 
@@ -163,8 +217,8 @@ class PretalxTalk:
             title=data.get("title", ""),
             abstract=data.get("abstract") or "",
             description=data.get("description") or "",
-            submission_type=_localized(data.get("submission_type")),
-            track=_localized(data.get("track")),
+            submission_type=submission_type,
+            track=track,
             duration=data.get("duration"),
             state=data.get("state") or "",
             speaker_codes=speaker_codes,
@@ -197,11 +251,22 @@ class PretalxSlot:
     end_dt: datetime | None = field(default=None, repr=False)
 
     @classmethod
-    def from_api(cls, data: dict[str, Any]) -> PretalxSlot:
+    def from_api(
+        cls,
+        data: dict[str, Any],
+        *,
+        rooms: dict[int, str] | None = None,
+    ) -> PretalxSlot:
         """Construct a ``PretalxSlot`` from a raw Pretalx schedule slot dict.
+
+        Handles both the legacy format (string ``room``, ``code``, ``title``
+        keys) and the real paginated ``/slots/`` format (integer ``room`` ID,
+        ``submission`` key instead of ``code``, no ``title``).
 
         Args:
             data: A single slot object from the Pretalx schedule endpoint.
+            rooms: Optional ``{id: name}`` mapping for resolving integer
+                room IDs.
 
         Returns:
             A populated ``PretalxSlot`` instance.
@@ -209,12 +274,18 @@ class PretalxSlot:
         start_str = data.get("start") or ""
         end_str = data.get("end") or ""
 
+        room_raw = data.get("room")
+        room = _resolve_id_or_localized(room_raw, rooms)
+
+        code = data.get("submission") or data.get("code") or ""
+        title = _localized(data.get("title")) if "title" in data else ""
+
         return cls(
-            room=_localized(data.get("room")),
+            room=room,
             start=start_str,
             end=end_str,
-            code=data.get("code") or "",
-            title=_localized(data.get("title")),
+            code=code,
+            title=title,
             start_dt=_parse_datetime(start_str),
             end_dt=_parse_datetime(end_str),
         )
@@ -324,6 +395,96 @@ class PretalxClient:
         logger.debug("Collected %d results from paginated endpoint", len(results))
         return results
 
+    def _get_paginated_or_none(self, url: str) -> list[dict[str, Any]] | None:
+        """Fetch a paginated endpoint, returning ``None`` on HTTP 404.
+
+        Behaves like :meth:`_get_paginated` but treats a 404 response as a
+        signal that the endpoint does not exist for this event, returning
+        ``None`` instead of raising.
+
+        Args:
+            url: The initial URL to fetch.
+
+        Returns:
+            A flat list of result dicts, or ``None`` if the endpoint returned
+            404.
+
+        Raises:
+            RuntimeError: If the API returns a non-404 HTTP error status.
+        """
+        results: list[dict[str, Any]] = []
+        current_url: str | None = url
+
+        with httpx.Client(timeout=30, headers=self.headers) as client:
+            while current_url is not None:
+                logger.debug("Fetching %s", current_url)
+                try:
+                    response = client.get(current_url)
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code == http.HTTPStatus.NOT_FOUND:
+                        logger.debug("Got 404 for %s, endpoint unavailable", url)
+                        return None
+                    msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
+                    raise RuntimeError(msg) from exc
+                except httpx.RequestError as exc:
+                    msg = f"Pretalx API connection error for URL {current_url}: {exc}"
+                    raise RuntimeError(msg) from exc
+
+                data = response.json()
+                results.extend(data.get("results", []))
+                current_url = data.get("next")
+
+        logger.debug("Collected %d results from paginated endpoint", len(results))
+        return results
+
+    def _fetch_id_name_mapping(self, endpoint: str) -> dict[int, str]:
+        """Fetch a lookup table from a Pretalx endpoint that returns ID+name objects.
+
+        Works for ``/rooms/``, ``/submission-types/``, and ``/tracks/``
+        endpoints where each object has an integer ``id`` and a localized
+        ``name`` field.
+
+        Args:
+            endpoint: The endpoint path relative to the event API URL
+                (e.g. ``"rooms/"``).
+
+        Returns:
+            A dict mapping integer IDs to resolved display name strings.
+        """
+        url = f"{self.api_url}{endpoint}"
+        items = self._get_paginated(url)
+        mapping: dict[int, str] = {}
+        for item in items:
+            item_id = item.get("id")
+            if item_id is not None:
+                mapping[int(item_id)] = _localized(item.get("name"))
+        return mapping
+
+    def fetch_rooms(self) -> dict[int, str]:
+        """Fetch room ID-to-name mappings for the event.
+
+        Returns:
+            A dict mapping room IDs to display names.
+        """
+        return self._fetch_id_name_mapping("rooms/")
+
+    def fetch_submission_types(self) -> dict[int, str]:
+        """Fetch submission type ID-to-name mappings for the event.
+
+        Returns:
+            A dict mapping submission type IDs to display names.
+        """
+        return self._fetch_id_name_mapping("submission-types/")
+
+    def fetch_tracks(self) -> dict[int, str]:
+        """Fetch track ID-to-name mappings for the event.
+
+        Returns:
+            A dict mapping track IDs to display names.
+        """
+        return self._fetch_id_name_mapping("tracks/")
+
     def fetch_speakers(self) -> list[PretalxSpeaker]:
         """Fetch all speakers for the event.
 
@@ -333,25 +494,58 @@ class PretalxClient:
         url = f"{self.api_url}speakers/"
         return [PretalxSpeaker.from_api(item) for item in self._get_paginated(url)]
 
-    def fetch_talks(self) -> list[PretalxTalk]:
+    def fetch_talks(
+        self,
+        *,
+        submission_types: dict[int, str] | None = None,
+        tracks: dict[int, str] | None = None,
+        rooms: dict[int, str] | None = None,
+    ) -> list[PretalxTalk]:
         """Fetch all confirmed/accepted talks for the event.
 
-        The talks endpoint returns only submissions that have been accepted
-        into the schedule, unlike :meth:`fetch_submissions` which can return
-        submissions in any state.
+        Tries the ``/talks/`` endpoint first. When that returns 404 (as it
+        does for some Pretalx events like PyCon US), falls back to
+        ``/submissions/?state=confirmed``.
+
+        Args:
+            submission_types: Optional ID-to-name mapping for submission types.
+            tracks: Optional ID-to-name mapping for tracks.
+            rooms: Optional ID-to-name mapping for rooms.
 
         Returns:
             A list of :class:`PretalxTalk` instances.
         """
         url = f"{self.api_url}talks/"
-        return [PretalxTalk.from_api(item) for item in self._get_paginated(url)]
+        raw = self._get_paginated_or_none(url)
+        if raw is None:
+            logger.info("talks/ endpoint returned 404, falling back to submissions/?state=confirmed")
+            raw = self._get_paginated(f"{self.api_url}submissions/?state=confirmed")
+        return [
+            PretalxTalk.from_api(
+                item,
+                submission_types=submission_types,
+                tracks=tracks,
+                rooms=rooms,
+            )
+            for item in raw
+        ]
 
-    def fetch_submissions(self, *, state: str = "") -> list[PretalxTalk]:
+    def fetch_submissions(
+        self,
+        *,
+        state: str = "",
+        submission_types: dict[int, str] | None = None,
+        tracks: dict[int, str] | None = None,
+        rooms: dict[int, str] | None = None,
+    ) -> list[PretalxTalk]:
         """Fetch submissions for the event, optionally filtered by state.
 
         Args:
             state: Pretalx submission state to filter by (e.g.
                 ``"confirmed"``). When empty, all submissions are returned.
+            submission_types: Optional ID-to-name mapping for submission types.
+            tracks: Optional ID-to-name mapping for tracks.
+            rooms: Optional ID-to-name mapping for rooms.
 
         Returns:
             A list of :class:`PretalxTalk` instances.
@@ -359,35 +553,34 @@ class PretalxClient:
         url = f"{self.api_url}submissions/"
         if state:
             url = f"{url}?state={state}"
-        return [PretalxTalk.from_api(item) for item in self._get_paginated(url)]
+        return [
+            PretalxTalk.from_api(
+                item,
+                submission_types=submission_types,
+                tracks=tracks,
+                rooms=rooms,
+            )
+            for item in self._get_paginated(url)
+        ]
 
-    def fetch_schedule(self) -> list[PretalxSlot]:
-        """Fetch the latest schedule slots for the event.
+    def fetch_schedule(
+        self,
+        *,
+        rooms: dict[int, str] | None = None,
+    ) -> list[PretalxSlot]:
+        """Fetch schedule slots for the event from the paginated ``/slots/`` endpoint.
 
-        Unlike the other fetch methods, this endpoint is not paginated. It
-        returns the full schedule in a single response.
+        Uses the ``/slots/`` endpoint which returns fully expanded slot objects
+        with start/end times and room IDs, unlike ``/schedules/latest/`` which
+        only returns slot ID integers.
+
+        Args:
+            rooms: Optional ID-to-name mapping for resolving integer room IDs.
 
         Returns:
             A list of :class:`PretalxSlot` instances.
-
-        Raises:
-            RuntimeError: If the API returns an HTTP error status.
         """
-        url = f"{self.api_url}schedules/latest/"
-
-        with httpx.Client(timeout=30, headers=self.headers) as client:
-            logger.debug("Fetching schedule from %s", url)
-            try:
-                response = client.get(url)
-                response.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                msg = f"Pretalx API request failed: {exc.response.status_code} for URL {exc.request.url}"
-                raise RuntimeError(msg) from exc
-            except httpx.RequestError as exc:
-                msg = f"Pretalx API connection error for URL {url}: {exc}"
-                raise RuntimeError(msg) from exc
-
-        data = response.json()
-        raw_slots: list[dict[str, Any]] = data.get("slots", [])
+        url = f"{self.api_url}slots/"
+        raw_slots = self._get_paginated(url)
         logger.debug("Fetched %d schedule slots", len(raw_slots))
-        return [PretalxSlot.from_api(slot) for slot in raw_slots]
+        return [PretalxSlot.from_api(slot, rooms=rooms) for slot in raw_slots]
