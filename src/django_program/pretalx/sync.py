@@ -232,18 +232,20 @@ class PretalxSyncService:
         Args:
             m2m_map: Mapping of talk pretalx_code to lists of speaker PKs.
         """
-        all_talk_pks = dict(
+        synced_codes = set(m2m_map.keys())
+        synced_talk_pks = dict(
             Talk.objects.filter(
                 conference=self.conference,
+                pretalx_code__in=synced_codes,
             ).values_list("pretalx_code", "pk")
         )
         TalkSpeaker = Talk.speakers.through  # noqa: N806
         TalkSpeaker.objects.filter(
-            talk_id__in=all_talk_pks.values(),
+            talk_id__in=synced_talk_pks.values(),
         ).delete()
         through_entries = []
         for talk_code, spk_pks in m2m_map.items():
-            talk_pk = all_talk_pks.get(talk_code)
+            talk_pk = synced_talk_pks.get(talk_code)
             if talk_pk:
                 through_entries.extend(TalkSpeaker(talk_id=talk_pk, speaker_id=spk_pk) for spk_pk in spk_pks)
         if through_entries:
