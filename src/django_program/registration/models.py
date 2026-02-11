@@ -276,14 +276,14 @@ class CartItem(models.Model):
     )
     ticket_type = models.ForeignKey(
         TicketType,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="cart_items",
     )
     addon = models.ForeignKey(
         AddOn,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="cart_items",
