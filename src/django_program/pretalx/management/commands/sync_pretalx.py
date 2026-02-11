@@ -40,6 +40,12 @@ class Command(BaseCommand):
             help="Conference slug to sync.",
         )
         parser.add_argument(
+            "--rooms",
+            action="store_true",
+            default=False,
+            help="Sync rooms only.",
+        )
+        parser.add_argument(
             "--speakers",
             action="store_true",
             default=False,
@@ -86,22 +92,28 @@ class Command(BaseCommand):
 
         service = PretalxSyncService(conference)
 
+        sync_rooms: bool = bool(options["rooms"])
         sync_speakers: bool = bool(options["speakers"])
         sync_talks: bool = bool(options["talks"])
         sync_schedule: bool = bool(options["schedule"])
         sync_all: bool = bool(options["sync_all"])
-        no_specific_flag = not (sync_speakers or sync_talks or sync_schedule)
+        no_specific_flag = not (sync_rooms or sync_speakers or sync_talks or sync_schedule)
 
         if sync_all or no_specific_flag:
             results = service.sync_all()
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Synced {results['speakers']} speakers, "
+                    f"Synced {results['rooms']} rooms, "
+                    f"{results['speakers']} speakers, "
                     f"{results['talks']} talks, "
                     f"{results['schedule_slots']} schedule slots"
                 )
             )
             return
+
+        if sync_rooms:
+            count = service.sync_rooms()
+            self.stdout.write(self.style.SUCCESS(f"Synced {count} rooms"))
 
         if sync_speakers:
             count = service.sync_speakers()

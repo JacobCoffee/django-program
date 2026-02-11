@@ -2,7 +2,17 @@
 
 from django.contrib import admin
 
-from django_program.pretalx.models import ScheduleSlot, Speaker, Talk
+from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
+
+
+@admin.register(Room)
+class RoomAdmin(admin.ModelAdmin):
+    """Admin interface for managing rooms synced from Pretalx."""
+
+    list_display = ("name", "conference", "capacity", "position", "pretalx_id", "synced_at")
+    list_filter = ("conference",)
+    search_fields = ("name",)
+    readonly_fields = ("pretalx_id", "synced_at", "created_at", "updated_at")
 
 
 @admin.register(Speaker)
@@ -32,6 +42,7 @@ class TalkAdmin(admin.ModelAdmin):
     list_display = ("title", "conference", "submission_type", "track", "state", "room", "slot_start")
     list_filter = ("conference", "submission_type", "track", "state")
     search_fields = ("title", "pretalx_code", "abstract")
+    raw_id_fields = ("room",)
     filter_horizontal = ("speakers",)
     readonly_fields = ("pretalx_code", "synced_at", "created_at", "updated_at")
 
@@ -46,9 +57,9 @@ class ScheduleSlotAdmin(admin.ModelAdmin):
     """
 
     list_display = ("display_title", "conference", "room", "start", "end", "slot_type")
-    list_filter = ("conference", "slot_type", "room")
+    list_filter = ("conference", "slot_type")
     search_fields = ("title",)
-    raw_id_fields = ("talk",)
+    raw_id_fields = ("talk", "room")
     readonly_fields = ("synced_at", "created_at", "updated_at")
 
     @admin.display(description="Title")

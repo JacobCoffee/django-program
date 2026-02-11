@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "django_program.pretalx",
     "django_program.sponsors",
     "django_program.programs",
+    "django_program.manage",
 ]
 
 MIDDLEWARE = [
@@ -66,6 +67,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/manage/"
 
 DJANGO_PROGRAM = {
     "pretalx": {

@@ -1,7 +1,36 @@
-"""Speaker, Talk, and ScheduleSlot models synced from Pretalx."""
+"""Speaker, Talk, Room, and ScheduleSlot models synced from Pretalx."""
 
 from django.conf import settings
 from django.db import models
+
+
+class Room(models.Model):
+    """A room or venue space synced from the Pretalx API.
+
+    Each room is uniquely identified per conference by its Pretalx integer ID.
+    Stores metadata like capacity and display position for schedule rendering.
+    """
+
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="rooms",
+    )
+    pretalx_id = models.PositiveIntegerField()
+    name = models.CharField(max_length=300)
+    description = models.TextField(blank=True, default="")
+    capacity = models.PositiveIntegerField(null=True, blank=True)
+    position = models.PositiveIntegerField(null=True, blank=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position", "name"]
+        unique_together = [("conference", "pretalx_id")]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class Speaker(models.Model):
@@ -67,7 +96,13 @@ class Talk(models.Model):
         related_name="talks",
         blank=True,
     )
-    room = models.CharField(max_length=200, blank=True, default="")
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="talks",
+    )
     slot_start = models.DateTimeField(null=True, blank=True)
     slot_end = models.DateTimeField(null=True, blank=True)
     synced_at = models.DateTimeField(null=True, blank=True)
@@ -111,7 +146,13 @@ class ScheduleSlot(models.Model):
         related_name="schedule_slots",
     )
     title = models.CharField(max_length=500, blank=True, default="")
-    room = models.CharField(max_length=200, blank=True, default="")
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="schedule_slots",
+    )
     start = models.DateTimeField()
     end = models.DateTimeField()
     slot_type = models.CharField(

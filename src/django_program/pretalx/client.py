@@ -469,6 +469,18 @@ class PretalxClient:
         """
         return self._fetch_id_name_mapping("rooms/")
 
+    def fetch_rooms_full(self) -> list[dict[str, Any]]:
+        """Fetch full room data for the event.
+
+        Returns all fields from the Pretalx ``/rooms/`` endpoint including
+        ``id``, ``name``, ``description``, ``capacity``, and ``position``.
+
+        Returns:
+            A list of raw room dicts from the Pretalx API.
+        """
+        url = f"{self.api_url}rooms/"
+        return self._get_paginated(url)
+
     def fetch_submission_types(self) -> dict[int, str]:
         """Fetch submission type ID-to-name mappings for the event.
 
@@ -505,7 +517,8 @@ class PretalxClient:
 
         Tries the ``/talks/`` endpoint first. When that returns 404 (as it
         does for some Pretalx events like PyCon US), falls back to
-        ``/submissions/?state=confirmed``.
+        ``/submissions/`` with both ``confirmed`` and ``accepted`` states to
+        capture all scheduled content including tutorials and sponsor talks.
 
         Args:
             submission_types: Optional ID-to-name mapping for submission types.
@@ -518,8 +531,11 @@ class PretalxClient:
         url = f"{self.api_url}talks/"
         raw = self._get_paginated_or_none(url)
         if raw is None:
-            logger.info("talks/ endpoint returned 404, falling back to submissions/?state=confirmed")
-            raw = self._get_paginated(f"{self.api_url}submissions/?state=confirmed")
+            logger.info("talks/ endpoint returned 404, falling back to submissions/ with confirmed+accepted states")
+            confirmed = self._get_paginated(f"{self.api_url}submissions/?state=confirmed")
+            accepted = self._get_paginated(f"{self.api_url}submissions/?state=accepted")
+            raw = confirmed + accepted
+            logger.info("Fetched %d confirmed + %d accepted = %d submissions", len(confirmed), len(accepted), len(raw))
         return [
             PretalxTalk.from_api(
                 item,

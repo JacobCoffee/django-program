@@ -23,7 +23,7 @@
       {% for slot in slots %}
       <tr>
         <td class="schedule-time">{{ slot.start|time:"H:i" }} &ndash; {{ slot.end|time:"H:i" }}</td>
-        <td class="schedule-room">{{ slot.room }}</td>
+        <td class="schedule-room">{{ slot.room.name|default:"" }}</td>
         <td class="schedule-session">
           {% if slot.talk %}
           <a href="{% url 'pretalx:talk-detail' conference.slug slot.talk.pretalx_code %}">{{ slot.display_title }}</a>
@@ -32,7 +32,11 @@
           {% endif %}
         </td>
         <td>
+          {% if slot.talk and slot.talk.submission_type %}
+          <span class="slot-badge slot-badge--{{ slot.slot_type }}">{{ slot.talk.submission_type }}</span>
+          {% else %}
           <span class="slot-badge slot-badge--{{ slot.slot_type }}">{{ slot.get_slot_type_display }}</span>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

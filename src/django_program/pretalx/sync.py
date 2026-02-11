@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from django_program.pretalx.client import PretalxClient
-from django_program.pretalx.models import ScheduleSlot, Speaker, Talk
+from django_program.pretalx.client import PretalxClient, _localized
+from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.settings import get_config
 
 if TYPE_CHECKING:
@@ -62,7 +62,8 @@ class PretalxSyncService:
             api_token=api_token,
         )
 
-        self._rooms: dict[int, str] | None = None
+        self._rooms: dict[int, Room] | None = None
+        self._room_names: dict[int, str] | None = None
         self._submission_types: dict[int, str] | None = None
         self._tracks: dict[int, str] | None = None
 
@@ -76,13 +77,60 @@ class PretalxSyncService:
         """
         if self._rooms is None:
             logger.debug("Fetching room mappings for %s", self.conference.slug)
-            self._rooms = self.client.fetch_rooms()
+            self._rooms = {room.pretalx_id: room for room in Room.objects.filter(conference=self.conference)}
+            self._room_names = {pid: room.name for pid, room in self._rooms.items()}
         if self._submission_types is None:
             logger.debug("Fetching submission type mappings for %s", self.conference.slug)
             self._submission_types = self.client.fetch_submission_types()
         if self._tracks is None:
             logger.debug("Fetching track mappings for %s", self.conference.slug)
             self._tracks = self.client.fetch_tracks()
+
+    def sync_rooms(self) -> int:
+        """Fetch rooms from Pretalx and upsert into the database.
+
+        Populates the :class:`~django_program.pretalx.models.Room` table with
+        full room metadata including name, description, capacity, and position.
+        After syncing, refreshes the in-memory room cache so that subsequent
+        talk and schedule syncs can resolve room FKs.
+
+        Returns:
+            The number of rooms synced.
+        """
+        api_rooms = self.client.fetch_rooms_full()
+        now = timezone.now()
+        count = 0
+
+        for raw_room in api_rooms:
+            room_id = raw_room.get("id")
+            if room_id is None:
+                continue
+
+            name = _localized(raw_room.get("name"))
+            description = _localized(raw_room.get("description"))
+            capacity = raw_room.get("capacity")
+            position = raw_room.get("position")
+
+            Room.objects.update_or_create(
+                conference=self.conference,
+                pretalx_id=int(room_id),
+                defaults={
+                    "name": name,
+                    "description": description,
+                    "capacity": capacity,
+                    "position": position,
+                    "synced_at": now,
+                },
+            )
+            count += 1
+
+        logger.info("Synced %d rooms for %s", count, self.conference.slug)
+
+        self._rooms = None
+        self._room_names = None
+        self._ensure_mappings()
+
+        return count
 
     def sync_speakers(self) -> int:
         """Fetch speakers from Pretalx and upsert into the database.
@@ -142,12 +190,14 @@ class PretalxSyncService:
         api_talks = self.client.fetch_talks(
             submission_types=self._submission_types,
             tracks=self._tracks,
-            rooms=self._rooms,
+            rooms=self._room_names,
         )
         now = timezone.now()
         count = 0
 
         for api_talk in api_talks:
+            room = self._resolve_room(api_talk.room)
+
             talk, created = Talk.objects.update_or_create(
                 conference=self.conference,
                 pretalx_code=api_talk.code,
@@ -159,7 +209,7 @@ class PretalxSyncService:
                     "track": api_talk.track,
                     "duration": api_talk.duration,
                     "state": api_talk.state,
-                    "room": api_talk.room,
+                    "room": room,
                     "slot_start": _parse_iso_datetime(api_talk.slot_start),
                     "slot_end": _parse_iso_datetime(api_talk.slot_end),
                     "synced_at": now,
@@ -201,7 +251,7 @@ class PretalxSyncService:
             The number of schedule slots synced.
         """
         self._ensure_mappings()
-        api_slots = self.client.fetch_schedule(rooms=self._rooms)
+        api_slots = self.client.fetch_schedule(rooms=self._room_names)
         now = timezone.now()
         count = 0
 
@@ -227,10 +277,12 @@ class PretalxSyncService:
                 logger.warning("Skipping slot with unparsable times: %s", api_slot)
                 continue
 
+            room = self._resolve_room(api_slot.room)
+
             ScheduleSlot.objects.update_or_create(
                 conference=self.conference,
                 start=start_dt,
-                room=api_slot.room,
+                room=room,
                 defaults={
                     "talk": talk,
                     "title": title,
@@ -256,18 +308,35 @@ class PretalxSyncService:
         logger.info("Synced %d schedule slots for %s", count, self.conference.slug)
         return count
 
+    def _resolve_room(self, room_name: str) -> Room | None:
+        """Look up a Room instance by its display name.
+
+        Args:
+            room_name: The room display name as resolved from the Pretalx API.
+
+        Returns:
+            The matching ``Room`` instance, or ``None`` if the name is empty
+            or no match is found.
+        """
+        if not room_name or self._rooms is None:
+            return None
+        for room in self._rooms.values():
+            if room.name == room_name:
+                return room
+        return None
+
     def sync_all(self) -> dict[str, int]:
         """Run all sync operations in dependency order.
 
-        Pre-fetches all ID-to-name mappings once, then syncs speakers first
+        Syncs rooms first (talks and slots reference them), then speakers
         (talks reference them), then talks (schedule slots reference them),
         then schedule slots.
 
         Returns:
             A mapping of entity type to the number synced.
         """
-        self._ensure_mappings()
         return {
+            "rooms": self.sync_rooms(),
             "speakers": self.sync_speakers(),
             "talks": self.sync_talks(),
             "schedule_slots": self.sync_schedule(),

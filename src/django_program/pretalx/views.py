@@ -91,8 +91,8 @@ class ScheduleView(ConferenceMixin, TemplateView):
             ScheduleSlot.objects.filter(
                 conference=self.conference,
             )
-            .select_related("talk")
-            .order_by("start", "room")
+            .select_related("talk", "room")
+            .order_by("start", "room__position", "room__name")
         )
 
         days: list[tuple[date, list[ScheduleSlot]]] = [
@@ -125,14 +125,14 @@ class ScheduleJSONView(ConferenceMixin, View):
             ScheduleSlot.objects.filter(
                 conference=self.conference,
             )
-            .select_related("talk")
-            .order_by("start", "room")
+            .select_related("talk", "room")
+            .order_by("start", "room__position", "room__name")
         )
 
         data = [
             {
                 "title": slot.display_title,
-                "room": slot.room,
+                "room": slot.room.name if slot.room else "",
                 "start": slot.start.isoformat(),
                 "end": slot.end.isoformat(),
                 "slot_type": slot.slot_type,
