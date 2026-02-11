@@ -1,0 +1,1427 @@
+{
+  "meta": {
+    "project": "django-program",
+    "version": "1.0.0",
+    "created_at": "2026-02-10T23:48:54.202607Z",
+    "updated_at": "2026-02-11T00:30:00.000000Z",
+    "business_plan_path": ".claude/BUSINESS_PLAN.md"
+  },
+  "summary": {
+    "total_phases": 12,
+    "total_tasks": 103,
+    "completed_tasks": 29,
+    "overall_progress": 28.2
+  },
+  "phases": [
+    {
+      "id": "0",
+      "name": "Project Scaffolding",
+      "description": "",
+      "status": "completed",
+      "progress": {
+        "completed": 10,
+        "total": 10,
+        "percentage": 100.0
+      },
+      "tasks": [
+        {
+          "id": "0.1.1",
+          "title": "Create pyproject.toml with uv_build backend",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "pyproject.toml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "0.1.2",
+          "title": "Create src/django_program/__init__.py and __metadata__.py",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/__init__.py",
+            "src/django_program/__metadata__.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "0.1.3",
+          "title": "Create src/django_program/py.typed marker",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/py.typed"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "0.1.4",
+          "title": "Create src/django_program/conf.py with PROGRAM_* settings defaults",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/conf.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "0.1.5",
+          "title": "Create .pre-commit-config.yaml with ruff, ty, codespell, conventional commits",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".pre-commit-config.yaml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "0.1.6",
+          "title": "Create Makefile with dev, lint, fmt, test, docs, build targets",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "Makefile"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "0.1.7",
+          "title": "Create .python-version (3.14)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".python-version"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "0.1.8",
+          "title": "Create .gitignore for Python/Django project",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".gitignore"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "0.1.9",
+          "title": "Create conference.example.toml with full sample config",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "conference.example.toml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "0.1.10",
+          "title": "Create src/django_program/config_loader.py for TOML parsing and validation",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/config_loader.py"
+          ],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "1",
+      "name": "Conference App",
+      "description": "",
+      "status": "completed",
+      "progress": {
+        "completed": 6,
+        "total": 6,
+        "percentage": 100.0
+      },
+      "tasks": [
+        {
+          "id": "1.1.1",
+          "title": "Create conference app: apps.py with DjangoProgramConferenceConfig",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/conference/__init__.py",
+            "src/django_program/conference/apps.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "1.1.2",
+          "title": "Create Conference model (name, slug, dates, timezone, venue, pretalx_event_slug, stripe keys, is_active)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/conference/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "1.1.3",
+          "title": "Create Section model (conference FK, name, slug, dates, order)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/conference/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "1.1.4",
+          "title": "Create conference admin (ConferenceAdmin, SectionInline)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/conference/admin.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "1.1.5",
+          "title": "Create bootstrap management command (--config, --update, --dry-run)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/conference/management/__init__.py",
+            "src/django_program/conference/management/commands/__init__.py",
+            "src/django_program/conference/management/commands/bootstrap.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "1.1.6",
+          "title": "Create initial migration for conference app",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/conference/migrations/0001_initial.py"
+          ],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "name": "Registration Models",
+      "description": "",
+      "status": "completed",
+      "progress": {
+        "completed": 13,
+        "total": 13,
+        "percentage": 100.0
+      },
+      "tasks": [
+        {
+          "id": "2.1.1",
+          "title": "Create registration app: apps.py with DjangoProgramRegistrationConfig",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/__init__.py",
+            "src/django_program/registration/apps.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.2",
+          "title": "Create TicketType model (conference FK, name, slug, price, available_from/until, total_quantity, limit_per_user, requires_voucher, is_active, order)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.3",
+          "title": "Create AddOn model (conference FK, name, slug, price, requires_ticket_types M2M, availability fields)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.4",
+          "title": "Create Voucher model (conference FK, code, voucher_type enum, discount_value, applicable_ticket_types/addons M2M, max_uses, valid_from/until, unlocks_hidden_tickets)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.5",
+          "title": "Create Cart model (user FK, conference FK, status enum, voucher FK, expires_at)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.6",
+          "title": "Create CartItem model (cart FK, ticket_type/addon nullable FKs, quantity, CheckConstraint for exactly-one)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.7",
+          "title": "Create Order model (conference FK, user FK, status enum, subtotal/discount/total, voucher snapshot, billing info, reference)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.8",
+          "title": "Create OrderLineItem model (order FK, description, quantity, unit_price, discount, line_total, ticket_type/addon nullable FKs)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.9",
+          "title": "Create Payment model (order FK, method enum, amount, stripe IDs, reference, note, created_by)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.10",
+          "title": "Create Credit model (user FK, conference FK, amount, status enum, applied_to_order/source_order FKs, note)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.11",
+          "title": "Create registration admin (TicketTypeAdmin, AddOnAdmin, VoucherAdmin, OrderAdmin with PaymentInline, CreditAdmin)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/admin.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.12",
+          "title": "Create registration signals (order_paid signal definition)",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/signals.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "2.1.13",
+          "title": "Create initial migration for registration app",
+          "status": "completed",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/migrations/0001_initial.py"
+          ],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "name": "Cart & Checkout",
+      "description": "",
+      "status": "pending",
+      "progress": {
+        "completed": 0,
+        "total": 12,
+        "percentage": 0.0
+      },
+      "tasks": [
+        {
+          "id": "3.1.1",
+          "title": "Create CartService: get_or_create_cart(user, conference)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/services.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.2",
+          "title": "Create CartService: add_ticket(cart, ticket_type, quantity) with availability/limit validation",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/services.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.3",
+          "title": "Create CartService: add_addon(cart, addon, quantity) with requires_ticket_types validation",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/services.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.4",
+          "title": "Create CartService: apply_voucher(cart, code) with validation (is_valid, max_uses_per_user, applicable items)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/services.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.5",
+          "title": "Create CartService: remove_item(cart, cart_item_id) and get_cart_summary(cart)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/services.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.6",
+          "title": "Create CheckoutService: checkout(cart, billing_info) - create Order, snapshot line items, calculate discounts",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/services.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.7",
+          "title": "Create CheckoutService: apply credits to order before Stripe",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/services.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.8",
+          "title": "Create stripe_client.py: create_checkout_session(order) using stripe SDK",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/stripe_client.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.9",
+          "title": "Create webhooks.py: Stripe webhook handler (checkout.session.completed, charge.refunded)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/webhooks.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.10",
+          "title": "Create CheckoutService: admin_refund(order, amount) with Stripe refund + Credit creation",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/services.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.11",
+          "title": "Create registration/urls.py with cart, checkout, webhook URL patterns",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/urls.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "3.1.12",
+          "title": "Create registration/forms.py (CartForm, VoucherForm, CheckoutForm)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/forms.py"
+          ],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "Pretalx Integration",
+      "description": "",
+      "status": "pending",
+      "progress": {
+        "completed": 0,
+        "total": 12,
+        "percentage": 0.0
+      },
+      "tasks": [
+        {
+          "id": "4.1.1",
+          "title": "Create pretalx app: apps.py with DjangoProgramPretalxConfig",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/__init__.py",
+            "src/django_program/pretalx/apps.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.2",
+          "title": "Create Speaker model (conference FK, pretalx_code, name, biography, avatar_url, email, user FK nullable, synced_at)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.3",
+          "title": "Create Talk model (conference FK, pretalx_code, title, abstract, description, type, track, duration, state, speakers M2M, room, slot_start/end, synced_at)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.4",
+          "title": "Create ScheduleSlot model (conference FK, talk FK nullable, title, room, start/end, slot_type, synced_at)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.5",
+          "title": "Create pretalx admin (SpeakerAdmin, TalkAdmin, ScheduleSlotAdmin)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/admin.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.6",
+          "title": "Create pretalx/client.py: httpx-based PretalxClient with pagination, auth, error handling",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/client.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.7",
+          "title": "Create pretalx/sync.py: PretalxSyncService.sync_speakers() with update_or_create and user email matching",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/sync.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.8",
+          "title": "Create pretalx/sync.py: PretalxSyncService.sync_talks() with speaker M2M linking",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/sync.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.9",
+          "title": "Create pretalx/sync.py: PretalxSyncService.sync_schedule() for full schedule grid",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/sync.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.10",
+          "title": "Create sync_pretalx management command (--speakers, --talks, --schedule, --all)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/management/__init__.py",
+            "src/django_program/pretalx/management/commands/__init__.py",
+            "src/django_program/pretalx/management/commands/sync_pretalx.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.11",
+          "title": "Create pretalx/urls.py and views.py for schedule JSON API and public schedule view",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/urls.py",
+            "src/django_program/pretalx/views.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "4.1.12",
+          "title": "Create initial migration for pretalx app",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/migrations/0001_initial.py"
+          ],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "name": "Sponsors App",
+      "description": "",
+      "status": "pending",
+      "progress": {
+        "completed": 0,
+        "total": 8,
+        "percentage": 0.0
+      },
+      "tasks": [
+        {
+          "id": "5.1.1",
+          "title": "Create sponsors app: apps.py with DjangoProgramSponsorsConfig",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/sponsors/__init__.py",
+            "src/django_program/sponsors/apps.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "5.1.2",
+          "title": "Create SponsorLevel model (conference FK, name, slug, cost, description, benefits_summary, comp_ticket_count, order)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/sponsors/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "5.1.3",
+          "title": "Create Sponsor model (conference FK, level FK, name, slug, website_url, logo, description, contact info, is_active)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/sponsors/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "5.1.4",
+          "title": "Create SponsorBenefit model (sponsor FK, name, description, is_complete, notes)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/sponsors/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "5.1.5",
+          "title": "Create sponsors admin with SponsorBenefitInline on SponsorAdmin",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/sponsors/admin.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "5.1.6",
+          "title": "Create auto-voucher generation signal: when Sponsor saved, generate comp vouchers based on level.comp_ticket_count",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/sponsors/signals.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "5.1.7",
+          "title": "Create sponsors/urls.py and views.py (sponsor list, sponsor detail)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/sponsors/urls.py",
+            "src/django_program/sponsors/views.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "5.1.8",
+          "title": "Create initial migration for sponsors app",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/sponsors/migrations/0001_initial.py"
+          ],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "6",
+      "name": "Programs App",
+      "description": "",
+      "status": "pending",
+      "progress": {
+        "completed": 0,
+        "total": 7,
+        "percentage": 0.0
+      },
+      "tasks": [
+        {
+          "id": "6.1.1",
+          "title": "Create programs app: apps.py with DjangoProgramProgramsConfig",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/programs/__init__.py",
+            "src/django_program/programs/apps.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "6.1.2",
+          "title": "Create Activity model (conference FK, name, slug, activity_type enum, description, location, times, max_participants, requires_ticket, external_url)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/programs/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "6.1.3",
+          "title": "Create ActivitySignup model (activity FK, user FK, note, unique_together)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/programs/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "6.1.4",
+          "title": "Create TravelGrant model (conference FK, user FK, status enum, requested/approved_amount, travel_from, reason, reviewer_notes, reviewed_by/at)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/programs/models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "6.1.5",
+          "title": "Create programs admin (ActivityAdmin with SignupInline, TravelGrantAdmin with list filters and actions)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/programs/admin.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "6.1.6",
+          "title": "Create programs/urls.py and views.py (activity list, signup, travel grant application)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/programs/urls.py",
+            "src/django_program/programs/views.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "6.1.7",
+          "title": "Create initial migration for programs app",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/programs/migrations/0001_initial.py"
+          ],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "7",
+      "name": "CI/CD & Docs",
+      "description": "",
+      "status": "pending",
+      "progress": {
+        "completed": 0,
+        "total": 12,
+        "percentage": 0.0
+      },
+      "tasks": [
+        {
+          "id": "7.1.1",
+          "title": "Create .github/workflows/ci.yml (security, validate, smoke tests, full matrix - Python 3.14 only)",
+          "status": "pending",
+          "agent_type": "github-git-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".github/workflows/ci.yml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.2",
+          "title": "Create .github/workflows/docs.yml (sphinx build, pages deploy, PR preview)",
+          "status": "pending",
+          "agent_type": "github-git-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".github/workflows/docs.yml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.3",
+          "title": "Create .github/workflows/publish.yml (build, sigstore sign, draft release, PyPI publish)",
+          "status": "pending",
+          "agent_type": "github-git-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".github/workflows/publish.yml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.4",
+          "title": "Create .github/workflows/cd.yml (git-cliff changelog automation)",
+          "status": "pending",
+          "agent_type": "github-git-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".github/workflows/cd.yml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.5",
+          "title": "Create .github/workflows/pr-title.yml (conventional commit PR title check)",
+          "status": "pending",
+          "agent_type": "github-git-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".github/workflows/pr-title.yml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.6",
+          "title": "Create .github/ISSUE_TEMPLATE/ (BUG.yml, FEATURE.yml, DOCS.yml, config.yml)",
+          "status": "pending",
+          "agent_type": "github-git-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".github/ISSUE_TEMPLATE/BUG.yml",
+            ".github/ISSUE_TEMPLATE/FEATURE.yml",
+            ".github/ISSUE_TEMPLATE/DOCS.yml",
+            ".github/ISSUE_TEMPLATE/config.yml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.7",
+          "title": "Create .github/dependabot.yml and .github/release.yml",
+          "status": "pending",
+          "agent_type": "github-git-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".github/dependabot.yml",
+            ".github/release.yml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.8",
+          "title": "Create .github/PULL_REQUEST_TEMPLATE.md",
+          "status": "pending",
+          "agent_type": "github-git-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            ".github/PULL_REQUEST_TEMPLATE.md"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.9",
+          "title": "Create docs/ structure: conf.py (sphinx+shibuya), index.md, getting-started.md",
+          "status": "pending",
+          "agent_type": "documentation-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "docs/conf.py",
+            "docs/index.md",
+            "docs/getting-started.md"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.10",
+          "title": "Create docs/toml-config.md documenting TOML bootstrap schema",
+          "status": "pending",
+          "agent_type": "documentation-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "docs/toml-config.md"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.11",
+          "title": "Create docs/registration-flow.md documenting cart/checkout/payment flow",
+          "status": "pending",
+          "agent_type": "documentation-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "docs/registration-flow.md"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "7.1.12",
+          "title": "Create docs/pretalx-integration.md documenting sync architecture",
+          "status": "pending",
+          "agent_type": "documentation-expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "docs/pretalx-integration.md"
+          ],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "8",
+      "name": "Templates & Views",
+      "description": "",
+      "status": "pending",
+      "progress": {
+        "completed": 0,
+        "total": 10,
+        "percentage": 0.0
+      },
+      "tasks": [
+        {
+          "id": "8.1.1",
+          "title": "Create base template with minimal default styling (django_program/base.html)",
+          "status": "pending",
+          "agent_type": "ui-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/templates/django_program/base.html"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "8.1.2",
+          "title": "Create registration templates: ticket_select.html, cart.html, checkout.html, order_confirmation.html, order_detail.html",
+          "status": "pending",
+          "agent_type": "ui-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/templates/django_program/registration/"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "8.1.3",
+          "title": "Create registration views: TicketSelectView, CartView, CheckoutView, OrderConfirmationView, OrderDetailView",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/views.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "8.1.4",
+          "title": "Create pretalx templates: schedule.html, talk_detail.html, speaker_detail.html, speaker_list.html",
+          "status": "pending",
+          "agent_type": "ui-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/templates/django_program/pretalx/"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "8.1.5",
+          "title": "Create pretalx views: ScheduleView, TalkDetailView, SpeakerDetailView, SpeakerListView",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/pretalx/views.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "8.1.6",
+          "title": "Create sponsor templates: sponsor_list.html, sponsor_detail.html",
+          "status": "pending",
+          "agent_type": "ui-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/templates/django_program/sponsors/"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "8.1.7",
+          "title": "Create program templates: activity_list.html, activity_detail.html, travel_grant_form.html",
+          "status": "pending",
+          "agent_type": "ui-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/templates/django_program/programs/"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "8.1.8",
+          "title": "Create email templates: order_confirmation.html, order_refund.html, grant_decision.html",
+          "status": "pending",
+          "agent_type": "ui-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/templates/django_program/emails/"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "8.1.9",
+          "title": "Create registration templatetags/registration_tags.py (cart_total, format_currency)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/registration/templatetags/__init__.py",
+            "src/django_program/registration/templatetags/registration_tags.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "8.1.10",
+          "title": "Create sponsors templatetags/sponsor_tags.py (sponsors_by_level)",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "src/django_program/sponsors/templatetags/__init__.py",
+            "src/django_program/sponsors/templatetags/sponsor_tags.py"
+          ],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "9",
+      "name": "Testing & Polish",
+      "description": "",
+      "status": "pending",
+      "progress": {
+        "completed": 0,
+        "total": 13,
+        "percentage": 0.0
+      },
+      "tasks": [
+        {
+          "id": "9.1.1",
+          "title": "Create tests/conftest.py with Django settings, fixtures, and common test utilities",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/conftest.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.2",
+          "title": "Create tests/factories.py with model-bakery factories for all 20 models",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/factories.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.3",
+          "title": "Create tests/fixtures/sample_conference.toml for test bootstrapping",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/fixtures/sample_conference.toml"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.4",
+          "title": "Create tests/test_conference/ (test bootstrap command, test Conference/Section models)",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/test_conference/test_models.py",
+            "tests/test_conference/test_bootstrap.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.5",
+          "title": "Create tests/test_registration/test_models.py (TicketType availability, Voucher validation, Order status transitions)",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/test_registration/test_models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.6",
+          "title": "Create tests/test_registration/test_cart_service.py (add/remove items, voucher application, cart expiry)",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/test_registration/test_cart_service.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.7",
+          "title": "Create tests/test_registration/test_checkout_service.py (order creation, discount calc, credit application)",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/test_registration/test_checkout_service.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.8",
+          "title": "Create tests/test_registration/test_stripe_webhooks.py (payment confirmation, refund handling)",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/test_registration/test_stripe_webhooks.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.9",
+          "title": "Create tests/test_registration/test_vouchers.py (all 3 types: comp, percentage, fixed + edge cases)",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/test_registration/test_vouchers.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.10",
+          "title": "Create tests/test_pretalx/test_sync.py (mock httpx responses, verify Speaker/Talk/ScheduleSlot sync)",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/test_pretalx/test_sync.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.11",
+          "title": "Create tests/test_sponsors/test_models.py (sponsor creation, auto-voucher generation)",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/test_sponsors/test_models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.12",
+          "title": "Create tests/test_programs/test_models.py (activity signup, travel grant workflow)",
+          "status": "pending",
+          "agent_type": "Python Testing Expert",
+          "skill": null,
+          "depends_on": [],
+          "files": [
+            "tests/test_programs/test_models.py"
+          ],
+          "tracking": {}
+        },
+        {
+          "id": "9.1.13",
+          "title": "Run make ci locally - verify ruff + ty + pytest all pass",
+          "status": "pending",
+          "agent_type": "python-backend-engineer",
+          "skill": null,
+          "depends_on": [],
+          "files": [],
+          "tracking": {}
+        }
+      ]
+    },
+    {
+      "id": "bugs",
+      "name": "Bugs",
+      "description": "Tasks identified as bugs requiring fixes",
+      "status": "pending",
+      "progress": {
+        "completed": 0,
+        "total": 0,
+        "percentage": 0
+      },
+      "tasks": []
+    },
+    {
+      "id": "deferred",
+      "name": "Deferred",
+      "description": "Tasks postponed for later consideration",
+      "status": "pending",
+      "progress": {
+        "completed": 0,
+        "total": 0,
+        "percentage": 0
+      },
+      "tasks": []
+    }
+  ]
+}
