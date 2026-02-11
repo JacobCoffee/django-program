@@ -47,6 +47,7 @@ class ProgramConfig:
     stripe: StripeConfig = field(default_factory=StripeConfig)
     pretalx: PretalxConfig = field(default_factory=PretalxConfig)
     cart_expiry_minutes: int = 30
+    order_reference_prefix: str = "ORD"
     currency: str = "USD"
     currency_symbol: str = "$"
 
