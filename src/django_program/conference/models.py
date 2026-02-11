@@ -1,6 +1,7 @@
 """Conference and Section models for django-program."""
 
 from django.db import models
+from encrypted_fields import EncryptedCharField
 
 
 class Conference(models.Model):
@@ -20,9 +21,9 @@ class Conference(models.Model):
 
     pretalx_event_slug = models.CharField(max_length=200, blank=True, default="")
 
-    stripe_secret_key = models.CharField(max_length=200, blank=True, default="")
-    stripe_publishable_key = models.CharField(max_length=200, blank=True, default="")
-    stripe_webhook_secret = models.CharField(max_length=200, blank=True, default="")
+    stripe_secret_key = EncryptedCharField(max_length=200, blank=True, null=True, default=None)
+    stripe_publishable_key = EncryptedCharField(max_length=200, blank=True, null=True, default=None)
+    stripe_webhook_secret = EncryptedCharField(max_length=200, blank=True, null=True, default=None)
 
     is_active = models.BooleanField(default=True)
 
