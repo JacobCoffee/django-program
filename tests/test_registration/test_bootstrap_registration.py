@@ -64,7 +64,7 @@ quantity = 40
 requires = ["individual", "corporate"]
 
 [[conference.addons]]
-name = "T-Shirt"
+name = "PyCon T-Shirt"
 price = 25.00
 quantity = 1000
 """
@@ -106,7 +106,7 @@ class TestBootstrapRegistration:
 
         conf = Conference.objects.get(slug="testcon")
         workshop = AddOn.objects.get(conference=conf, slug="workshop")
-        tshirt = AddOn.objects.get(conference=conf, slug="t-shirt")
+        tshirt = AddOn.objects.get(conference=conf, slug="pycon-t-shirt")
 
         assert workshop.price == Decimal("75.00")
         assert workshop.total_quantity == 40
