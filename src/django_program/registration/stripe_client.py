@@ -88,6 +88,7 @@ class StripeClient:
 
         get_name = getattr(user, "get_full_name", None)
         full_name = get_name() if callable(get_name) else ""
+        idempotency_key = f"customer-{self.conference.pk}-{user.pk}"
         customer = self.client.v1.customers.create(
             params={
                 "email": getattr(user, "email", ""),
@@ -97,6 +98,7 @@ class StripeClient:
                     "conference_slug": self.conference.slug,
                 },
             },
+            options={"idempotency_key": idempotency_key},
         )
 
         try:
@@ -190,4 +192,9 @@ class StripeClient:
             config = get_config()
             params["amount"] = convert_amount_for_api(amount, config.currency)
 
-        return self.client.v1.refunds.create(params=params)
+        amount_key = str(amount) if amount is not None else "full"
+        idempotency_key = f"refund-{payment_intent_id}-{amount_key}-{reason}"
+        return self.client.v1.refunds.create(
+            params=params,
+            options={"idempotency_key": idempotency_key},
+        )
