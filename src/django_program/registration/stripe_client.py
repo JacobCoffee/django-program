@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import stripe
 
 from django_program.registration.models import StripeCustomer
-from django_program.registration.stripe_utils import convert_amount_for_api, obfuscate_key
+from django_program.registration.stripe_utils import convert_amount_for_api
 from django_program.settings import get_config
 
 if TYPE_CHECKING:
@@ -63,11 +63,7 @@ class StripeClient:
             stripe_version=config.stripe.api_version,
         )
 
-        logger.info(
-            "Initialized StripeClient for conference '%s' (key %s)",
-            conference.slug,
-            obfuscate_key(secret_key),
-        )
+        logger.info("Initialized StripeClient for conference '%s'", conference.slug)
 
     def get_or_create_customer(self, user: AbstractBaseUser) -> StripeCustomer:
         """Return an existing StripeCustomer or create one via the Stripe API.
