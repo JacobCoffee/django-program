@@ -132,9 +132,9 @@ class Webhook:
 
         try:
             self.process_webhook()
+            self.send_signal()
             self.event.processed = True
             self.event.save(update_fields=["processed"])
-            self.send_signal()
         except Exception:
             self.log_exception()
             raise
@@ -212,18 +212,34 @@ class PaymentIntentSucceededWebhook(Webhook):
         config = get_config()
         amount = convert_amount_for_db(int(intent["amount"]), config.currency)
 
-        payment_kwargs: dict[str, object] = {
-            "order": order,
-            "method": Payment.Method.STRIPE,
-            "status": Payment.Status.SUCCEEDED,
-            "stripe_payment_intent_id": str(intent.get("id", "")),
-            "amount": amount,
-        }
-        latest_charge = intent.get("latest_charge")
-        if latest_charge:
-            payment_kwargs["stripe_charge_id"] = str(latest_charge)
+        intent_id = str(intent.get("id", ""))
+        payment = Payment.objects.filter(
+            order=order,
+            stripe_payment_intent_id=intent_id,
+            status=Payment.Status.PENDING,
+        ).first()
 
-        Payment.objects.create(**payment_kwargs)
+        latest_charge = intent.get("latest_charge")
+
+        if payment is not None:
+            payment.status = Payment.Status.SUCCEEDED
+            payment.amount = amount
+            update = ["status", "amount"]
+            if latest_charge:
+                payment.stripe_charge_id = str(latest_charge)
+                update.append("stripe_charge_id")
+            payment.save(update_fields=update)
+        else:
+            payment_kwargs: dict[str, object] = {
+                "order": order,
+                "method": Payment.Method.STRIPE,
+                "status": Payment.Status.SUCCEEDED,
+                "stripe_payment_intent_id": intent_id,
+                "amount": amount,
+            }
+            if latest_charge:
+                payment_kwargs["stripe_charge_id"] = str(latest_charge)
+            Payment.objects.create(**payment_kwargs)
 
         order.status = Order.Status.PAID
         update_fields = ["status", "updated_at"]

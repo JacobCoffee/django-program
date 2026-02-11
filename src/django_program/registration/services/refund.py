@@ -79,6 +79,7 @@ class RefundService:
             raise ValidationError("No succeeded Stripe payment found on this order.")
 
         total_paid = order.payments.filter(
+            method=Payment.Method.STRIPE,
             status=Payment.Status.SUCCEEDED,
         ).aggregate(total=models.Sum("amount"))["total"] or Decimal("0.00")
         total_refunded = order.issued_credits.aggregate(total=models.Sum("amount"))["total"] or Decimal("0.00")
@@ -187,11 +188,8 @@ class RefundService:
         new_paid = existing_paid + apply_amount
         if new_paid >= target_order.total:
             target_order.status = Order.Status.PAID
-            if hasattr(Order, "hold_expires_at"):
-                target_order.hold_expires_at = None
-                target_order.save(update_fields=["status", "hold_expires_at", "updated_at"])
-            else:
-                target_order.save(update_fields=["status", "updated_at"])
+            target_order.hold_expires_at = None
+            target_order.save(update_fields=["status", "hold_expires_at", "updated_at"])
             order_paid.send(sender=Order, order=target_order, user=target_order.user)
 
         logger.info(
