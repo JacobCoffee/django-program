@@ -1,8 +1,11 @@
 """Template tags for Stripe integration."""
 
+from typing import TYPE_CHECKING
+
 from django import template
 
-from django_program.conference.models import Conference
+if TYPE_CHECKING:
+    from django_program.conference.models import Conference
 
 register = template.Library()
 

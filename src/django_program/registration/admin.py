@@ -1,7 +1,11 @@
 """Django admin configuration for the registration app."""
 
+from typing import TYPE_CHECKING
+
 from django.contrib import admin
-from django.http import HttpRequest
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
 
 from django_program.registration.models import (
     AddOn,
