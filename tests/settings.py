@@ -12,7 +12,6 @@ INSTALLED_APPS = [
     "django_program.pretalx",
     "django_program.sponsors",
     "django_program.programs",
-    "django_program.manage",
 ]
 MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",

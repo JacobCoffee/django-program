@@ -13,6 +13,7 @@ UV            ?= uv $(UV_OPTS)
 .PHONY: ci
 .PHONY: act act-ci act-docs act-list
 .PHONY: test-cov test-fast build destroy
+.PHONY: test-pretalx-client
 
 help: ## Display this help text for Makefile
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
@@ -102,6 +103,9 @@ test-cov: ## Run tests with coverage report
 
 test-fast: ## Run tests without coverage (faster)
 	@PYTHONDONTWRITEBYTECODE=1 $(UV) run --no-sync pytest -x -q
+
+test-pretalx-client: ## Run pretalx-client package tests
+	@PYTHONDONTWRITEBYTECODE=1 $(UV) run --no-sync pytest packages/pretalx-client/tests/ -v
 
 # =============================================================================
 # Documentation
