@@ -1,0 +1,53 @@
+refcode/
+plan.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# Django
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+coverage.json
+htmlcov/
+.hypothesis/
+
+# Linting / Formatting
+.ruff_cache/
+
+# Documentation
+docs/_build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git worktrees
+.worktrees/
+
+# uv (library — do not commit lockfile)
+uv.lock

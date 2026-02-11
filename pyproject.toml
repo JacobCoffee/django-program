@@ -1,0 +1,268 @@
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.9.11,<0.10.0"]
+
+[dependency-groups]
+docs = [
+  "linkify-it-py>=2.0.0",
+  "myst-parser>=2.0.0",
+  "shibuya>=2024.8.0",
+  "sphinx>=7.0.0",
+  "sphinx-autobuild>=2024.0.0",
+  "sphinx-autodoc-typehints>=2.0.0",
+  "sphinx-copybutton>=0.5.0",
+  "sphinx-design>=0.5.0",
+]
+lint = ["codespell>=2.2.6", "prek>=0.2.18", "ruff>=0.8.0", "ty>=0.0.1a27"]
+test = [
+  "model-bakery>=1.20.0",
+  "pytest>=8.1.1",
+  "pytest-cov>=4.1.0",
+  "pytest-django>=4.9.0",
+  "pytest-sugar>=1.1.1",
+]
+dev = [
+  { include-group = "docs" },
+  { include-group = "lint" },
+  { include-group = "test" },
+]
+
+[project]
+authors = [{ name = "Jacob Coffee", email = "jacob@python.org" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Framework :: Django",
+  "Framework :: Django :: 5.2",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = ["django>=5.2", "stripe>=12.0.0"]
+description = "Modern conference management plugin for Django"
+keywords = [
+  "django",
+  "conference",
+  "registration",
+  "program",
+  "schedule",
+  "tickets",
+]
+license = { text = "MIT" }
+name = "django-program"
+readme = "README.md"
+requires-python = ">=3.14"
+version = "0.1.0"
+
+[project.urls]
+Changelog = "https://github.com/JacobCoffee/django-program/releases/"
+Documentation = "https://jacobcoffee.github.io/django-program"
+"Issue Tracker" = "https://github.com/JacobCoffee/django-program/issues"
+Repository = "https://github.com/JacobCoffee/django-program"
+
+[tool.codespell]
+skip = "uv.lock"
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "\\.\\.\\.",
+  "@abstractmethod",
+  "class .*(Protocol):",
+]
+fail_under = 0
+
+[tool.coverage.run]
+concurrency = ["multiprocessing", "thread"]
+omit = ["*/tests/*"]
+parallel = true
+source = ["django_program"]
+
+[tool.git-cliff.changelog]
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+"""
+body = """
+{% if version %}\
+    {% if previous.version %}\
+## [{{ version | trim_start_matches(pat="v") }}]($REPO/compare/{{ previous.version }}..{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+    {% else %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+    {% endif %}\
+{% else %}\
+## [unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+
+### {{ group | striptags | trim | upper_first }}
+
+{% for commit in commits
+| filter(attribute="scope")
+| sort(attribute="scope") %}
+- **({{commit.scope}})**{% if commit.breaking %} [**breaking**]{% endif %} {{ commit.message }} - ([{{ commit.id | truncate(length=7, end="") }}]($REPO/commit/{{ commit.id }})) - {{ commit.author.name }}
+{%- endfor -%}
+{%- for commit in commits %}
+{%- if commit.scope -%}
+{% else %}
+- {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message }} - ([{{ commit.id | truncate(length=7, end="") }}]($REPO/commit/{{ commit.id }})) - {{ commit.author.name }}
+{% endif -%}
+{% endfor -%}
+{% endfor %}
+"""
+footer = """
+---
+*django-program Changelog*
+"""
+output = "docs/changelog.md"
+postprocessors = [
+  { pattern = '\$REPO', replace = "https://github.com/JacobCoffee/django-program" },
+]
+trim = true
+
+[tool.git-cliff.git]
+commit_parsers = [
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Bug Fixes" },
+  { message = "^doc", group = "Documentation" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Refactoring" },
+  { message = "^style", group = "Style" },
+  { message = "^revert", group = "Revert" },
+  { message = "^test", group = "Tests" },
+  { message = "^chore\\(version\\):", skip = true },
+  { message = "^chore", group = "Miscellaneous Chores" },
+  { body = ".*security", group = "Security" },
+]
+conventional_commits = true
+filter_unconventional = true
+sort_commits = "oldest"
+tag_pattern = "v[0-9].*"
+
+[tool.pytest.ini_options]
+addopts = ["-v", "--strict-markers", "--tb=short"]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+markers = [
+  "unit: mark test as unit test",
+  "integration: mark test as integration test",
+  "e2e: mark test as end-to-end test",
+]
+python_classes = ["Test*"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+exclude = ["refcode/"]
+fix = true
+line-length = 120
+src = ["src/django_program", "tests"]
+target-version = "py314"
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 88
+indent-style = "space"
+quote-style = "double"
+
+[tool.ruff.lint]
+fixable = ["ALL"]
+ignore = [
+  "COM812", # Missing trailing comma (conflicts with formatter)
+  "ISC001", # Single-line string concatenation (conflicts with formatter)
+  "ERA001", # Commented-out code
+  "TD",     # TODOs
+  "FIX002", # Line contains TODO
+  "EM101",  # Exception string literal
+  "EM102",  # Exception f-string literal
+  "TRY003", # Long exception message
+  "RUF012", # Mutable class attributes (Django uses these extensively)
+  "D105",   # Missing docstring in magic method (__str__ etc.)
+  "D106",   # Missing docstring in public nested class (Django Meta)
+  "DJ001",  # Avoid using null=True on string fields (not always applicable)
+]
+select = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["django_program", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/**/*.*" = [
+  "ANN",    # Type annotations
+  "D",      # Docstrings
+  "E501",   # Line too long (auto-generated)
+  "INP001", # Implicit namespace package
+]
+"**/management/**/*.*" = [
+  "ANN401",  # Any in management command signatures (Django convention)
+  "ARG002",  # Unused *args in handle() (Django convention)
+  "PLR2004", # Magic values in verbosity checks
+]
+"docs/conf.py" = [
+  "A001",   # Variable shadowing builtin
+  "INP001", # Implicit namespace package
+  "PTH",    # Use pathlib
+  "DTZ",    # Datetime timezone
+]
+"tests/**/*.*" = [
+  "A",
+  "ANN",
+  "ARG",
+  "B",
+  "BLE",
+  "C901",
+  "D",
+  "DTZ",
+  "EM",
+  "ERA001",
+  "F841",
+  "FBT",
+  "G",
+  "N",
+  "PGH",
+  "PIE",
+  "PLR",
+  "PLW",
+  "PTH",
+  "RET504",
+  "RSE",
+  "S",
+  "S101",
+  "SIM",
+  "SLF001",
+  "TCH",
+  "TRY",
+  "UP006",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ty]
+
+[tool.ty.environment]
+python = ".venv"
+
+[tool.ty.rules]
+deprecated = "warn"
+# Django's ORM dynamically adds .objects, so ty can't resolve it
+unresolved-attribute = "warn"
+# Django field types (CharField etc.) don't resolve to Python builtins
+invalid-return-type = "warn"
+
+[tool.ty.src]
+exclude = ["docs/conf.py", "tests/", "refcode/"]
+
+[tool.uv]
+default-groups = ["dev"]
