@@ -22,11 +22,11 @@ from pretalx_client.client import PretalxClient
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from django.contrib.auth.models import AbstractBaseUser
+
     from django_program.conference.models import Conference
 
 logger = logging.getLogger(__name__)
-
-User = get_user_model()
 
 _PROGRESS_CHUNK = 50
 
@@ -169,9 +169,10 @@ class PretalxSyncService:
         existing = {s.pretalx_code: s for s in Speaker.objects.filter(conference=self.conference)}
 
         emails = {s.email.lower() for s in api_speakers if s.email}
+        user_model: type[AbstractBaseUser] = get_user_model()  # type: ignore[assignment]
         users_by_email: dict[str, object] = {}
         if emails:
-            for u in User.objects.annotate(
+            for u in user_model.objects.annotate(
                 email_lower=Lower("email"),
             ).filter(email_lower__in=emails):
                 users_by_email[u.email_lower] = u
