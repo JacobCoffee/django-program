@@ -42,7 +42,7 @@ install: ## Install package
 	@$(UV) sync
 	@echo "=> Installation complete"
 
-dev: ## placeholder,willr un example app later to test lib
+dev: ## Placeholder; will run example app later to test the library
 	@echo "=> not ready yet"
 
 upgrade: ## Upgrade all dependencies to the latest stable versions
