@@ -109,7 +109,8 @@ class CheckoutService:
         voucher_code = voucher.code if voucher else ""
         voucher_details = _snapshot_voucher(voucher) if voucher else ""
         hold_expires_at = now + timedelta(minutes=get_config().pending_order_expiry_minutes)
-        while True:
+        max_retries = 10
+        for attempt in range(max_retries):
             reference = _generate_reference()
             try:
                 order_kwargs = {
@@ -131,6 +132,8 @@ class CheckoutService:
                 order = Order.objects.create(**order_kwargs)
                 break
             except IntegrityError:
+                if attempt >= max_retries - 1:
+                    raise
                 continue
 
         items_by_id = {item.pk: item for item in items}
@@ -275,20 +278,33 @@ def _reverse_credit_payments(order: Order) -> None:
     """Reverse any succeeded credit payments on a pending order.
 
     Marks each CREDIT payment as REFUNDED and restores the associated
-    Credit back to AVAILABLE so it can be reused on a future order.
+    Credits back to AVAILABLE so they can be reused on future orders.
+    Credits are matched deterministically by PK order and capped at
+    their original amount to prevent over-restoration.
     """
     credit_payments = order.payments.filter(
         method=Payment.Method.CREDIT,
         status=Payment.Status.SUCCEEDED,
-    )
+    ).order_by("pk")
+
+    applied_credits = list(Credit.objects.select_for_update().filter(applied_to_order=order).order_by("pk"))
+    credits_iter = iter(applied_credits)
+
     for payment in credit_payments:
         payment.status = Payment.Status.REFUNDED
         payment.save(update_fields=["status"])
 
-        credit = Credit.objects.select_for_update().filter(applied_to_order=order).first()
-        if credit is None:
+        try:
+            credit = next(credits_iter)
+        except StopIteration:
             continue
-        credit.remaining_amount += payment.amount
+
+        max_restorable = credit.amount - credit.remaining_amount
+        restore_amount = min(payment.amount, max_restorable)
+        if restore_amount <= Decimal("0.00"):
+            continue
+
+        credit.remaining_amount += restore_amount
         credit.status = Credit.Status.AVAILABLE
         credit.applied_to_order = None
         credit.save(update_fields=["remaining_amount", "status", "applied_to_order", "updated_at"])
@@ -374,15 +390,23 @@ def _revalidate_addon_stock(item: object, now: object) -> None:
 
 
 def _expire_stale_pending_orders(*, conference_id: int, now: object) -> None:
-    """Mark stale pending orders as cancelled so holds no longer reserve stock."""
+    """Mark stale pending orders as cancelled and release voucher usage."""
     if not _order_has_hold_expires_at():
         return
-    Order.objects.filter(
+    stale_qs = Order.objects.filter(
         conference_id=conference_id,
         status=Order.Status.PENDING,
         hold_expires_at__isnull=False,
         hold_expires_at__lte=now,
-    ).update(status=Order.Status.CANCELLED, hold_expires_at=None)
+    )
+    voucher_codes = list(stale_qs.exclude(voucher_code="").values_list("voucher_code", flat=True))
+    stale_qs.update(status=Order.Status.CANCELLED, hold_expires_at=None)
+    for code in voucher_codes:
+        Voucher.objects.filter(
+            conference_id=conference_id,
+            code=code,
+            times_used__gt=0,
+        ).update(times_used=models.F("times_used") - 1)
 
 
 def _order_has_hold_expires_at() -> bool:

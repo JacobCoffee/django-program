@@ -250,7 +250,7 @@ class TestCheckout:
 
     def test_snapshots_voucher_on_order(self, cart, ticket_type, conference):
         CartService.add_ticket(cart, ticket_type, qty=1)
-        voucher = Voucher.objects.create(
+        Voucher.objects.create(
             conference=conference,
             code="SAVE20",
             voucher_type=Voucher.VoucherType.PERCENTAGE,
@@ -353,6 +353,12 @@ class TestCheckout:
 
         assert order.status == Order.Status.PENDING
         assert call_count == 2
+
+    def test_raises_after_max_reference_retries(self, cart_with_ticket):
+        """IntegrityError is re-raised after exhausting retry attempts."""
+        with patch.object(Order.objects, "create", side_effect=IntegrityError("duplicate key")):
+            with pytest.raises(IntegrityError):
+                CheckoutService.checkout(cart_with_ticket)
 
     def test_voucher_race_condition_at_update(self, conference, user):
         """Voucher passes is_valid in-memory but DB update returns 0."""
@@ -943,6 +949,36 @@ class TestCancelOrder:
         payment = order.payments.first()
         assert payment.status == Payment.Status.REFUNDED
 
+    def test_reverse_skips_already_restored_credit(self, conference, user):
+        """Credit already at full amount is not over-restored."""
+        order = _make_order(conference=conference, user=user, status=Order.Status.PENDING)
+        order.total = Decimal("100.00")
+        order.save(update_fields=["total"])
+
+        credit = Credit.objects.create(
+            user=user,
+            conference=conference,
+            amount=Decimal("50.00"),
+            status=Credit.Status.APPLIED,
+            applied_to_order=order,
+        )
+        # Force remaining_amount to equal amount (already fully restored)
+        Credit.objects.filter(pk=credit.pk).update(remaining_amount=Decimal("50.00"))
+
+        Payment.objects.create(
+            order=order,
+            method=Payment.Method.CREDIT,
+            status=Payment.Status.SUCCEEDED,
+            amount=Decimal("50.00"),
+        )
+
+        result = CheckoutService.cancel_order(order)
+        assert result.status == Order.Status.CANCELLED
+
+        credit.refresh_from_db()
+        # remaining_amount should NOT exceed amount
+        assert credit.remaining_amount == Decimal("50.00")
+
 
 # =============================================================================
 # TestExpireStaleOrders
@@ -959,3 +995,32 @@ class TestExpireStaleOrders:
             return_value=False,
         ):
             _expire_stale_pending_orders(conference_id=conference.pk, now=timezone.now())
+
+    def test_expire_decrements_voucher_usage(self, conference, user):
+        """Expiring stale orders releases their voucher usage."""
+        voucher = Voucher.objects.create(
+            conference=conference,
+            code="STALE",
+            voucher_type=Voucher.VoucherType.COMP,
+            max_uses=10,
+            times_used=3,
+            is_active=True,
+        )
+        order = Order.objects.create(
+            conference=conference,
+            user=user,
+            status=Order.Status.PENDING,
+            subtotal=Decimal("0.00"),
+            total=Decimal("0.00"),
+            reference=f"ORD-{uuid4().hex[:8].upper()}",
+            voucher_code="STALE",
+            hold_expires_at=timezone.now() - timedelta(minutes=1),
+        )
+
+        _expire_stale_pending_orders(conference_id=conference.pk, now=timezone.now())
+
+        order.refresh_from_db()
+        assert order.status == Order.Status.CANCELLED
+
+        voucher.refresh_from_db()
+        assert voucher.times_used == 2
