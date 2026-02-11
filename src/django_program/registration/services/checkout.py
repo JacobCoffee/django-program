@@ -68,10 +68,10 @@ class CheckoutService:
     ) -> Order:
         """Convert a cart into an order atomically.
 
-        Re-validates stock and prices at checkout time to prevent stale-cart
-        issues. Creates an Order with PENDING status, snapshots each CartItem
-        into OrderLineItems, records voucher details, and marks the cart as
-        CHECKED_OUT.
+        Re-validates stock, pricing, and voucher validity at checkout time to
+        prevent stale-cart issues. Creates an Order with PENDING status,
+        snapshots each CartItem into OrderLineItems, records voucher details,
+        and marks the cart as CHECKED_OUT.
 
         Args:
             cart: The open cart to check out.
@@ -105,6 +105,7 @@ class CheckoutService:
         summary = CartService.get_summary(cart)
 
         voucher = cart.voucher
+        _validate_voucher_for_checkout(voucher)
         voucher_code = voucher.code if voucher else ""
         voucher_details = _snapshot_voucher(voucher) if voucher else ""
         hold_expires_at = now + timedelta(minutes=get_config().pending_order_expiry_minutes)
@@ -148,10 +149,7 @@ class CheckoutService:
         cart.status = Cart.Status.CHECKED_OUT
         cart.save(update_fields=["status", "updated_at"])
 
-        if voucher:
-            Voucher.objects.filter(pk=voucher.pk).update(
-                times_used=models.F("times_used") + 1,
-            )
+        _increment_voucher_usage(voucher=voucher, now=now)
 
         return order
 
@@ -291,6 +289,35 @@ def _reverse_credit_payments(order: Order) -> None:
         credit.status = Credit.Status.AVAILABLE
         credit.applied_to_order = None
         credit.save(update_fields=["remaining_amount", "status", "applied_to_order", "updated_at"])
+
+
+def _validate_voucher_for_checkout(voucher: Voucher | None) -> None:
+    """Fail checkout if the attached voucher is no longer valid."""
+    if voucher is not None and not voucher.is_valid:
+        raise ValidationError(f"Voucher code '{voucher.code}' is no longer valid.")
+
+
+def _increment_voucher_usage(*, voucher: Voucher | None, now: object) -> None:
+    """Atomically increment voucher usage, enforcing validity constraints."""
+    if voucher is None:
+        return
+
+    voucher_updated = (
+        Voucher.objects.filter(
+            pk=voucher.pk,
+            is_active=True,
+            times_used__lt=models.F("max_uses"),
+        )
+        .filter(
+            models.Q(valid_from__isnull=True) | models.Q(valid_from__lte=now),
+        )
+        .filter(
+            models.Q(valid_until__isnull=True) | models.Q(valid_until__gte=now),
+        )
+        .update(times_used=models.F("times_used") + 1)
+    )
+    if voucher_updated != 1:
+        raise ValidationError(f"Voucher code '{voucher.code}' is no longer valid.")
 
 
 def _revalidate_stock(items: list[object]) -> None:

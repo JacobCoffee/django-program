@@ -3,6 +3,7 @@
 import json
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -21,7 +22,7 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
-from django_program.registration.services.cart import CartService
+from django_program.registration.services.cart import CartService, CartSummary, LineItemSummary
 from django_program.registration.services.checkout import CheckoutService
 from django_program.registration.signals import order_paid
 
@@ -296,6 +297,83 @@ class TestCheckout:
         assert order.subtotal == Decimal("100.00")
         assert order.discount_amount == Decimal("50.00")
         assert order.total == Decimal("50.00")
+
+    def test_rejects_checkout_when_voucher_becomes_inactive(self, cart, ticket_type, conference):
+        CartService.add_ticket(cart, ticket_type, qty=1)
+        voucher = Voucher.objects.create(
+            conference=conference,
+            code="SAVE10",
+            voucher_type=Voucher.VoucherType.PERCENTAGE,
+            discount_value=Decimal("10.00"),
+            max_uses=10,
+            is_active=True,
+        )
+        CartService.apply_voucher(cart, "SAVE10")
+        voucher.is_active = False
+        voucher.save(update_fields=["is_active", "updated_at"])
+
+        with pytest.raises(ValidationError, match="no longer valid"):
+            CheckoutService.checkout(cart)
+
+    def test_rejects_checkout_when_voucher_usage_limit_reached(self, cart, ticket_type, conference):
+        CartService.add_ticket(cart, ticket_type, qty=1)
+        voucher = Voucher.objects.create(
+            conference=conference,
+            code="LIMIT1",
+            voucher_type=Voucher.VoucherType.COMP,
+            discount_value=Decimal("0.00"),
+            max_uses=1,
+            is_active=True,
+        )
+        CartService.apply_voucher(cart, "LIMIT1")
+        Voucher.objects.filter(pk=voucher.pk).update(times_used=1)
+
+        with pytest.raises(ValidationError, match="no longer valid"):
+            CheckoutService.checkout(cart)
+
+    def test_rejects_cart_item_id_mismatch(self, cart_with_ticket):
+        """Defensive check: summary item_id not in fetched items raises ValidationError."""
+        fake_summary = CartSummary(
+            items=[
+                LineItemSummary(
+                    item_id=999999,
+                    description="Ghost",
+                    quantity=1,
+                    unit_price=Decimal("10.00"),
+                    discount=Decimal("0.00"),
+                    line_total=Decimal("10.00"),
+                ),
+            ],
+            subtotal=Decimal("10.00"),
+            discount=Decimal("0.00"),
+            total=Decimal("10.00"),
+        )
+        with patch.object(CartService, "get_summary_from_items", return_value=fake_summary):
+            with pytest.raises(ValidationError, match="Cart changed during checkout"):
+                CheckoutService.checkout(cart_with_ticket)
+
+    def test_voucher_race_condition_at_update(self, cart, ticket_type, conference):
+        """Voucher passes is_valid but DB update returns 0 due to concurrent change."""
+        CartService.add_ticket(cart, ticket_type, qty=1)
+        voucher = Voucher.objects.create(
+            conference=conference,
+            code="RACE",
+            voucher_type=Voucher.VoucherType.PERCENTAGE,
+            discount_value=Decimal("10.00"),
+            max_uses=10,
+            is_active=True,
+        )
+        CartService.apply_voucher(cart, "RACE")
+
+        original_save = Cart.save
+
+        def save_and_deactivate(self, *args, **kwargs):
+            original_save(self, *args, **kwargs)
+            Voucher.objects.filter(pk=voucher.pk).update(is_active=False)
+
+        with patch.object(Cart, "save", save_and_deactivate):
+            with pytest.raises(ValidationError, match="no longer valid"):
+                CheckoutService.checkout(cart)
 
     def test_rejects_non_open_cart(self, cart_with_ticket):
         cart_with_ticket.status = Cart.Status.CHECKED_OUT
