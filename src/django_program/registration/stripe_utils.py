@@ -12,7 +12,7 @@ as a helper to safely obfuscate API keys for log output.
 from decimal import Decimal
 
 _OBFUSCATE_VISIBLE_CHARS = 4
-_ONE_WHOLE = Decimal("1")
+_ONE_WHOLE = Decimal(1)
 _ONE_CENT = Decimal("0.01")
 
 ZERO_DECIMAL_CURRENCIES: frozenset[str] = frozenset(
