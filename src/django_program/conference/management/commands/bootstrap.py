@@ -33,6 +33,7 @@ _SECTION_FIELD_MAP: dict[str, str] = {
     "slug": "slug",
     "start": "start_date",
     "end": "end_date",
+    "order": "order",
 }
 
 
