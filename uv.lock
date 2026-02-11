@@ -3,6 +3,10 @@ revision = 3
 requires-python = ">=3.14"
 
 [manifest]
+members = [
+    "django-program",
+    "pretalx-client",
+]
 constraints = [{ name = "django", specifier = ">=5.2,<5.3" }]
 
 [[package]]
@@ -267,7 +271,7 @@ source = { editable = "." }
 dependencies = [
     { name = "django" },
     { name = "django-fernet-encrypted-fields" },
-    { name = "httpx" },
+    { name = "pretalx-client" },
     { name = "stripe" },
 ]
 
@@ -319,7 +323,7 @@ test = [
 requires-dist = [
     { name = "django", specifier = ">=5.2" },
     { name = "django-fernet-encrypted-fields", specifier = ">=0.3.1" },
-    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pretalx-client", editable = "packages/pretalx-client" },
     { name = "stripe", specifier = ">=12.0.0" },
 ]
 
@@ -597,6 +601,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/97/11/6665f47a7c350d83de17403c90bbf7a762ef50876ece456a86f64f46fbfb/prek-0.3.2-py3-none-win_amd64.whl", hash = "sha256:70114b48e9eb8048b2c11b4c7715ce618529c6af71acc84dd8877871a2ef71a6", size = 4624324, upload-time = "2026-02-06T13:49:45.922Z" },
     { url = "https://files.pythonhosted.org/packages/22/e7/740997ca82574d03426f897fd88afe3fc8a7306b8c7ea342a8bc1c538488/prek-0.3.2-py3-none-win_arm64.whl", hash = "sha256:9144d176d0daa2469a25c303ef6f6fa95a8df015eb275232f5cb53551ecefef0", size = 4336008, upload-time = "2026-02-06T13:49:52.27Z" },
 ]
+
+[[package]]
+name = "pretalx-client"
+version = "0.1.0"
+source = { editable = "packages/pretalx-client" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "httpx", specifier = ">=0.28.1" }]
 
 [[package]]
 name = "pycparser"
