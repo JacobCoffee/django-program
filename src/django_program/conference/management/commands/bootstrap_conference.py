@@ -61,9 +61,9 @@ class Command(BaseCommand):
 
     Usage::
 
-        manage.py bootstrap --config conference.toml
-        manage.py bootstrap --config conference.toml --update
-        manage.py bootstrap --config conference.toml --dry-run
+        manage.py bootstrap_conference --config conference.toml
+        manage.py bootstrap_conference --config conference.toml --update
+        manage.py bootstrap_conference --config conference.toml --dry-run
     """
 
     help = "Create or update a conference and its sections from a TOML config file."

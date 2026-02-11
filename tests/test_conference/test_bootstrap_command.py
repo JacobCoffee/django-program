@@ -24,7 +24,7 @@ sections = ["invalid"]
 """)
 
     with pytest.raises(CommandError, match=r"conference\.sections\[0\] must be a mapping"):
-        call_command("bootstrap", config=str(config_file))
+        call_command("bootstrap_conference", config=str(config_file))
 
 
 @pytest.mark.django_db
@@ -55,7 +55,7 @@ end = 2027-05-03
 """,
     )
 
-    call_command("bootstrap", config=config_path)
+    call_command("bootstrap_conference", config=config_path)
 
     conference = Conference.objects.get(slug="pycon-test")
     assert isinstance(conference.start_date, datetime.date)
@@ -89,7 +89,7 @@ start = 2027-05-02
 end = 2027-05-02
 """,
     )
-    call_command("bootstrap", config=initial_config)
+    call_command("bootstrap_conference", config=initial_config)
 
     updated_config = _write_config(
         tmp_path / "updated.toml",
@@ -119,7 +119,7 @@ start = 2027-05-08
 end = 2027-05-08
 """,
     )
-    call_command("bootstrap", config=updated_config, update=True)
+    call_command("bootstrap_conference", config=updated_config, update=True)
 
     conference = Conference.objects.get(slug="pycon-test")
     assert conference.name == "PyCon Test Updated"
