@@ -134,7 +134,7 @@
 
 {% if signups %}
 <div class="talk-section">
-  <h3 class="section-heading">Signed Up ({{ signups.count }})</h3>
+  <h3 class="section-heading">Signed Up ({{ signups|length }})</h3>
   <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
     {% for signup in signups %}
     <span style="display: inline-block; padding: 0.3rem 0.7rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.85rem;">{{ signup.user }}</span>
