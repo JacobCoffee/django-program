@@ -1,0 +1,29 @@
+{% block title %}{{ sponsor.name }}{% endblock %}
+
+{% block content %}
+<a href="{% url 'sponsors:sponsor-list' conference.slug %}">Back to sponsors</a>
+
+<article>
+  <h2>{{ sponsor.name }}</h2>
+  <p>{{ sponsor.level.name }} Sponsor</p>
+
+  {% if sponsor.logo %}<img src="{{ sponsor.logo.url }}" alt="{{ sponsor.name }}">{% endif %}
+
+  {% if sponsor.description %}
+  <div>{{ sponsor.description|linebreaks }}</div>
+  {% endif %}
+
+  {% if sponsor.website_url %}
+  <p><a href="{{ sponsor.website_url }}" target="_blank" rel="noopener">{{ sponsor.website_url }}</a></p>
+  {% endif %}
+
+  {% if benefits %}
+  <h3>Benefits</h3>
+  <ul>
+    {% for benefit in benefits %}
+    <li>{{ benefit.name }}{% if benefit.is_complete %} (completed){% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</article>
+{% endblock %}

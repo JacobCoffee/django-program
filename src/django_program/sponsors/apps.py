@@ -10,3 +10,7 @@ class DjangoProgramSponsorsConfig(AppConfig):
     name = "django_program.sponsors"
     label = "program_sponsors"
     verbose_name = "Sponsors"
+
+    def ready(self) -> None:
+        """Import signal handlers on app startup."""
+        import django_program.sponsors.signals  # noqa: F401, PLC0415

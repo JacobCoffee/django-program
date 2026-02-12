@@ -34,11 +34,14 @@ from django_program.manage.forms import (
     RoomForm,
     ScheduleSlotForm,
     SectionForm,
+    SponsorForm,
+    SponsorLevelForm,
     TalkForm,
 )
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.pretalx.sync import PretalxSyncService
 from django_program.settings import get_config
+from django_program.sponsors.models import Sponsor, SponsorLevel
 from pretalx_client.adapters.normalization import localized as _localized
 from pretalx_client.client import PretalxClient
 
@@ -602,6 +605,8 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             "schedule_slots": ScheduleSlot.objects.filter(conference=conference).count(),
             "sections": Section.objects.filter(conference=conference).count(),
             "unscheduled_talks": Talk.objects.filter(conference=conference, slot_start__isnull=True).count(),
+            "sponsors": Sponsor.objects.filter(conference=conference).count(),
+            "sponsor_levels": SponsorLevel.objects.filter(conference=conference).count(),
         }
 
         return context
@@ -1169,6 +1174,159 @@ class ScheduleSlotEditView(ManagePermissionMixin, UpdateView):
         """
         messages.success(self.request, "Schedule slot updated successfully.")
         return super().form_valid(form)
+
+
+class SponsorLevelListView(ManagePermissionMixin, ListView):
+    """List sponsor levels for the current conference."""
+
+    template_name = "django_program/manage/sponsor_level_list.html"
+    context_object_name = "levels"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "sponsor-levels"
+        return context
+
+    def get_queryset(self) -> QuerySet[SponsorLevel]:
+        """Return sponsor levels for the current conference."""
+        return SponsorLevel.objects.filter(conference=self.conference).order_by("order", "name")
+
+
+class SponsorLevelEditView(ManagePermissionMixin, UpdateView):
+    """Edit a sponsor level."""
+
+    template_name = "django_program/manage/sponsor_level_edit.html"
+    form_class = SponsorLevelForm
+    context_object_name = "level"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "sponsor-levels"
+        return context
+
+    def get_queryset(self) -> QuerySet[SponsorLevel]:
+        """Scope to the current conference."""
+        return SponsorLevel.objects.filter(conference=self.conference)
+
+    def get_success_url(self) -> str:
+        """Redirect to the sponsor level list."""
+        return reverse("manage:sponsor-level-list", kwargs={"conference_slug": self.conference.slug})
+
+    def form_valid(self, form: SponsorLevelForm) -> HttpResponse:
+        """Save and flash success."""
+        messages.success(self.request, "Sponsor level updated successfully.")
+        return super().form_valid(form)
+
+
+class SponsorLevelCreateView(ManagePermissionMixin, CreateView):
+    """Create a new sponsor level."""
+
+    template_name = "django_program/manage/sponsor_level_edit.html"
+    form_class = SponsorLevelForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and ``is_create`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "sponsor-levels"
+        context["is_create"] = True
+        return context
+
+    def form_valid(self, form: SponsorLevelForm) -> HttpResponse:
+        """Assign the conference before saving."""
+        form.instance.conference = self.conference
+        messages.success(self.request, "Sponsor level created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the sponsor level list."""
+        return reverse("manage:sponsor-level-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class SponsorManageListView(ManagePermissionMixin, ListView):
+    """List sponsors for the current conference."""
+
+    template_name = "django_program/manage/sponsor_list.html"
+    context_object_name = "sponsors"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "sponsors"
+        return context
+
+    def get_queryset(self) -> QuerySet[Sponsor]:
+        """Return sponsors for the current conference."""
+        return (
+            Sponsor.objects.filter(conference=self.conference).select_related("level").order_by("level__order", "name")
+        )
+
+
+class SponsorEditView(ManagePermissionMixin, UpdateView):
+    """Edit a sponsor."""
+
+    template_name = "django_program/manage/sponsor_edit.html"
+    form_class = SponsorForm
+    context_object_name = "sponsor"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and benefits to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "sponsors"
+        context["benefits"] = self.object.benefits.all()
+        return context
+
+    def get_queryset(self) -> QuerySet[Sponsor]:
+        """Scope to the current conference."""
+        return Sponsor.objects.filter(conference=self.conference).select_related("level")
+
+    def get_form(self, form_class: type[SponsorForm] | None = None) -> SponsorForm:
+        """Scope the level queryset to the current conference."""
+        form = super().get_form(form_class)
+        form.fields["level"].queryset = SponsorLevel.objects.filter(conference=self.conference)
+        return form
+
+    def get_success_url(self) -> str:
+        """Redirect to the sponsor list."""
+        return reverse("manage:sponsor-manage-list", kwargs={"conference_slug": self.conference.slug})
+
+    def form_valid(self, form: SponsorForm) -> HttpResponse:
+        """Save and flash success."""
+        messages.success(self.request, "Sponsor updated successfully.")
+        return super().form_valid(form)
+
+
+class SponsorCreateView(ManagePermissionMixin, CreateView):
+    """Create a new sponsor."""
+
+    template_name = "django_program/manage/sponsor_edit.html"
+    form_class = SponsorForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and ``is_create`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "sponsors"
+        context["is_create"] = True
+        return context
+
+    def get_form(self, form_class: type[SponsorForm] | None = None) -> SponsorForm:
+        """Scope the level queryset to the current conference."""
+        form = super().get_form(form_class)
+        form.fields["level"].queryset = SponsorLevel.objects.filter(conference=self.conference)
+        return form
+
+    def form_valid(self, form: SponsorForm) -> HttpResponse:
+        """Assign the conference before saving."""
+        form.instance.conference = self.conference
+        messages.success(self.request, "Sponsor created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the sponsor list."""
+        return reverse("manage:sponsor-manage-list", kwargs={"conference_slug": self.conference.slug})
 
 
 class SyncPretalxView(ManagePermissionMixin, View):

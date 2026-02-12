@@ -97,6 +97,12 @@
       <div class="stat-card-label">Sections</div>
     </a>
   </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:sponsor-manage-list' conference.slug %}">
+      <div class="stat-card-value">{{ stats.sponsors }}</div>
+      <div class="stat-card-label">Sponsors</div>
+    </a>
+  </div>
   {% if stats.unscheduled_talks %}
   <div class="stat-card" style="border-color: var(--color-warning-border, #fde68a); background: var(--color-warning-bg, #fffbeb);">
     <a href="{% url 'manage:talk-list' conference.slug %}?scheduled=no">

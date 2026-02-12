@@ -1041,6 +1041,21 @@
           </li>
         </ul>
       </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Sponsors</div>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="{% url 'manage:sponsor-level-list' conference.slug %}" class="{% if active_nav == 'sponsor-levels' %}active{% endif %}">
+              <span class="sidebar-nav-icon">&#9733;</span> Levels
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'manage:sponsor-manage-list' conference.slug %}" class="{% if active_nav == 'sponsors' %}active{% endif %}">
+              <span class="sidebar-nav-icon">&#9830;</span> Sponsors
+            </a>
+          </li>
+        </ul>
+      </div>
     </nav>
     {% endif %}
 

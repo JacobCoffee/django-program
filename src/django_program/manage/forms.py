@@ -11,6 +11,7 @@ from django.core.validators import RegexValidator
 
 from django_program.conference.models import Conference, Section
 from django_program.pretalx.models import Room, ScheduleSlot, Talk
+from django_program.sponsors.models import Sponsor, SponsorLevel
 
 
 class ImportFromPretalxForm(forms.Form):
@@ -187,3 +188,29 @@ class ScheduleSlotForm(forms.ModelForm):
             for field_name in self.SYNCED_FIELDS:
                 if field_name in self.fields:
                     self.fields[field_name].disabled = True
+
+
+class SponsorLevelForm(forms.ModelForm):
+    """Form for editing a sponsor level."""
+
+    class Meta:
+        model = SponsorLevel
+        fields = ["name", "slug", "cost", "description", "benefits_summary", "comp_ticket_count", "order"]
+
+
+class SponsorForm(forms.ModelForm):
+    """Form for editing a sponsor."""
+
+    class Meta:
+        model = Sponsor
+        fields = [
+            "name",
+            "slug",
+            "level",
+            "website_url",
+            "logo",
+            "description",
+            "contact_name",
+            "contact_email",
+            "is_active",
+        ]

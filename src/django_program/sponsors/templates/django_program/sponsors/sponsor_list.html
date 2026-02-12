@@ -1,0 +1,23 @@
+{% block title %}Sponsors{% endblock %}
+
+{% block content %}
+<h2>Sponsors</h2>
+
+{% for level in levels %}
+<section>
+  <h3>{{ level.name }}</h3>
+  <div class="sponsor-grid">
+    {% for sponsor in sponsors %}
+      {% if sponsor.level_id == level.pk %}
+      <a href="{% url 'sponsors:sponsor-detail' conference.slug sponsor.slug %}">
+        {% if sponsor.logo %}<img src="{{ sponsor.logo.url }}" alt="{{ sponsor.name }}">{% endif %}
+        <span>{{ sponsor.name }}</span>
+      </a>
+      {% endif %}
+    {% endfor %}
+  </div>
+</section>
+{% empty %}
+<p>No sponsors yet.</p>
+{% endfor %}
+{% endblock %}

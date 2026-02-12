@@ -1,0 +1,50 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Sponsor Levels{% endblock %}
+
+{% block page_title %}
+<h1>Sponsor Levels</h1>
+<p>Sponsorship tiers and pricing</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:sponsor-level-add' conference.slug %}" class="btn btn-primary">Add Level</a>
+{% endblock %}
+
+{% block content %}
+{% if levels %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Slug</th>
+      <th>Cost</th>
+      <th>Comp Tickets</th>
+      <th>Order</th>
+      <th>Sponsors</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for level in levels %}
+    <tr>
+      <td>{{ level.name }}</td>
+      <td><span class="mono">{{ level.slug }}</span></td>
+      <td>${{ level.cost }}</td>
+      <td>{{ level.comp_ticket_count }}</td>
+      <td>{{ level.order }}</td>
+      <td>{{ level.sponsors.count }}</td>
+      <td>
+        <a href="{% url 'manage:sponsor-level-edit' conference.slug level.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No sponsor levels defined for this conference.</p>
+  <p><a href="{% url 'manage:sponsor-level-add' conference.slug %}" class="btn btn-primary">Add First Level</a></p>
+</div>
+{% endif %}
+{% endblock %}
