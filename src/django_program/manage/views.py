@@ -1380,8 +1380,16 @@ class ActivityManageListView(ManagePermissionMixin, ListView):
         return context
 
     def get_queryset(self) -> QuerySet[Activity]:
-        """Return activities for the current conference."""
-        return Activity.objects.filter(conference=self.conference).order_by("start_time", "name")
+        """Return activities for the current conference.
+
+        Annotates each activity with ``signup_count`` to avoid N+1
+        queries when rendering the signup column in the template.
+        """
+        return (
+            Activity.objects.filter(conference=self.conference)
+            .annotate(signup_count=Count("signups"))
+            .order_by("start_time", "name")
+        )
 
 
 class ActivityEditView(ManagePermissionMixin, UpdateView):

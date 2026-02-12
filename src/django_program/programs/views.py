@@ -4,18 +4,20 @@ Provides activity listing, detail, signup, and travel grant application
 views scoped to a conference via the ``conference_slug`` URL kwarg.
 """
 
-from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import IntegrityError, transaction
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView
 
 from django_program.pretalx.views import ConferenceMixin
-from django_program.programs.models import Activity, ActivitySignup, TravelGrant
+from django_program.programs.forms import TravelGrantApplicationForm
+from django_program.programs.models import Activity, ActivitySignup
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -32,9 +34,14 @@ class ActivityListView(ConferenceMixin, ListView):
         """Return active activities for the current conference.
 
         Returns:
-            A queryset of active Activity instances ordered by time and name.
+            A queryset of active Activity instances ordered by time and name,
+            annotated with ``signup_count`` to avoid N+1 queries.
         """
-        return Activity.objects.filter(conference=self.conference, is_active=True).order_by("start_time", "name")
+        return (
+            Activity.objects.filter(conference=self.conference, is_active=True)
+            .annotate(signup_count=Count("signups"))
+            .order_by("start_time", "name")
+        )
 
 
 class ActivityDetailView(ConferenceMixin, DetailView):
@@ -77,6 +84,9 @@ class ActivitySignupView(LoginRequiredMixin, ConferenceMixin, View):
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Handle the signup form submission.
 
+        Uses ``select_for_update`` inside a transaction to prevent race
+        conditions when checking capacity.
+
         Args:
             request: The incoming HTTP request.
             **kwargs: URL keyword arguments (unused).
@@ -84,26 +94,31 @@ class ActivitySignupView(LoginRequiredMixin, ConferenceMixin, View):
         Returns:
             A redirect to the activity detail page.
         """
-        activity = get_object_or_404(
-            Activity,
-            conference=self.conference,
-            slug=self.kwargs["slug"],
-            is_active=True,
-        )
-        if activity.spots_remaining is not None and activity.spots_remaining <= 0:
-            messages.error(request, "This activity is full.")
-            return redirect(reverse("programs:activity-detail", args=[self.conference.slug, activity.slug]))
-        ActivitySignup.objects.get_or_create(
-            activity=activity,
-            user=request.user,
-            defaults={"note": request.POST.get("note", "")},
-        )
+        with transaction.atomic():
+            activity = get_object_or_404(
+                Activity.objects.select_for_update(),
+                conference=self.conference,
+                slug=self.kwargs["slug"],
+                is_active=True,
+            )
+            if activity.spots_remaining is not None and activity.spots_remaining <= 0:
+                messages.error(request, "This activity is full.")
+                return redirect(reverse("programs:activity-detail", args=[self.conference.slug, activity.slug]))
+            ActivitySignup.objects.get_or_create(
+                activity=activity,
+                user=request.user,
+                defaults={"note": request.POST.get("note", "")},
+            )
         messages.success(request, f"You have signed up for {activity.name}.")
         return redirect(reverse("programs:activity-detail", args=[self.conference.slug, activity.slug]))
 
 
 class TravelGrantApplyView(LoginRequiredMixin, ConferenceMixin, View):
-    """View for applying for a travel grant."""
+    """View for applying for a travel grant.
+
+    Uses ``TravelGrantApplicationForm`` for server-side validation of
+    the requested amount, travel origin, and reason fields.
+    """
 
     template_name = "django_program/programs/travel_grant_form.html"
 
@@ -117,7 +132,8 @@ class TravelGrantApplyView(LoginRequiredMixin, ConferenceMixin, View):
         Returns:
             The rendered form page.
         """
-        return render(request, self.template_name, {"conference": self.conference})
+        form = TravelGrantApplicationForm()
+        return render(request, self.template_name, {"conference": self.conference, "form": form})
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Handle the travel grant application submission.
@@ -127,20 +143,21 @@ class TravelGrantApplyView(LoginRequiredMixin, ConferenceMixin, View):
             **kwargs: URL keyword arguments (unused).
 
         Returns:
-            A redirect to the activity list on success.
+            A redirect to the activity list on success, or the form with
+            errors on validation failure.
         """
-        try:
-            amount = Decimal(request.POST.get("requested_amount", "0"))
-        except InvalidOperation:
-            messages.error(request, "Invalid amount.")
-            return render(request, self.template_name, {"conference": self.conference})
+        form = TravelGrantApplicationForm(request.POST)
+        if not form.is_valid():
+            return render(request, self.template_name, {"conference": self.conference, "form": form})
 
-        TravelGrant.objects.create(
-            conference=self.conference,
-            user=request.user,
-            requested_amount=amount,
-            travel_from=request.POST.get("travel_from", ""),
-            reason=request.POST.get("reason", ""),
-        )
+        grant = form.save(commit=False)
+        grant.conference = self.conference
+        grant.user = request.user
+        try:
+            with transaction.atomic():
+                grant.save()
+        except IntegrityError:
+            messages.error(request, "You have already applied for a travel grant for this conference.")
+            return redirect(reverse("programs:activity-list", args=[self.conference.slug]))
         messages.success(request, "Your travel grant application has been submitted.")
         return redirect(reverse("programs:activity-list", args=[self.conference.slug]))

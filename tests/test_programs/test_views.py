@@ -1,6 +1,7 @@
 """Tests for programs views."""
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from django.contrib.auth.models import User
@@ -114,6 +115,7 @@ def test_travel_grant_apply_get(client: Client, conference: Conference, user: Us
     client.force_login(user)
     response = client.get(f"/{conference.slug}/programs/travel-grants/apply/")
     assert response.status_code == 200
+    assert "form" in response.context
 
 
 @pytest.mark.django_db
@@ -128,7 +130,8 @@ def test_travel_grant_apply_post(client: Client, conference: Conference, user: U
         },
     )
     assert response.status_code == 302
-    assert TravelGrant.objects.filter(conference=conference, user=user).exists()
+    grant = TravelGrant.objects.get(conference=conference, user=user)
+    assert grant.requested_amount == Decimal("500.00")
 
 
 @pytest.mark.django_db
@@ -144,6 +147,61 @@ def test_travel_grant_apply_invalid_amount(client: Client, conference: Conferenc
     )
     assert response.status_code == 200
     assert not TravelGrant.objects.filter(conference=conference, user=user).exists()
+
+
+@pytest.mark.django_db
+def test_travel_grant_apply_negative_amount(client: Client, conference: Conference, user: User):
+    """Negative requested amounts are rejected by form validation."""
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/apply/",
+        {
+            "requested_amount": "-100.00",
+            "travel_from": "Denver",
+            "reason": "Need help",
+        },
+    )
+    assert response.status_code == 200
+    assert not TravelGrant.objects.filter(conference=conference, user=user).exists()
+
+
+@pytest.mark.django_db
+def test_travel_grant_apply_empty_required_fields(client: Client, conference: Conference, user: User):
+    """Empty travel_from and reason are rejected by form validation."""
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/apply/",
+        {
+            "requested_amount": "500.00",
+            "travel_from": "",
+            "reason": "",
+        },
+    )
+    assert response.status_code == 200
+    assert not TravelGrant.objects.filter(conference=conference, user=user).exists()
+
+
+@pytest.mark.django_db
+def test_travel_grant_apply_duplicate(client: Client, conference: Conference, user: User):
+    """A user who already has a grant for this conference gets an error."""
+    TravelGrant.objects.create(
+        conference=conference,
+        user=user,
+        requested_amount=Decimal("500.00"),
+        travel_from="Chicago",
+        reason="First application",
+    )
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/apply/",
+        {
+            "requested_amount": "300.00",
+            "travel_from": "Denver",
+            "reason": "Second attempt",
+        },
+    )
+    assert response.status_code == 302
+    assert TravelGrant.objects.filter(conference=conference, user=user).count() == 1
 
 
 @pytest.mark.django_db

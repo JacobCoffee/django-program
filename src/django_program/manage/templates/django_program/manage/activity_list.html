@@ -32,7 +32,7 @@
       <td>{{ activity.get_activity_type_display }}</td>
       <td>{{ activity.start_time|default:"--" }}</td>
       <td>{{ activity.location|default:"--" }}</td>
-      <td>{{ activity.signups.count }}{% if activity.max_participants %} / {{ activity.max_participants }}{% endif %}</td>
+      <td>{{ activity.signup_count }}{% if activity.max_participants %} / {{ activity.max_participants }}{% endif %}</td>
       <td>
         {% if activity.is_active %}
         <span class="badge badge--active">Active</span>
