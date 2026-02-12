@@ -22,7 +22,7 @@ from django_program.registration.models import (
     Payment,
     Voucher,
 )
-from django_program.registration.services.cart import CartService
+from django_program.registration.services.cart import get_summary_from_items
 from django_program.registration.signals import order_paid
 from django_program.settings import get_config
 
@@ -102,7 +102,7 @@ class CheckoutService:
 
         _revalidate_stock(items)
 
-        summary = CartService.get_summary_from_items(cart, items)
+        summary = get_summary_from_items(cart, items)
 
         voucher = cart.voucher
         _validate_voucher_for_checkout(voucher)
