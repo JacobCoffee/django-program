@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Subject: Travel Grant Update - {{ conference.name }}
+  -->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8f9fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #1a1a2e; line-height: 1.6;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f9fa; padding: 2rem 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 10px; border: 1px solid #e2e4e9; overflow: hidden; max-width: 100%;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color: #4338ca; padding: 1.5rem 2rem;">
+              <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #ffffff;">
+                {{ conference.name }}
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 2rem;">
+              <h2 style="margin: 0 0 0.5rem; font-size: 1.35rem; font-weight: 800; color: #1a1a2e;">
+                Travel Grant Update
+              </h2>
+              <p style="margin: 0 0 1.25rem; font-size: 0.95rem; color: #555770;">
+                Thank you for applying for a travel grant to {{ conference.name }}. We have an update on your application.
+              </p>
+
+              <!-- Status -->
+              {% if grant.status == "approved" %}
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 1.5rem;">
+                <tr>
+                  <td style="background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 1.25rem;">
+                    <span style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #059669; display: block; margin-bottom: 0.5rem;">Status: Approved</span>
+                    <span style="font-size: 1.5rem; font-weight: 800; color: #059669; display: block; margin-bottom: 0.5rem;">
+                      ${{ grant.approved_amount }}
+                    </span>
+                    <p style="margin: 0; font-size: 0.9rem; color: #555770;">
+                      Congratulations! Your travel grant has been approved. Please review the details below and follow the next steps to claim your grant.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <h3 style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #8889a0; margin: 0 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid #f0f1f4;">
+                Next Steps
+              </h3>
+              <ol style="margin: 0 0 1.5rem; padding-left: 1.25rem; font-size: 0.9rem; color: #555770;">
+                <li style="margin-bottom: 0.35rem;">Accept the grant through your travel grant status page.</li>
+                <li style="margin-bottom: 0.35rem;">Submit your travel receipts after attending the conference.</li>
+                <li style="margin-bottom: 0.35rem;">Provide your payment information for disbursement.</li>
+              </ol>
+
+              {% elif grant.status == "waitlisted" %}
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 1.5rem;">
+                <tr>
+                  <td style="background-color: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; padding: 1.25rem;">
+                    <span style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #d97706; display: block; margin-bottom: 0.5rem;">Status: Waitlisted</span>
+                    <p style="margin: 0; font-size: 0.9rem; color: #555770;">
+                      Your application has been placed on our waitlist. If additional funding becomes available, we will notify you. No further action is required at this time.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              {% elif grant.status == "declined" %}
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 1.5rem;">
+                <tr>
+                  <td style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 1.25rem;">
+                    <span style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #dc2626; display: block; margin-bottom: 0.5rem;">Status: Declined</span>
+                    <p style="margin: 0; font-size: 0.9rem; color: #555770;">
+                      We regret to inform you that we were unable to approve your travel grant application at this time. Due to the high volume of applications and limited funding, we could not accommodate all requests.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 1rem; font-size: 0.9rem; color: #555770;">
+                We still hope to see you at {{ conference.name }}. Thank you for your interest and understanding.
+              </p>
+              {% endif %}
+
+              <p style="margin: 0; font-size: 0.9rem; color: #8889a0;">
+                If you have any questions, please contact the conference organizers.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 1.25rem 2rem; border-top: 1px solid #e2e4e9; text-align: center; font-size: 0.8rem; color: #8889a0;">
+              {{ conference.name }}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

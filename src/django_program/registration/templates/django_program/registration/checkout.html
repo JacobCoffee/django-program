@@ -1,0 +1,92 @@
+{% extends "django_program/base.html" %}
+
+{% block title %}Checkout{% endblock %}
+
+{% block content %}
+<a href="{% url 'registration:cart' conference.slug %}" class="back-link">Back to cart</a>
+
+<div class="page-header">
+  <h1>Checkout</h1>
+</div>
+
+<div class="order-layout">
+  <div>
+    {# ---- Billing Information ---- #}
+    <form method="post" action="{% url 'registration:checkout' conference.slug %}">
+      {% csrf_token %}
+      <h2 class="section-heading mt-0">Billing Information</h2>
+
+      <div class="form-group">
+        <label for="id_billing_name">Full Name</label>
+        <input type="text" id="id_billing_name" name="billing_name" value="{{ form.billing_name.value|default:'' }}" required>
+        {% if form.billing_name.errors %}
+        <ul class="errorlist">
+          {% for error in form.billing_name.errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="id_billing_email">Email Address</label>
+        <input type="email" id="id_billing_email" name="billing_email" value="{{ form.billing_email.value|default:'' }}" required>
+        {% if form.billing_email.errors %}
+        <ul class="errorlist">
+          {% for error in form.billing_email.errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="id_billing_company">Company <span style="font-weight: 400; color: var(--color-text-muted);">(optional)</span></label>
+        <input type="text" id="id_billing_company" name="billing_company" value="{{ form.billing_company.value|default:'' }}">
+        {% if form.billing_company.errors %}
+        <ul class="errorlist">
+          {% for error in form.billing_company.errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-lg">Complete Order</button>
+        <a href="{% url 'registration:cart' conference.slug %}" class="btn btn-secondary">Back to Cart</a>
+      </div>
+    </form>
+  </div>
+
+  {# ---- Order Summary Sidebar ---- #}
+  <aside class="order-sidebar">
+    <div class="card card--static">
+      <div class="card-body">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border-light);">Order Summary</h3>
+
+        {% for item in cart.items.all %}
+        <div style="display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 0.4rem; color: var(--color-text-secondary);">
+          <span>
+            {% if item.ticket_type %}{{ item.ticket_type.name }}{% elif item.addon %}{{ item.addon.name }}{% endif %}
+            {% if item.quantity > 1 %}&times;{{ item.quantity }}{% endif %}
+          </span>
+          <span>${{ item.line_total }}</span>
+        </div>
+        {% endfor %}
+
+        <div style="border-top: 1px solid var(--color-border-light); margin-top: 0.75rem; padding-top: 0.75rem;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.35rem;">
+            <span class="text-secondary">Subtotal</span>
+            <span>${{ subtotal }}</span>
+          </div>
+          {% if discount_amount %}
+          <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.35rem; color: var(--color-success);">
+            <span>Discount</span>
+            <span>-${{ discount_amount }}</span>
+          </div>
+          {% endif %}
+          <div style="display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: 700; padding-top: 0.5rem; border-top: 1px solid var(--color-border-light); margin-top: 0.5rem;">
+            <span>Total</span>
+            <span>${{ total }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+{% endblock %}

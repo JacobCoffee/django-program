@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Max, Min
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_PROGRESS_CHUNK = 50
+_PROGRESS_CHUNK = 10
 
 # Maps Pretalx submission_type names (case-insensitive) to ActivityType values.
 _SUBMISSION_TYPE_TO_ACTIVITY: dict[str, str] = {
@@ -81,6 +82,11 @@ class PretalxSyncService:
             conference.pretalx_event_slug,
             base_url=base_url,
             api_token=api_token,
+        )
+        self._schedule_delete_guard_enabled = config.pretalx.schedule_delete_guard_enabled
+        self._schedule_delete_guard_min_existing_slots = config.pretalx.schedule_delete_guard_min_existing_slots
+        self._schedule_delete_guard_max_fraction_removed = float(
+            config.pretalx.schedule_delete_guard_max_fraction_removed
         )
 
         self._rooms: dict[int, Room] | None = None
@@ -498,84 +504,124 @@ class PretalxSyncService:
             candidate = f"{base}-{counter}"
         return candidate
 
-    def sync_schedule(self) -> tuple[int, int]:
+    def _check_schedule_deletion_safety(
+        self,
+        *,
+        existing_count: int,
+        stale_count: int,
+        allow_large_deletions: bool,
+    ) -> None:
+        """Raise when schedule deletion volume looks anomalous.
+
+        The guard is intended to prevent accidental local schedule wipes when
+        Pretalx returns an unexpectedly small/empty payload.
+        """
+        if allow_large_deletions or not self._schedule_delete_guard_enabled:
+            return
+        if existing_count < self._schedule_delete_guard_min_existing_slots:
+            return
+        if existing_count <= 0 or stale_count <= 0:
+            return
+
+        removed_fraction = stale_count / existing_count
+        if removed_fraction < self._schedule_delete_guard_max_fraction_removed:
+            return
+
+        msg = (
+            "Aborting schedule sync: would remove "
+            f"{stale_count}/{existing_count} existing slots ({removed_fraction:.1%}), "
+            "which exceeds the configured safety threshold. "
+            "Retry with allow_large_deletions=True only if this is intentional."
+        )
+        raise RuntimeError(msg)
+
+    def sync_schedule(self, *, allow_large_deletions: bool = False) -> tuple[int, int]:
         """Fetch schedule slots from Pretalx and upsert into the database.
 
         Slots that no longer appear in the Pretalx schedule are deleted
         after the sync completes.
+
+        Args:
+            allow_large_deletions: When ``True``, bypasses the schedule-drop
+                safety guard and permits large stale-slot deletions.
 
         Returns:
             A tuple of ``(synced_count, unscheduled_count)`` where
             *unscheduled_count* is the number of talks that still have
             no scheduled slot after the sync.
         """
-        self._ensure_mappings()
-        api_slots = self.client.fetch_schedule(rooms=self._room_names)
-        now = timezone.now()
-        count = 0
+        with transaction.atomic():
+            self._ensure_mappings()
+            api_slots = self.client.fetch_schedule(rooms=self._room_names)
+            existing_count = ScheduleSlot.objects.filter(conference=self.conference).count()
+            now = timezone.now()
+            count = 0
 
-        for api_slot in api_slots:
-            talk = None
-            slot_type = _classify_slot(api_slot.title, api_slot.code)
-            title = api_slot.title
+            for api_slot in api_slots:
+                talk = None
+                slot_type = _classify_slot(api_slot.title, api_slot.code)
+                title = api_slot.title
 
-            if api_slot.code:
-                try:
-                    talk = Talk.objects.get(
-                        conference=self.conference,
-                        pretalx_code=api_slot.code,
-                    )
-                    title = title or talk.title
-                except Talk.DoesNotExist:
-                    pass
+                if api_slot.code:
+                    try:
+                        talk = Talk.objects.get(
+                            conference=self.conference,
+                            pretalx_code=api_slot.code,
+                        )
+                        title = title or talk.title
+                    except Talk.DoesNotExist:
+                        pass
 
-            start_dt = api_slot.start_dt or _parse_iso_datetime(api_slot.start)
-            end_dt = api_slot.end_dt or _parse_iso_datetime(api_slot.end)
+                start_dt = api_slot.start_dt or _parse_iso_datetime(api_slot.start)
+                end_dt = api_slot.end_dt or _parse_iso_datetime(api_slot.end)
 
-            if start_dt is None or end_dt is None:
-                logger.warning("Skipping slot with unparsable times: %s", api_slot)
-                continue
+                if start_dt is None or end_dt is None:
+                    logger.warning("Skipping slot with unparsable times: %s", api_slot)
+                    continue
 
-            room = self._resolve_room(api_slot.room)
+                room = self._resolve_room(api_slot.room)
 
-            ScheduleSlot.objects.update_or_create(
+                ScheduleSlot.objects.update_or_create(
+                    conference=self.conference,
+                    start=start_dt,
+                    room=room,
+                    defaults={
+                        "talk": talk,
+                        "title": title,
+                        "end": end_dt,
+                        "slot_type": slot_type,
+                        "synced_at": now,
+                    },
+                )
+
+                logger.debug("Synced slot %s at %s in %s", title, start_dt, api_slot.room)
+                count += 1
+
+            stale_qs = ScheduleSlot.objects.filter(
                 conference=self.conference,
-                start=start_dt,
-                room=room,
-                defaults={
-                    "talk": talk,
-                    "title": title,
-                    "end": end_dt,
-                    "slot_type": slot_type,
-                    "synced_at": now,
-                },
+            ).exclude(synced_at=now)
+            stale_count = stale_qs.count()
+            self._check_schedule_deletion_safety(
+                existing_count=existing_count,
+                stale_count=stale_count,
+                allow_large_deletions=allow_large_deletions,
             )
+            stale_count, _ = stale_qs.delete()
+            if stale_count:
+                logger.info("Removed %d stale schedule slots for %s", stale_count, self.conference.slug)
 
-            logger.debug("Synced slot %s at %s in %s", title, start_dt, api_slot.room)
-            count += 1
+            logger.info("Synced %d schedule slots for %s", count, self.conference.slug)
 
-        stale_count, _ = (
-            ScheduleSlot.objects.filter(
+            self._backfill_talks_from_schedule()
+
+            unscheduled = Talk.objects.filter(
                 conference=self.conference,
-            )
-            .exclude(synced_at=now)
-            .delete()
-        )
-        if stale_count:
-            logger.info("Removed %d stale schedule slots for %s", stale_count, self.conference.slug)
+                slot_start__isnull=True,
+            ).count()
+            if unscheduled:
+                logger.info("%d talks remain unscheduled for %s", unscheduled, self.conference.slug)
 
-        logger.info("Synced %d schedule slots for %s", count, self.conference.slug)
-
-        self._backfill_talks_from_schedule()
-
-        unscheduled = Talk.objects.filter(
-            conference=self.conference,
-            slot_start__isnull=True,
-        ).count()
-        if unscheduled:
-            logger.info("%d talks remain unscheduled for %s", unscheduled, self.conference.slug)
-
-        return count, unscheduled
+            return count, unscheduled
 
     def _backfill_talks_from_schedule(self) -> None:
         """Populate talk room/slot fields from linked schedule slots.
@@ -623,7 +669,7 @@ class PretalxSyncService:
                 return room
         return None
 
-    def sync_all(self) -> dict[str, int]:
+    def sync_all(self, *, allow_large_deletions: bool = False) -> dict[str, int]:
         """Run all sync operations in dependency order.
 
         Returns:
@@ -631,7 +677,7 @@ class PretalxSyncService:
             ``schedule_slots`` key contains only the synced count;
             ``unscheduled_talks`` is added when any talks lack a slot.
         """
-        schedule_count, unscheduled = self.sync_schedule()
+        schedule_count, unscheduled = self.sync_schedule(allow_large_deletions=allow_large_deletions)
         result: dict[str, int] = {
             "rooms": self.sync_rooms(),
             "speakers": self.sync_speakers(),

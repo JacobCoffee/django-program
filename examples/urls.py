@@ -13,7 +13,9 @@ urlpatterns = [
     path("accounts/login/", auth_views.LoginView.as_view(template_name="admin/login.html"), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("manage/", include("django_program.manage.urls")),
+    path("<slug:conference_slug>/register/", include("django_program.registration.urls")),
     path("<slug:conference_slug>/program/", include("django_program.pretalx.urls")),
+    path("<slug:conference_slug>/sponsors/", include("django_program.sponsors.urls")),
     path("<slug:conference_slug>/programs/", include("django_program.programs.urls")),
     *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
 ]

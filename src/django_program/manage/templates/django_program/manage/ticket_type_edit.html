@@ -1,0 +1,45 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}{% if is_create %}Add Ticket Type{% else %}Edit Ticket Type{% endif %}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:ticket-type-list' conference.slug %}">Ticket Types</a>
+  <span class="breadcrumb-separator"></span>
+  <span>{% if is_create %}Add{% else %}Edit{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>{% if is_create %}Add Ticket Type{% else %}Edit Ticket Type: {{ ticket_type.name }}{% endif %}</h1>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-group">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}
+      <span class="helptext">{{ field.help_text }}</span>
+      {% endif %}
+      {% if field.errors %}
+      <ul class="errorlist">
+        {% for error in field.errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{% if is_create %}Create Ticket Type{% else %}Save Changes{% endif %}</button>
+      <a href="{% url 'manage:ticket-type-list' conference.slug %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

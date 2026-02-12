@@ -1,0 +1,79 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Orders{% endblock %}
+
+{% block page_title %}
+<h1>Orders</h1>
+<p>All ticket orders and their payment status</p>
+{% endblock %}
+
+{% block content %}
+<form method="get" class="filter-bar">
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for value, label in order_statuses %}
+    <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  {% if current_status %}
+  <a href="{% url 'manage:order-list' conference.slug %}" class="btn btn-sm btn-secondary">Clear Filter</a>
+  {% endif %}
+</form>
+
+{% if orders %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Reference</th>
+      <th>User</th>
+      <th>Status</th>
+      <th>Total</th>
+      <th>Date</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for order in orders %}
+    <tr>
+      <td class="mono">{{ order.reference }}</td>
+      <td>{{ order.user.email|default:order.user.username }}</td>
+      <td>
+        {% if order.status == "paid" %}
+        <span class="badge badge--active">Paid</span>
+        {% elif order.status == "pending" %}
+        <span class="badge badge--warning">Pending</span>
+        {% elif order.status == "refunded" %}
+        <span class="badge badge--other">Refunded</span>
+        {% elif order.status == "partially_refunded" %}
+        <span class="badge badge--warning">Partial Refund</span>
+        {% elif order.status == "cancelled" %}
+        <span class="badge badge--inactive">Cancelled</span>
+        {% endif %}
+      </td>
+      <td>${{ order.total }}</td>
+      <td>{{ order.created_at|date:"M j, Y" }}</td>
+      <td>
+        <a href="{% url 'manage:order-detail' conference.slug order.pk %}" class="btn btn-sm btn-secondary">View</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if is_paginated %}
+<div class="pagination">
+  {% if page_obj.has_previous %}
+  <a href="?{% if current_status %}status={{ current_status }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+  {% endif %}
+  <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}
+  <a href="?{% if current_status %}status={{ current_status }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+{% else %}
+<div class="empty-state">
+  <p>No orders found{% if current_status %} with status "{{ current_status }}"{% endif %}.</p>
+</div>
+{% endif %}
+{% endblock %}

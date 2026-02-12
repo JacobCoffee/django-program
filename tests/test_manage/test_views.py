@@ -1333,7 +1333,7 @@ class TestSyncPretalxView:
         url = reverse("manage:sync-pretalx", kwargs={"conference_slug": conference.slug})
         resp = client_logged_in_super.post(url)
         assert resp.status_code == 302
-        mock_sync_cls.return_value.sync_all.assert_called_once()
+        mock_sync_cls.return_value.sync_all.assert_called_once_with(allow_large_deletions=False)
 
     @override_settings(DJANGO_PROGRAM={"pretalx": {"base_url": "https://pretalx.com"}})
     @patch("django_program.manage.views.PretalxSyncService")
@@ -1369,7 +1369,19 @@ class TestSyncPretalxView:
         url = reverse("manage:sync-pretalx", kwargs={"conference_slug": conference.slug})
         resp = client_logged_in_super.post(url, {"sync_schedule": "on"})
         assert resp.status_code == 302
-        mock_sync_cls.return_value.sync_schedule.assert_called_once()
+        mock_sync_cls.return_value.sync_schedule.assert_called_once_with(allow_large_deletions=False)
+
+    @override_settings(DJANGO_PROGRAM={"pretalx": {"base_url": "https://pretalx.com"}})
+    @patch("django_program.manage.views.PretalxSyncService")
+    def test_sync_schedule_with_override_flag(self, mock_sync_cls, client_logged_in_super, conference):
+        mock_sync_cls.return_value.sync_schedule.return_value = (30, 0)
+        url = reverse("manage:sync-pretalx", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.post(
+            url,
+            {"sync_schedule": "on", "allow_large_schedule_drop": "on"},
+        )
+        assert resp.status_code == 302
+        mock_sync_cls.return_value.sync_schedule.assert_called_once_with(allow_large_deletions=True)
 
     @override_settings(DJANGO_PROGRAM={"pretalx": {"base_url": "https://pretalx.com"}})
     @patch("django_program.manage.views.PretalxSyncService")
@@ -1576,6 +1588,19 @@ class TestSyncPretalxStreamView:
         names = [s[0] for s in steps]
         assert "rooms" in names
         assert "talks" in names
+
+    def test_build_sync_steps_schedule_override(self, superuser, conference):
+        factory = RequestFactory()
+        request = factory.post("/", {"sync_schedule": "on", "allow_large_schedule_drop": "on"})
+        request.user = superuser
+        mock_service = MagicMock()
+        mock_service.sync_schedule.return_value = (1, 0)
+        steps = SyncPretalxStreamView._build_sync_steps(request, mock_service)
+        assert len(steps) == 1
+        assert steps[0][0] == "schedule slots"
+        sync_fn = steps[0][1]
+        sync_fn()
+        mock_service.sync_schedule.assert_called_once_with(allow_large_deletions=True)
 
     @override_settings(DJANGO_PROGRAM={"pretalx": {"base_url": "https://pretalx.com"}})
     @patch("django_program.manage.views.PretalxSyncService")

@@ -37,6 +37,14 @@ def test_get_config_validates_primitive_values() -> None:
         with pytest.raises(ValueError, match="currency_symbol"):
             get_config()
 
+    with override_settings(DJANGO_PROGRAM={"pretalx": {"schedule_delete_guard_min_existing_slots": -1}}):
+        with pytest.raises(ValueError, match="schedule_delete_guard_min_existing_slots"):
+            get_config()
+
+    with override_settings(DJANGO_PROGRAM={"pretalx": {"schedule_delete_guard_max_fraction_removed": 1.5}}):
+        with pytest.raises(ValueError, match="schedule_delete_guard_max_fraction_removed"):
+            get_config()
+
 
 def test_get_config_cache_clears_on_setting_changed() -> None:
     with override_settings(DJANGO_PROGRAM={"currency": "USD"}):

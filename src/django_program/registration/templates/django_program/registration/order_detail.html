@@ -1,0 +1,122 @@
+{% extends "django_program/base.html" %}
+
+{% block title %}Order {{ order.reference }}{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+  <div>
+    <h1>Order <span class="mono">{{ order.reference }}</span></h1>
+    <p>Placed on {{ order.created_at|date:"N j, Y, g:i A" }}</p>
+  </div>
+  <span class="badge badge--{{ order.status }}" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">
+    {{ order.get_status_display }}
+  </span>
+</div>
+
+{# ---- Billing Info ---- #}
+<h2 class="section-heading mt-0">Billing Information</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Name</div>
+    <div class="info-item-value">{{ order.billing_name|default:"--" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Email</div>
+    <div class="info-item-value">{{ order.billing_email|default:"--" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Company</div>
+    <div class="info-item-value">{{ order.billing_company|default:"--" }}</div>
+  </div>
+  {% if order.voucher_code %}
+  <div class="info-item">
+    <div class="info-item-label">Voucher</div>
+    <div class="info-item-value mono">{{ order.voucher_code }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{# ---- Line Items ---- #}
+<h2 class="section-heading">Line Items</h2>
+<table class="data-table" style="margin-bottom: 1.5rem;">
+  <thead>
+    <tr>
+      <th>Description</th>
+      <th class="text-center">Qty</th>
+      <th class="text-right">Unit Price</th>
+      {% if order.discount_amount %}
+      <th class="text-right">Discount</th>
+      {% endif %}
+      <th class="text-right">Line Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in order.line_items.all %}
+    <tr>
+      <td>{{ item.description }}</td>
+      <td class="text-center">{{ item.quantity }}</td>
+      <td class="text-right">${{ item.unit_price }}</td>
+      {% if order.discount_amount %}
+      <td class="text-right">
+        {% if item.discount_amount %}-${{ item.discount_amount }}{% else %}--{% endif %}
+      </td>
+      {% endif %}
+      <td class="text-right">${{ item.line_total }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="{% if order.discount_amount %}4{% else %}3{% endif %}" class="text-right" style="font-weight: 600; color: var(--color-text-muted); font-size: 0.85rem;">Subtotal</td>
+      <td class="text-right">${{ order.subtotal }}</td>
+    </tr>
+    {% if order.discount_amount %}
+    <tr>
+      <td colspan="4" class="text-right" style="font-weight: 600; color: var(--color-success); font-size: 0.85rem;">Total Discount</td>
+      <td class="text-right" style="color: var(--color-success);">-${{ order.discount_amount }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td colspan="{% if order.discount_amount %}4{% else %}3{% endif %}" class="text-right" style="font-weight: 700; font-size: 1rem;">Total</td>
+      <td class="text-right" style="font-weight: 700; font-size: 1rem;">${{ order.total }}</td>
+    </tr>
+  </tfoot>
+</table>
+
+{# ---- Payment History ---- #}
+{% if order.payments.all|length %}
+<h2 class="section-heading">Payment History</h2>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th class="text-right">Amount</th>
+      <th>Date</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for payment in order.payments.all %}
+    <tr>
+      <td>{{ payment.get_method_display }}</td>
+      <td class="text-right">${{ payment.amount }}</td>
+      <td>{{ payment.created_at|date:"N j, Y, g:i A" }}</td>
+      <td>
+        {% if payment.status == "succeeded" %}
+        <span class="badge badge--success">{{ payment.get_status_display }}</span>
+        {% elif payment.status == "pending" or payment.status == "processing" %}
+        <span class="badge badge--warning">{{ payment.get_status_display }}</span>
+        {% elif payment.status == "failed" %}
+        <span class="badge badge--danger">{{ payment.get_status_display }}</span>
+        {% elif payment.status == "refunded" %}
+        <span class="badge badge--info">{{ payment.get_status_display }}</span>
+        {% else %}
+        <span class="badge badge--muted">{{ payment.get_status_display }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

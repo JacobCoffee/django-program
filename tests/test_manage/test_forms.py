@@ -60,6 +60,7 @@ class TestConferenceForm:
             "end_date",
             "timezone",
             "venue",
+            "address",
             "website_url",
             "pretalx_event_slug",
             "is_active",

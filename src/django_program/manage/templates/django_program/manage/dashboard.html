@@ -4,22 +4,104 @@
 
 {% block page_title %}
 <h1>{{ conference.name }}</h1>
-<p>Conference dashboard and overview</p>
+<p>{{ conference.start_date|date:"N j" }} &ndash; {{ conference.end_date|date:"N j, Y" }}{% if conference.venue %} &middot; {{ conference.venue }}{% endif %}</p>
 {% endblock %}
 
 {% block page_actions %}
-<a href="{% url 'manage:conference-edit' conference.slug %}" class="btn btn-primary">Edit Conference</a>
+{% if conference.pretalx_event_slug %}<a href="#sync-section" class="btn btn-secondary btn-sm">Sync Pretalx</a>{% endif %}
+{% if has_psf_sponsor_sync %}<a href="#sync-section" class="btn btn-secondary btn-sm">Sync Sponsors</a>{% endif %}
+<a href="{% url 'manage:conference-edit' conference.slug %}" class="btn btn-secondary">Settings</a>
 {% endblock %}
 
 {% block content %}
 <style>
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
+
+  .top-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .dash-alert {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    margin-bottom: 1.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning-border);
+    color: var(--color-warning);
+  }
+  .dash-alert:hover { text-decoration: none; color: var(--color-warning); }
+
+  .dir-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+  .dir-link {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.5rem;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    color: var(--color-text);
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-left: 2px solid transparent;
+    transition: all 0.12s ease;
+  }
+  .dir-link:hover {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    text-decoration: none;
+    padding-left: 0.75rem;
+    border-left-color: var(--color-primary);
+  }
+  .dir-link-n {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+  }
+  .dir-link:hover .dir-link-n { color: var(--color-primary); }
+
+  .sync-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+  }
+  .sync-row + .sync-row { border-top: 1px solid var(--color-border-light); }
+  .sync-row-label {
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    min-width: 6.5rem;
+  }
+  .sync-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .sync-row .btn { margin-left: auto; }
+
   .sync-progress-track {
     height: 6px;
     background: var(--color-border, #e5e7eb);
@@ -39,38 +121,43 @@
     gap: 0.5rem;
     padding: 0.3rem 0;
     font-size: 0.85rem;
-    color: var(--color-text-muted, #9ca3af);
+    color: var(--color-text-muted);
     transition: color 0.3s;
   }
-  .sync-step.active {
-    color: var(--color-primary, #2563eb);
-    font-weight: 500;
-  }
+  .sync-step.active { color: var(--color-primary, #2563eb); font-weight: 500; }
   .sync-step.done { color: var(--color-success-text, #166534); }
   .sync-step.step-error { color: var(--color-danger, #dc2626); }
   .sync-step-spinner {
     display: inline-block;
-    width: 0.85rem;
-    height: 0.85rem;
-    border: 2px solid var(--color-border, #e5e7eb);
-    border-top-color: var(--color-primary, #2563eb);
+    width: 0.9rem; height: 0.9rem;
     border-radius: 50%;
-    animation: spin 0.7s linear infinite;
+    background: conic-gradient(var(--color-primary, #2563eb) calc(var(--pct, 0) * 1%), var(--color-border, #e5e7eb) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0);
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0);
   }
-  .sync-step-icon {
-    flex-shrink: 0;
-    width: 1rem;
-    text-align: center;
-    font-size: 0.8rem;
+  .sync-step-icon { flex-shrink: 0; width: 1rem; text-align: center; font-size: 0.8rem; }
+  .sync-step-icon.active { animation: none; }
+
+  @media (max-width: 900px) {
+    .top-stats { grid-template-columns: repeat(2, 1fr); }
+    .dir-grid { grid-template-columns: 1fr; }
   }
-  .sync-step-icon.active { animation: pulse 1.2s ease-in-out infinite; }
+  @media (max-width: 520px) {
+    .top-stats { grid-template-columns: 1fr 1fr; }
+    .sync-row { flex-direction: column; align-items: stretch; }
+    .sync-row .btn { margin-left: 0; }
+  }
 </style>
 
-<div class="stat-grid">
+<!-- Key metrics -->
+<div class="top-stats">
   <div class="stat-card">
-    <a href="{% url 'manage:room-list' conference.slug %}">
-      <div class="stat-card-value">{{ stats.rooms }}</div>
-      <div class="stat-card-label">Rooms</div>
+    <a href="{% url 'manage:talk-list' conference.slug %}">
+      <div class="stat-card-value">{{ stats.talks }}</div>
+      <div class="stat-card-label">Talks</div>
+      {% if stats.unscheduled_talks %}
+      <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-warning); font-weight: 500;">{{ stats.unscheduled_talks }} unscheduled</div>
+      {% endif %}
     </a>
   </div>
   <div class="stat-card">
@@ -80,142 +167,131 @@
     </a>
   </div>
   <div class="stat-card">
-    <a href="{% url 'manage:talk-list' conference.slug %}">
-      <div class="stat-card-value">{{ stats.talks }}</div>
-      <div class="stat-card-label">Talks</div>
-    </a>
-  </div>
-  <div class="stat-card">
     <a href="{% url 'manage:schedule-list' conference.slug %}">
       <div class="stat-card-value">{{ stats.schedule_slots }}</div>
       <div class="stat-card-label">Schedule Slots</div>
     </a>
   </div>
   <div class="stat-card">
-    <a href="{% url 'manage:section-list' conference.slug %}">
-      <div class="stat-card-value">{{ stats.sections }}</div>
-      <div class="stat-card-label">Sections</div>
+    <a href="{% url 'manage:order-list' conference.slug %}">
+      <div class="stat-card-value">{{ stats.orders }}</div>
+      <div class="stat-card-label">Orders</div>
+      {% if stats.paid_orders %}
+      <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-success); font-weight: 500;">{{ stats.paid_orders }} paid</div>
+      {% endif %}
     </a>
   </div>
-  <div class="stat-card">
-    <a href="{% url 'manage:sponsor-manage-list' conference.slug %}">
-      <div class="stat-card-value">{{ stats.sponsors }}</div>
-      <div class="stat-card-label">Sponsors</div>
-    </a>
-  </div>
-  <div class="stat-card">
-    <a href="{% url 'manage:activity-list' conference.slug %}">
-      <div class="stat-card-value">{{ stats.activities }}</div>
-      <div class="stat-card-label">Activities</div>
-    </a>
-  </div>
-  <div class="stat-card">
-    <a href="{% url 'manage:travel-grant-list' conference.slug %}">
-      <div class="stat-card-value">{{ stats.travel_grants }}</div>
-      <div class="stat-card-label">Travel Grants</div>
-    </a>
-  </div>
-  {% if stats.unscheduled_talks %}
-  <div class="stat-card" style="border-color: var(--color-warning-border, #fde68a); background: var(--color-warning-bg, #fffbeb);">
-    <a href="{% url 'manage:talk-list' conference.slug %}?scheduled=no">
-      <div class="stat-card-value" style="color: var(--color-warning-text, #92400e);">{{ stats.unscheduled_talks }}</div>
-      <div class="stat-card-label" style="color: var(--color-warning-text, #92400e);">Unscheduled Talks</div>
-    </a>
-  </div>
-  {% endif %}
 </div>
 
-<h2 class="section-heading">Conference Details</h2>
-<div class="info-grid">
-  <div class="info-item">
-    <div class="info-item-label">Start Date</div>
-    <div class="info-item-value">{{ conference.start_date|date:"N j, Y" }}</div>
+{% if stats.unscheduled_talks %}
+<a href="{% url 'manage:talk-list' conference.slug %}?scheduled=no" class="dash-alert">
+  &#9888; {{ stats.unscheduled_talks }} talk{{ stats.unscheduled_talks|pluralize }} need{{ stats.unscheduled_talks|pluralize:"s," }} scheduling
+</a>
+{% endif %}
+
+<!-- Directory -->
+<div class="card card--static" style="margin-bottom: 1.5rem;">
+  <div class="card-body">
+    <div class="dir-grid">
+      <div>
+        <h2 class="section-heading" style="margin-top: 0;">Program</h2>
+        <a href="{% url 'manage:talk-list' conference.slug %}" class="dir-link">Talks <span class="dir-link-n">{{ stats.talks }}</span></a>
+        <a href="{% url 'manage:speaker-list' conference.slug %}" class="dir-link">Speakers <span class="dir-link-n">{{ stats.speakers }}</span></a>
+        <a href="{% url 'manage:schedule-list' conference.slug %}" class="dir-link">Schedule <span class="dir-link-n">{{ stats.schedule_slots }}</span></a>
+        <a href="{% url 'manage:room-list' conference.slug %}" class="dir-link">Rooms <span class="dir-link-n">{{ stats.rooms }}</span></a>
+        <a href="{% url 'manage:section-list' conference.slug %}" class="dir-link">Sections <span class="dir-link-n">{{ stats.sections }}</span></a>
+        <a href="{% url 'manage:activity-list' conference.slug %}" class="dir-link">Activities <span class="dir-link-n">{{ stats.activities }}</span></a>
+      </div>
+      <div>
+        <h2 class="section-heading" style="margin-top: 0;">Operations</h2>
+        <a href="{% url 'manage:order-list' conference.slug %}" class="dir-link">Orders <span class="dir-link-n">{{ stats.orders }}</span></a>
+        <a href="{% url 'manage:ticket-type-list' conference.slug %}" class="dir-link">Ticket Types <span class="dir-link-n">{{ stats.ticket_types }}</span></a>
+        <a href="{% url 'manage:addon-list' conference.slug %}" class="dir-link">Add-ons <span class="dir-link-n">{{ stats.addons }}</span></a>
+        <a href="{% url 'manage:voucher-list' conference.slug %}" class="dir-link">Vouchers <span class="dir-link-n">{{ stats.vouchers }}</span></a>
+        <a href="{% url 'manage:sponsor-manage-list' conference.slug %}" class="dir-link">Sponsors <span class="dir-link-n">{{ stats.sponsors }}</span></a>
+        <a href="{% url 'manage:travel-grant-list' conference.slug %}" class="dir-link">Travel Grants <span class="dir-link-n">{{ stats.travel_grants }}</span></a>
+      </div>
+    </div>
   </div>
+</div>
+
+<!-- Conference details -->
+<div class="info-grid" style="margin-bottom: 1.5rem;">
   <div class="info-item">
-    <div class="info-item-label">End Date</div>
-    <div class="info-item-value">{{ conference.end_date|date:"N j, Y" }}</div>
+    <div class="info-item-label">Dates</div>
+    <div class="info-item-value">{{ conference.start_date|date:"N j" }} &ndash; {{ conference.end_date|date:"N j, Y" }}</div>
   </div>
   <div class="info-item">
     <div class="info-item-label">Venue</div>
     <div class="info-item-value">{{ conference.venue|default:"Not set" }}</div>
   </div>
+  {% if conference.address %}
+  <div class="info-item">
+    <div class="info-item-label">Address</div>
+    <div class="info-item-value">{{ conference.address }}</div>
+  </div>
+  {% endif %}
   <div class="info-item">
     <div class="info-item-label">Timezone</div>
     <div class="info-item-value">{{ conference.timezone }}</div>
   </div>
+  {% if conference.pretalx_event_slug %}
   <div class="info-item">
-    <div class="info-item-label">Pretalx Slug</div>
-    <div class="info-item-value">
-      {% if conference.pretalx_event_slug %}
-      <span class="mono">{{ conference.pretalx_event_slug }}</span>
-      {% else %}
-      Not configured
-      {% endif %}
-    </div>
+    <div class="info-item-label">Pretalx Event</div>
+    <div class="info-item-value mono">{{ conference.pretalx_event_slug }}</div>
   </div>
+  {% endif %}
 </div>
 
-{% if conference.pretalx_event_slug %}
-<h2 class="section-heading">Pretalx Sync</h2>
-<div class="sync-panel" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+<!-- Sync -->
+<div class="card card--static" id="sync-section">
+  <div class="card-body">
+  {% if conference.pretalx_event_slug %}
+    <div id="sync-form-container">
+      <form method="post" action="{% url 'manage:sync-pretalx' conference.slug %}" id="sync-form" class="sync-row" style="padding-top: 0;">
+        {% csrf_token %}
+        <span class="sync-row-label">Pretalx</span>
+        <label><input type="checkbox" name="sync_rooms"> Rooms</label>
+        <label><input type="checkbox" name="sync_speakers"> Speakers</label>
+        <label><input type="checkbox" name="sync_talks"> Talks</label>
+        <label><input type="checkbox" name="sync_schedule"> Schedule</label>
+        <label title="Bypass safety guard that blocks unexpectedly large schedule deletions.">
+          <input type="checkbox" name="allow_large_schedule_drop"> Allow large schedule drop
+        </label>
+        <button type="submit" class="btn btn-primary btn-sm" id="sync-btn">Sync from Pretalx</button>
+      </form>
+    </div>
 
-  <!-- Sync form -->
-  <div id="sync-form-container">
-    <p style="margin-bottom: 1rem; color: var(--color-text-secondary); font-size: 0.9rem;">
-      Pull data from Pretalx event <span class="mono">{{ conference.pretalx_event_slug }}</span>.
-      Select what to sync or leave all unchecked to sync everything.
-    </p>
-    <form method="post" action="{% url 'manage:sync-pretalx' conference.slug %}" id="sync-form" style="display: flex; flex-wrap: wrap; align-items: center; gap: 1rem;">
+    <div id="sync-progress-container" style="display: none; padding: 0.5rem 0;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem;">
+        <span id="sync-title" style="font-weight: 600; font-size: 0.9rem;">Syncing from Pretalx...</span>
+        <span id="sync-pct" style="font-size: 0.8rem; font-weight: 600; color: var(--color-primary); font-family: var(--font-mono);">0%</span>
+      </div>
+      <div class="sync-progress-track" style="margin-bottom: 0.75rem;">
+        <div class="sync-progress-fill" id="sync-bar"></div>
+      </div>
+      <div id="sync-steps"></div>
+      <div id="sync-result" style="display: none; margin-top: 0.5rem; padding: 0.4rem 0.65rem; border-radius: var(--radius-sm); font-size: 0.85rem;"></div>
+    </div>
+  {% else %}
+    <div class="sync-row" style="padding-top: 0;">
+      <span class="sync-row-label">Pretalx</span>
+      <span style="color: var(--color-text-muted); font-size: 0.85rem;">
+        No event slug configured. <a href="{% url 'manage:conference-edit' conference.slug %}">Set it in Settings</a> to enable syncing.
+      </span>
+    </div>
+  {% endif %}
+
+  {% if has_psf_sponsor_sync %}
+    <form method="post" action="{% url 'manage:sync-sponsors' conference.slug %}" class="sync-row">
       {% csrf_token %}
-      <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; cursor: pointer;">
-        <input type="checkbox" name="sync_rooms"> Rooms
-      </label>
-      <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; cursor: pointer;">
-        <input type="checkbox" name="sync_speakers"> Speakers
-      </label>
-      <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; cursor: pointer;">
-        <input type="checkbox" name="sync_talks"> Talks
-      </label>
-      <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; cursor: pointer;">
-        <input type="checkbox" name="sync_schedule"> Schedule
-      </label>
-      <button type="submit" class="btn btn-primary" id="sync-btn" style="margin-left: auto;">Sync from Pretalx</button>
+      <span class="sync-row-label">PSF Sponsors</span>
+      <span style="color: var(--color-text-secondary); font-size: 0.85rem; flex: 1;">Pull from PSF sponsorship API.</span>
+      <button type="submit" class="btn btn-primary btn-sm">Sync from PSF</button>
     </form>
-  </div>
-
-  <!-- Sync progress (hidden until sync starts) -->
-  <div id="sync-progress-container" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
-      <span id="sync-title" style="font-weight: 600; font-size: 0.95rem; color: var(--color-text);">Syncing from Pretalx...</span>
-      <span id="sync-pct" style="font-size: 0.8rem; font-weight: 600; color: var(--color-primary, #2563eb); font-family: var(--font-mono);">0%</span>
-    </div>
-    <div class="sync-progress-track" style="margin-bottom: 1rem;">
-      <div class="sync-progress-fill" id="sync-bar"></div>
-    </div>
-    <div id="sync-steps"></div>
-    <div id="sync-result" style="display: none; margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); font-size: 0.85rem;"></div>
+  {% endif %}
   </div>
 </div>
-{% else %}
-<h2 class="section-heading">Pretalx Sync</h2>
-<div style="background: var(--color-warning-bg); border: 1px solid var(--color-warning-border); border-radius: var(--radius-md); padding: 1rem 1.25rem; font-size: 0.9rem; color: var(--color-warning);">
-  No Pretalx event slug configured.
-  <a href="{% url 'manage:conference-edit' conference.slug %}">Set it in Conference Settings</a> to enable syncing.
-</div>
-{% endif %}
-
-{% if has_psf_sponsor_sync %}
-<h2 class="section-heading">PSF Sponsor Sync</h2>
-<div class="sync-panel" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
-  <p style="margin-bottom: 1rem; color: var(--color-text-secondary); font-size: 0.9rem;">
-    Pull sponsor data from the Python Software Foundation sponsorship API.
-  </p>
-  <form method="post" action="{% url 'manage:sync-sponsors' conference.slug %}">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary">Sync Sponsors from PSF</button>
-  </form>
-</div>
-{% endif %}
 
 {% if conference.pretalx_event_slug %}
 <script>
@@ -230,6 +306,9 @@
   var syncTitle = document.getElementById('sync-title');
   var syncSteps = document.getElementById('sync-steps');
   var syncResult = document.getElementById('sync-result');
+  var eventQueue = [];
+  var isProcessingQueue = false;
+  var lastCountByStep = {};
 
   function setProgress(step, total) {
     var pct = Math.round((step / total) * 100);
@@ -237,7 +316,7 @@
     syncPct.textContent = pct + '%';
   }
 
-  function addStep(idx, label, status) {
+  function addStep(idx, label, status, current, currentTotal) {
     var el = document.getElementById('sync-step-' + idx);
     if (!el) {
       el = document.createElement('div');
@@ -259,7 +338,16 @@
     if (status === 'in_progress') {
       el.className = 'sync-step active';
       icon.className = 'sync-step-icon';
-      icon.innerHTML = '<span class="sync-step-spinner"></span>';
+      var spinner = icon.querySelector('.sync-step-spinner');
+      if (!spinner) {
+        icon.innerHTML = '<span class="sync-step-spinner"></span>';
+        spinner = icon.querySelector('.sync-step-spinner');
+      }
+      var pct = 12;
+      if (typeof current === 'number' && typeof currentTotal === 'number' && currentTotal > 0) {
+        pct = Math.max(0, Math.min(100, Math.round((current / currentTotal) * 100)));
+      }
+      spinner.style.setProperty('--pct', String(pct));
     } else if (status === 'done') {
       el.className = 'sync-step done';
       icon.className = 'sync-step-icon';
@@ -296,8 +384,6 @@
     }
     syncPct.textContent = '100%';
     syncBar.style.width = '100%';
-
-    // Show "done" link to reload the page
     var reloadLink = document.createElement('a');
     reloadLink.href = window.location.href;
     reloadLink.textContent = ' Refresh dashboard';
@@ -307,7 +393,7 @@
 
   function handleEvent(data) {
     if (data.status === 'in_progress') {
-      addStep(data.step, data.label, 'in_progress');
+      addStep(data.step, data.label, 'in_progress', data.current, data.current_total);
       setProgress(data.step - 1, data.total);
     } else if (data.status === 'done') {
       addStep(data.step, data.label, 'done');
@@ -322,9 +408,36 @@
     }
   }
 
+  function processNextEvent() {
+    if (!eventQueue.length) { isProcessingQueue = false; return; }
+    handleEvent(eventQueue.shift());
+    window.requestAnimationFrame(function() { window.setTimeout(processNextEvent, 45); });
+  }
+
+  function enqueueEvent(data) {
+    if (data && data.status === 'in_progress' && typeof data.step !== 'undefined' && typeof data.label === 'string') {
+      var match = data.label.match(/^(Syncing .+\.\.\.) \((\d+)\/(\d+)\)$/);
+      if (match) {
+        var prefix = match[1];
+        var current = parseInt(match[2], 10);
+        var total = parseInt(match[3], 10);
+        var prev = lastCountByStep[data.step] || 0;
+        if (current > prev + 1) {
+          var stride = Math.max(1, Math.ceil((current - prev) / 30));
+          for (var i = prev + stride; i < current; i += stride) {
+            eventQueue.push({ step: data.step, total: data.total, status: 'in_progress', label: prefix + ' (' + i + '/' + total + ')', current: i, current_total: total });
+          }
+        }
+        lastCountByStep[data.step] = current;
+        if (typeof data.current === 'undefined') { data.current = current; data.current_total = total; }
+      }
+    }
+    eventQueue.push(data);
+    if (!isProcessingQueue) { isProcessingQueue = true; processNextEvent(); }
+  }
+
   form.addEventListener('submit', function(e) {
     e.preventDefault();
-
     formContainer.style.display = 'none';
     progressContainer.style.display = 'block';
     syncSteps.innerHTML = '';
@@ -334,21 +447,15 @@
     syncPct.textContent = '0%';
     syncTitle.textContent = 'Syncing from Pretalx...';
     syncTitle.style.color = 'var(--color-text)';
-
+    eventQueue = [];
+    isProcessingQueue = false;
+    lastCountByStep = {};
     var formData = new FormData(form);
-
-    fetch('{% url "manage:sync-pretalx-stream" conference.slug %}', {
-      method: 'POST',
-      body: formData,
-    }).then(function(response) {
-      if (!response.ok) {
-        showResult('Server returned ' + response.status, true, false);
-        return;
-      }
+    fetch('{% url "manage:sync-pretalx-stream" conference.slug %}', { method: 'POST', body: formData }).then(function(response) {
+      if (!response.ok) { showResult('Server returned ' + response.status, true, false); return; }
       var reader = response.body.getReader();
       var decoder = new TextDecoder();
       var buffer = '';
-
       function read() {
         reader.read().then(function(result) {
           if (result.done) return;
@@ -358,21 +465,14 @@
           for (var i = 0; i < parts.length; i++) {
             var part = parts[i].trim();
             if (part.indexOf('data: ') === 0) {
-              try {
-                var data = JSON.parse(part.substring(6));
-                handleEvent(data);
-              } catch (err) { /* skip malformed */ }
+              try { enqueueEvent(JSON.parse(part.substring(6))); } catch (err) { /* skip */ }
             }
           }
           read();
-        }).catch(function(err) {
-          showResult('Connection lost: ' + err.message, true, false);
-        });
+        }).catch(function(err) { showResult('Connection lost: ' + err.message, true, false); });
       }
       read();
-    }).catch(function(err) {
-      showResult('Network error: ' + err.message, true, false);
-    });
+    }).catch(function(err) { showResult('Network error: ' + err.message, true, false); });
   });
 })();
 </script>

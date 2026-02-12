@@ -70,6 +70,15 @@ class Command(BaseCommand):
             dest="sync_all",
             help="Sync everything (default if no specific flag given).",
         )
+        parser.add_argument(
+            "--allow-large-schedule-drop",
+            action="store_true",
+            default=False,
+            help=(
+                "Allow schedule sync to remove a large fraction of existing "
+                "slots. Use only when a major schedule reduction is intentional."
+            ),
+        )
 
     def handle(self, **options: object) -> None:
         """Execute the sync command.
@@ -97,10 +106,11 @@ class Command(BaseCommand):
         sync_talks: bool = bool(options["talks"])
         sync_schedule: bool = bool(options["schedule"])
         sync_all: bool = bool(options["sync_all"])
+        allow_large_schedule_drop: bool = bool(options["allow_large_schedule_drop"])
         no_specific_flag = not (sync_rooms or sync_speakers or sync_talks or sync_schedule)
 
         if sync_all or no_specific_flag:
-            results = service.sync_all()
+            results = service.sync_all(allow_large_deletions=allow_large_schedule_drop)
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Synced {results['rooms']} rooms, "
@@ -124,5 +134,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Synced {count} talks"))
 
         if sync_schedule:
-            count = service.sync_schedule()
-            self.stdout.write(self.style.SUCCESS(f"Synced {count} schedule slots"))
+            count, unscheduled = service.sync_schedule(allow_large_deletions=allow_large_schedule_drop)
+            msg = f"Synced {count} schedule slots"
+            if unscheduled:
+                msg += f" ({unscheduled} unscheduled)"
+            self.stdout.write(self.style.SUCCESS(msg))

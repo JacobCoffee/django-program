@@ -273,6 +273,8 @@
   var actionDashboard = document.getElementById('action-dashboard');
   var actionRetry = document.getElementById('action-retry');
   var progressActions = document.getElementById('progress-actions');
+  var eventQueue = [];
+  var isProcessingQueue = false;
 
   function setProgress(step, total) {
     var pct = Math.round((step / total) * 100);
@@ -368,6 +370,25 @@
     }
   }
 
+  function processNextEvent() {
+    if (!eventQueue.length) {
+      isProcessingQueue = false;
+      return;
+    }
+    handleEvent(eventQueue.shift());
+    window.requestAnimationFrame(function() {
+      window.setTimeout(processNextEvent, 45);
+    });
+  }
+
+  function enqueueEvent(data) {
+    eventQueue.push(data);
+    if (!isProcessingQueue) {
+      isProcessingQueue = true;
+      processNextEvent();
+    }
+  }
+
   form.addEventListener('submit', function(e) {
     e.preventDefault();
 
@@ -400,7 +421,7 @@
             if (part.indexOf('data: ') === 0) {
               try {
                 var data = JSON.parse(part.substring(6));
-                handleEvent(data);
+                enqueueEvent(data);
               } catch (err) { /* skip malformed */ }
             }
           }

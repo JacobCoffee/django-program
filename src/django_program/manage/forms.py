@@ -14,6 +14,7 @@ from django.core.validators import RegexValidator
 from django_program.conference.models import Conference, Section
 from django_program.pretalx.models import Room, ScheduleSlot, Talk
 from django_program.programs.models import Activity, TravelGrant, TravelGrantMessage
+from django_program.registration.models import AddOn, Payment, TicketType, Voucher
 from django_program.sponsors.models import Sponsor, SponsorLevel
 
 
@@ -76,10 +77,15 @@ class ConferenceForm(forms.ModelForm):
             "end_date",
             "timezone",
             "venue",
+            "address",
             "website_url",
             "pretalx_event_slug",
             "is_active",
         ]
+        widgets = {
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
+        }
 
 
 class SectionForm(forms.ModelForm):
@@ -349,4 +355,133 @@ class DisbursementForm(forms.Form):
         max_digits=10,
         decimal_places=2,
         help_text="Actual amount disbursed to the grantee.",
+    )
+
+
+class TicketTypeForm(forms.ModelForm):
+    """Form for creating and editing ticket types.
+
+    Provides datetime-local widgets for availability windows and auto-populates
+    the slug from the ticket name on creation.
+    """
+
+    class Meta:
+        model = TicketType
+        fields = [
+            "name",
+            "slug",
+            "description",
+            "price",
+            "available_from",
+            "available_until",
+            "total_quantity",
+            "limit_per_user",
+            "requires_voucher",
+            "is_active",
+            "order",
+        ]
+        widgets = {
+            "available_from": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "available_until": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class AddOnForm(forms.ModelForm):
+    """Form for creating and editing add-ons.
+
+    Provides datetime-local widgets for availability windows.
+    """
+
+    class Meta:
+        model = AddOn
+        fields = [
+            "name",
+            "slug",
+            "description",
+            "price",
+            "available_from",
+            "available_until",
+            "total_quantity",
+            "is_active",
+            "order",
+        ]
+        widgets = {
+            "available_from": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "available_until": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class VoucherForm(forms.ModelForm):
+    """Form for creating and editing vouchers.
+
+    Uses checkbox widgets for the many-to-many ticket type and add-on fields
+    so organizers can quickly select applicable items.
+    """
+
+    class Meta:
+        model = Voucher
+        fields = [
+            "code",
+            "voucher_type",
+            "discount_value",
+            "max_uses",
+            "valid_from",
+            "valid_until",
+            "unlocks_hidden_tickets",
+            "is_active",
+            "applicable_ticket_types",
+            "applicable_addons",
+        ]
+        widgets = {
+            "valid_from": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "valid_until": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "applicable_ticket_types": forms.CheckboxSelectMultiple,
+            "applicable_addons": forms.CheckboxSelectMultiple,
+        }
+
+
+class ManualPaymentForm(forms.Form):
+    """Form for organizers to record a manual payment against an order.
+
+    Supports comp, credit, and manual payment methods. The note field
+    allows attaching context (e.g. check number, approval reference).
+    """
+
+    amount = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Amount to record for this payment.",
+    )
+    method = forms.ChoiceField(
+        choices=[
+            (Payment.Method.COMP, "Complimentary"),
+            (Payment.Method.CREDIT, "Credit"),
+            (Payment.Method.MANUAL, "Manual"),
+        ],
+        help_text="Payment method used.",
+    )
+    note = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2, "placeholder": "Payment note (optional)..."}),
+        help_text="Optional note about this payment.",
     )

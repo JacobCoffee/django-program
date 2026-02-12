@@ -17,6 +17,7 @@ class Conference(models.Model):
     end_date = models.DateField()
     timezone = models.CharField(max_length=100, default="UTC")
     venue = models.CharField(max_length=300, blank=True, default="")
+    address = models.CharField(max_length=500, blank=True, default="")
     website_url = models.URLField(blank=True, default="")
 
     pretalx_event_slug = models.CharField(max_length=200, blank=True, default="")

@@ -555,8 +555,15 @@
       <nav class="site-nav">
         <a href="{% url 'pretalx:schedule' conference.slug %}">Schedule</a>
         <a href="{% url 'pretalx:speaker-list' conference.slug %}">Speakers</a>
+        <a href="{% url 'sponsors:sponsor-list' conference.slug %}">Sponsors</a>
         <a href="{% url 'programs:activity-list' conference.slug %}">Programs</a>
         <a href="{% url 'programs:travel-grant-status' conference.slug %}">Travel Grants</a>
+        {% if request.user.is_authenticated and request.user.is_staff %}
+        <a href="{% url 'manage:dashboard' conference.slug %}">Manage</a>
+        {% elif request.user.is_authenticated and request.user.is_superuser %}
+        <a href="{% url 'manage:dashboard' conference.slug %}">Manage</a>
+        {% endif %}
+        <a href="{% url 'registration:ticket-select' conference.slug %}" style="background: var(--color-primary); color: #fff; font-weight: 600; border-radius: var(--radius-sm); padding: 0.4rem 1rem;">Register</a>
       </nav>
     </div>
   </header>

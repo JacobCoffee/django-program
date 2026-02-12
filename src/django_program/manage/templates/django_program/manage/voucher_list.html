@@ -1,0 +1,70 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Vouchers{% endblock %}
+
+{% block page_title %}
+<h1>Vouchers</h1>
+<p>Discount codes, comp tickets, and access vouchers</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:voucher-add' conference.slug %}" class="btn btn-primary">Add Voucher</a>
+{% endblock %}
+
+{% block content %}
+{% if vouchers %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Type</th>
+      <th>Discount</th>
+      <th>Uses</th>
+      <th>Unlocks Hidden</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for voucher in vouchers %}
+    <tr>
+      <td class="mono">{{ voucher.code|truncatechars:8 }}****</td>
+      <td>{{ voucher.get_voucher_type_display }}</td>
+      <td>
+        {% if voucher.voucher_type == "comp" %}
+        100% off
+        {% elif voucher.voucher_type == "percentage" %}
+        {{ voucher.discount_value }}% off
+        {% elif voucher.voucher_type == "fixed_amount" %}
+        ${{ voucher.discount_value }} off
+        {% endif %}
+      </td>
+      <td>{{ voucher.times_used }} / {{ voucher.max_uses }}</td>
+      <td>
+        {% if voucher.unlocks_hidden_tickets %}
+        <span class="badge badge--accepted">Yes</span>
+        {% else %}
+        --
+        {% endif %}
+      </td>
+      <td>
+        {% if voucher.is_active %}
+        <span class="badge badge--active">Active</span>
+        {% else %}
+        <span class="badge badge--inactive">Inactive</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{% url 'manage:voucher-edit' conference.slug voucher.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No vouchers for this conference yet.</p>
+  <p><a href="{% url 'manage:voucher-add' conference.slug %}" class="btn btn-primary">Add First Voucher</a></p>
+</div>
+{% endif %}
+{% endblock %}

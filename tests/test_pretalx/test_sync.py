@@ -626,6 +626,92 @@ def test_sync_schedule_deletes_stale_slots(settings):
 
 
 @pytest.mark.django_db
+def test_sync_schedule_blocks_large_deletion_anomaly(settings):
+    settings.DJANGO_PROGRAM = {
+        "pretalx": {
+            "base_url": "https://pretalx.example.com",
+            "token": "tok",
+            "schedule_delete_guard_min_existing_slots": 1,
+            "schedule_delete_guard_max_fraction_removed": 0.4,
+        }
+    }
+    conference = _make_conference(slug="sched-guard")
+    service = PretalxSyncService(conference)
+    service._rooms = {}
+    service._room_names = {}
+    service._submission_types = {}
+    service._tracks = {}
+    service._tags = {}
+
+    ScheduleSlot.objects.create(
+        conference=conference,
+        title="Old Slot 1",
+        start=datetime(2027, 5, 1, 9, 0, tzinfo=UTC),
+        end=datetime(2027, 5, 1, 9, 30, tzinfo=UTC),
+        slot_type=ScheduleSlot.SlotType.OTHER,
+        synced_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    ScheduleSlot.objects.create(
+        conference=conference,
+        title="Old Slot 2",
+        start=datetime(2027, 5, 1, 10, 0, tzinfo=UTC),
+        end=datetime(2027, 5, 1, 10, 30, tzinfo=UTC),
+        slot_type=ScheduleSlot.SlotType.OTHER,
+        synced_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+
+    service.client.fetch_schedule = MagicMock(return_value=[])
+
+    with pytest.raises(RuntimeError, match="Aborting schedule sync"):
+        service.sync_schedule()
+
+    assert ScheduleSlot.objects.filter(conference=conference).count() == 2
+
+
+@pytest.mark.django_db
+def test_sync_schedule_allows_large_deletion_with_override(settings):
+    settings.DJANGO_PROGRAM = {
+        "pretalx": {
+            "base_url": "https://pretalx.example.com",
+            "token": "tok",
+            "schedule_delete_guard_min_existing_slots": 1,
+            "schedule_delete_guard_max_fraction_removed": 0.4,
+        }
+    }
+    conference = _make_conference(slug="sched-guard-override")
+    service = PretalxSyncService(conference)
+    service._rooms = {}
+    service._room_names = {}
+    service._submission_types = {}
+    service._tracks = {}
+    service._tags = {}
+
+    ScheduleSlot.objects.create(
+        conference=conference,
+        title="Old Slot 1",
+        start=datetime(2027, 5, 1, 9, 0, tzinfo=UTC),
+        end=datetime(2027, 5, 1, 9, 30, tzinfo=UTC),
+        slot_type=ScheduleSlot.SlotType.OTHER,
+        synced_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    ScheduleSlot.objects.create(
+        conference=conference,
+        title="Old Slot 2",
+        start=datetime(2027, 5, 1, 10, 0, tzinfo=UTC),
+        end=datetime(2027, 5, 1, 10, 30, tzinfo=UTC),
+        slot_type=ScheduleSlot.SlotType.OTHER,
+        synced_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+
+    service.client.fetch_schedule = MagicMock(return_value=[])
+
+    count, _ = service.sync_schedule(allow_large_deletions=True)
+
+    assert count == 0
+    assert ScheduleSlot.objects.filter(conference=conference).count() == 0
+
+
+@pytest.mark.django_db
 def test_sync_schedule_skips_slots_without_parsable_times(settings):
     conference = _make_conference(slug="sched-notime")
     service = _make_service(conference, settings)

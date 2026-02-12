@@ -1,0 +1,219 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Order {{ order.reference }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:order-list' conference.slug %}">Orders</a>
+  <span class="breadcrumb-separator"></span>
+  <span>{{ order.reference }}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Order {{ order.reference }}</h1>
+{% endblock %}
+
+{% block content %}
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Reference</div>
+    <div class="info-item-value mono">{{ order.reference }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">User</div>
+    <div class="info-item-value">{{ order.user.get_full_name|default:order.user.username }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Email</div>
+    <div class="info-item-value">{{ order.user.email|default:"--" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Status</div>
+    <div class="info-item-value">
+      {% if order.status == "paid" %}
+      <span class="badge badge--active">Paid</span>
+      {% elif order.status == "pending" %}
+      <span class="badge badge--warning">Pending</span>
+      {% elif order.status == "refunded" %}
+      <span class="badge badge--other">Refunded</span>
+      {% elif order.status == "partially_refunded" %}
+      <span class="badge badge--warning">Partial Refund</span>
+      {% elif order.status == "cancelled" %}
+      <span class="badge badge--inactive">Cancelled</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Subtotal</div>
+    <div class="info-item-value">${{ order.subtotal }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Discount</div>
+    <div class="info-item-value">{% if order.discount_amount %}-${{ order.discount_amount }}{% else %}--{% endif %}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Total</div>
+    <div class="info-item-value" style="font-weight: 700;">${{ order.total }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Date</div>
+    <div class="info-item-value">{{ order.created_at|date:"N j, Y, P" }}</div>
+  </div>
+  {% if order.voucher_code %}
+  <div class="info-item">
+    <div class="info-item-label">Voucher Code</div>
+    <div class="info-item-value mono">{{ order.voucher_code }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if order.billing_name or order.billing_email or order.billing_company %}
+<h2 class="section-heading">Billing Info</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  {% if order.billing_name %}
+  <div class="info-item">
+    <div class="info-item-label">Name</div>
+    <div class="info-item-value">{{ order.billing_name }}</div>
+  </div>
+  {% endif %}
+  {% if order.billing_email %}
+  <div class="info-item">
+    <div class="info-item-label">Email</div>
+    <div class="info-item-value">{{ order.billing_email }}</div>
+  </div>
+  {% endif %}
+  {% if order.billing_company %}
+  <div class="info-item">
+    <div class="info-item-label">Company</div>
+    <div class="info-item-value">{{ order.billing_company }}</div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<h2 class="section-heading">Line Items</h2>
+{% if line_items %}
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Description</th>
+      <th>Qty</th>
+      <th style="text-align: right;">Unit Price</th>
+      <th style="text-align: right;">Discount</th>
+      <th style="text-align: right;">Line Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in line_items %}
+    <tr>
+      <td>{{ item.description }}</td>
+      <td>{{ item.quantity }}</td>
+      <td style="text-align: right;">${{ item.unit_price }}</td>
+      <td style="text-align: right;">{% if item.discount_amount %}-${{ item.discount_amount }}{% else %}--{% endif %}</td>
+      <td style="text-align: right;">${{ item.line_total }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="font-size: 0.88rem; color: var(--color-text-muted); margin-bottom: 2rem;">No line items.</p>
+{% endif %}
+
+<h2 class="section-heading">Payments</h2>
+{% if payments %}
+<table class="data-table" style="margin-bottom: 1rem;">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Status</th>
+      <th style="text-align: right;">Amount</th>
+      <th>Stripe</th>
+      <th>Date</th>
+      <th>Recorded By</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for payment in payments %}
+    <tr>
+      <td>{{ payment.get_method_display }}</td>
+      <td>
+        {% if payment.status == "succeeded" %}
+        <span class="badge badge--active">Succeeded</span>
+        {% elif payment.status == "pending" %}
+        <span class="badge badge--warning">Pending</span>
+        {% elif payment.status == "processing" %}
+        <span class="badge badge--warning">Processing</span>
+        {% elif payment.status == "failed" %}
+        <span class="badge badge--inactive">Failed</span>
+        {% elif payment.status == "refunded" %}
+        <span class="badge badge--other">Refunded</span>
+        {% endif %}
+      </td>
+      <td style="text-align: right;">${{ payment.amount }}</td>
+      <td>
+        {% if payment.stripe_payment_intent_id %}
+        <a href="https://dashboard.stripe.com/test/payments/{{ payment.stripe_payment_intent_id }}" target="_blank" rel="noopener" class="mono" style="font-size: 0.78rem;">{{ payment.stripe_payment_intent_id|truncatechars:20 }}</a>
+        {% elif payment.stripe_charge_id %}
+        <a href="https://dashboard.stripe.com/test/payments/{{ payment.stripe_charge_id }}" target="_blank" rel="noopener" class="mono" style="font-size: 0.78rem;">{{ payment.stripe_charge_id|truncatechars:20 }}</a>
+        {% else %}
+        <span style="color: var(--color-text-muted);">--</span>
+        {% endif %}
+      </td>
+      <td>{{ payment.created_at|date:"M j, Y g:i A" }}</td>
+      <td>{% if payment.created_by %}{{ payment.created_by.get_full_name|default:payment.created_by.username }}{% else %}System{% endif %}</td>
+      <td>{{ payment.note|default:"--"|truncatechars:50 }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="font-size: 0.88rem; color: var(--color-text-muted); margin-bottom: 1rem;">No payments recorded.</p>
+{% endif %}
+
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Total Paid</div>
+    <div class="info-item-value" style="font-weight: 700; color: var(--color-success);">${{ total_paid }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Balance Remaining</div>
+    <div class="info-item-value" style="font-weight: 700; {% if balance_remaining > 0 %}color: var(--color-danger);{% else %}color: var(--color-success);{% endif %}">${{ balance_remaining }}</div>
+  </div>
+</div>
+
+{% if order.status == "pending" %}
+<div class="card" style="margin-bottom: 1.5rem; border-color: #bfdbfe;">
+  <div style="padding: 0.85rem 1.5rem; background: #eff6ff; border-bottom: 1px solid #bfdbfe;">
+    <span style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #1e40af;">Record Manual Payment</span>
+  </div>
+  <div class="card-body">
+    <form method="post" action="{% url 'manage:order-manual-payment' conference.slug order.pk %}">
+      {% csrf_token %}
+      <div style="display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 140px;">
+          <label style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.35rem;">Amount</label>
+          <input type="number" name="amount" step="0.01" value="{{ balance_remaining }}" style="width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.9rem;">
+        </div>
+        <div style="flex: 1; min-width: 140px;">
+          <label style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.35rem;">Method</label>
+          <select name="method" style="width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.9rem;">
+            <option value="comp">Complimentary</option>
+            <option value="credit">Credit</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div style="flex: 2; min-width: 200px;">
+          <label style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.35rem;">Note</label>
+          <input type="text" name="note" placeholder="Payment note (optional)" style="width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.9rem;">
+        </div>
+        <button type="submit" class="btn btn-primary" onclick="return confirm('Record this payment?');">Record Payment</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
