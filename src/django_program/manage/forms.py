@@ -298,8 +298,8 @@ class ActivityForm(forms.ModelForm):
             "is_active",
         ]
         widgets = {
-            "start_time": forms.DateTimeInput(attrs={"type": "datetime-local"}),
-            "end_time": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+            "start_time": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+            "end_time": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
         }
 
 
