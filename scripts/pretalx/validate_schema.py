@@ -81,7 +81,7 @@ def main() -> None:
 
     checksum_ok = _validate_checksum()
 
-    with SCHEMA_FILE.open() as f:
+    with SCHEMA_FILE.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not isinstance(data, dict):

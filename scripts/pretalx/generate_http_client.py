@@ -516,7 +516,7 @@ def main() -> None:
 
     print(f"Loading schema from {SCHEMA_FILE.relative_to(PROJECT_ROOT)} ...")
 
-    with SCHEMA_FILE.open() as f:
+    with SCHEMA_FILE.open(encoding="utf-8") as f:
         schema = yaml.safe_load(f)
 
     schema = _patch_schema(schema)

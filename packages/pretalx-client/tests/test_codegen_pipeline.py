@@ -613,7 +613,7 @@ class TestGenerateHttpClient:
         if not schema_path.exists():
             pytest.skip("Real schema not available")
 
-        with schema_path.open() as f:
+        with schema_path.open(encoding="utf-8") as f:
             schema = yaml.safe_load(f)
 
         schema = gen_mod._patch_schema(schema)
