@@ -31,5 +31,5 @@ urlpatterns = [
     path("checkout/", CheckoutView.as_view(), name="checkout"),
     path("orders/<str:reference>/", OrderDetailView.as_view(), name="order-detail"),
     path("orders/<str:reference>/confirmation/", OrderConfirmationView.as_view(), name="order-confirmation"),
-    path("webhooks/stripe/<slug:conference_slug>/", stripe_webhook, name="stripe-webhook"),
+    path("webhooks/stripe/", stripe_webhook, name="stripe-webhook"),
 ]

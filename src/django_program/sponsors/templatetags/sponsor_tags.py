@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from django import template
 
-from django_program.sponsors.models import Sponsor, SponsorLevel
+from django_program.sponsors.models import Sponsor
 
 if TYPE_CHECKING:
     from django_program.conference.models import Conference
@@ -39,21 +39,25 @@ def sponsors_by_level(conference: Conference) -> list[dict[str, Any]]:
     Returns:
         A list of dicts with ``"level"`` and ``"sponsors"`` keys.
     """
-    levels = SponsorLevel.objects.filter(conference=conference).order_by("order", "name")
-    result: list[dict[str, Any]] = []
-
-    for level in levels:
-        sponsors = list(
-            Sponsor.objects.filter(
-                level=level,
-                conference=conference,
-                is_active=True,
-            ).order_by("name")
+    sponsors = (
+        Sponsor.objects.filter(
+            conference=conference,
+            is_active=True,
         )
-        if sponsors:
-            result.append({"level": level, "sponsors": sponsors})
+        .select_related("level")
+        .order_by("level__order", "level__name", "name")
+    )
 
-    return result
+    grouped: dict[int, dict[str, Any]] = {}
+    for sponsor in sponsors:
+        level = sponsor.level
+        group = grouped.get(level.pk)
+        if group is None:
+            group = {"level": level, "sponsors": []}
+            grouped[level.pk] = group
+        group["sponsors"].append(sponsor)
+
+    return list(grouped.values())
 
 
 @register.simple_tag

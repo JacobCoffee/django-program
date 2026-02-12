@@ -570,6 +570,8 @@ class PretalxSyncService:
                         )
                         title = title or talk.title
                     except Talk.DoesNotExist:
+                        # Some schedule slots legitimately have no local Talk
+                        # record (for example external events).
                         pass
 
                 start_dt = api_slot.start_dt or _parse_iso_datetime(api_slot.start)

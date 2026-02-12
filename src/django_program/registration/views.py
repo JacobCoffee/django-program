@@ -7,12 +7,15 @@ scoped to a conference via the ``conference_slug`` URL kwarg.
 import logging
 import secrets
 import string
+from datetime import timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import transaction
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
+from django.db.models.functions import Coalesce
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -159,11 +162,33 @@ class CartView(LoginRequiredMixin, ConferenceMixin, View):
             voucher form, and totals.
         """
         items = cart.items.select_related("ticket_type", "addon")
-        available_tickets = TicketType.objects.filter(
-            conference=self.conference,
-            is_active=True,
-            requires_voucher=False,
-        ).order_by("order", "name")
+        now = timezone.now()
+        sold_filter = models.Q(
+            order_line_items__order__status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED]
+        ) | models.Q(
+            order_line_items__order__status=Order.Status.PENDING,
+            order_line_items__order__hold_expires_at__gt=now,
+        )
+        available_tickets = (
+            TicketType.objects.filter(
+                conference=self.conference,
+                is_active=True,
+                requires_voucher=False,
+            )
+            .filter(
+                models.Q(available_from__isnull=True) | models.Q(available_from__lte=now),
+            )
+            .filter(
+                models.Q(available_until__isnull=True) | models.Q(available_until__gte=now),
+            )
+            .annotate(
+                sold_quantity=Coalesce(models.Sum("order_line_items__quantity", filter=sold_filter), 0),
+            )
+            .filter(
+                models.Q(total_quantity=0) | models.Q(total_quantity__gt=models.F("sold_quantity")),
+            )
+            .order_by("order", "name")
+        )
         available_addons = AddOn.objects.filter(
             conference=self.conference,
             is_active=True,
@@ -173,7 +198,7 @@ class CartView(LoginRequiredMixin, ConferenceMixin, View):
             "conference": self.conference,
             "cart": cart,
             "items": items,
-            "available_tickets": [t for t in available_tickets if t.is_available],
+            "available_tickets": list(available_tickets),
             "available_addons": available_addons,
             "voucher_form": VoucherApplyForm(),
             "subtotal": subtotal,
@@ -322,7 +347,16 @@ class CartView(LoginRequiredMixin, ConferenceMixin, View):
             A redirect to the cart page.
         """
         slug = request.POST.get("ticket_type", "")
-        quantity = int(request.POST.get("quantity", 1) or 1)
+        raw_quantity = request.POST.get("quantity", 1)
+        try:
+            quantity = int(raw_quantity or 1)
+        except TypeError, ValueError:
+            messages.error(request, "Quantity must be a number.")
+            return redirect(reverse("registration:cart", args=[self.conference.slug]))
+        if quantity < 1:
+            messages.error(request, "Quantity must be at least 1.")
+            return redirect(reverse("registration:cart", args=[self.conference.slug]))
+
         ticket_type = TicketType.objects.filter(
             conference=self.conference,
             slug=slug,
@@ -557,52 +591,71 @@ class CheckoutView(LoginRequiredMixin, ConferenceMixin, View):
                 },
             )
 
-        with transaction.atomic():
-            reference = _generate_order_reference()
-            while Order.objects.filter(reference=reference).exists():
+        try:
+            with transaction.atomic():
                 reference = _generate_order_reference()
+                while Order.objects.filter(reference=reference).exists():
+                    reference = _generate_order_reference()
 
-            voucher_code = ""
-            voucher_details = ""
-            if cart.voucher is not None:
-                voucher_code = str(cart.voucher.code)
-                voucher_details = f"type={cart.voucher.voucher_type}, value={cart.voucher.discount_value}"
+                voucher_code = ""
+                voucher_details = ""
+                voucher = None
+                if cart.voucher is not None:
+                    voucher = Voucher.objects.select_for_update().get(pk=cart.voucher_id)
+                    if not voucher.is_valid:
+                        raise ValidationError(f"Voucher code '{voucher.code}' is no longer valid.")  # noqa: TRY301
+                    voucher_code = str(voucher.code)
+                    voucher_details = f"type={voucher.voucher_type}, value={voucher.discount_value}"
 
-            order = Order.objects.create(
-                conference=self.conference,
-                user=request.user,
-                status=Order.Status.PENDING,
-                subtotal=subtotal,
-                discount_amount=discount,
-                total=total,
-                voucher_code=voucher_code,
-                voucher_details=voucher_details,
-                billing_name=form.cleaned_data["billing_name"],
-                billing_email=form.cleaned_data["billing_email"],
-                billing_company=form.cleaned_data.get("billing_company", ""),
-                reference=reference,
-                hold_expires_at=timezone.now() + timezone.timedelta(minutes=30),
-            )
-
-            for item in items:
-                description = str(item.ticket_type.name if item.ticket_type else item.addon.name)
-                OrderLineItem.objects.create(
-                    order=order,
-                    description=description,
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    line_total=item.line_total,
-                    ticket_type=item.ticket_type,
-                    addon=item.addon,
+                order = Order.objects.create(
+                    conference=self.conference,
+                    user=request.user,
+                    status=Order.Status.PENDING,
+                    subtotal=subtotal,
+                    discount_amount=discount,
+                    total=total,
+                    voucher_code=voucher_code,
+                    voucher_details=voucher_details,
+                    billing_name=form.cleaned_data["billing_name"],
+                    billing_email=form.cleaned_data["billing_email"],
+                    billing_company=form.cleaned_data.get("billing_company", ""),
+                    reference=reference,
+                    hold_expires_at=timezone.now() + timedelta(minutes=30),
                 )
 
-            cart.status = Cart.Status.CHECKED_OUT
-            cart.save(update_fields=["status", "updated_at"])
+                for item in items:
+                    description = str(item.ticket_type.name if item.ticket_type else item.addon.name)
+                    OrderLineItem.objects.create(
+                        order=order,
+                        description=description,
+                        quantity=item.quantity,
+                        unit_price=item.unit_price,
+                        line_total=item.line_total,
+                        ticket_type=item.ticket_type,
+                        addon=item.addon,
+                    )
 
-            if cart.voucher is not None:
-                voucher = cart.voucher
-                voucher.times_used += 1
-                voucher.save(update_fields=["times_used"])
+                cart.status = Cart.Status.CHECKED_OUT
+                cart.save(update_fields=["status", "updated_at"])
+
+                if voucher is not None:
+                    voucher.times_used = models.F("times_used") + 1
+                    voucher.save(update_fields=["times_used"])
+        except ValidationError as exc:
+            messages.error(request, str(exc))
+            return render(
+                request,
+                self.template_name,
+                {
+                    "conference": self.conference,
+                    "form": form,
+                    "cart": cart,
+                    "items": items,
+                    "subtotal": subtotal,
+                    "discount": discount,
+                    "total": total,
+                },
+            )
 
         logger.info("Order %s created for user %s", order.reference, request.user)
         return redirect(reverse("registration:order-confirmation", args=[self.conference.slug, order.reference]))

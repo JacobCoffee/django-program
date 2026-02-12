@@ -156,9 +156,9 @@
       <td style="text-align: right;">${{ payment.amount }}</td>
       <td>
         {% if payment.stripe_payment_intent_id %}
-        <a href="https://dashboard.stripe.com/test/payments/{{ payment.stripe_payment_intent_id }}" target="_blank" rel="noopener" class="mono" style="font-size: 0.78rem;">{{ payment.stripe_payment_intent_id|truncatechars:20 }}</a>
+        <a href="https://dashboard.stripe.com/{% if conference.stripe_secret_key|slice:':8' == 'sk_test_' %}test/{% endif %}payments/{{ payment.stripe_payment_intent_id }}" target="_blank" rel="noopener" class="mono" style="font-size: 0.78rem;">{{ payment.stripe_payment_intent_id|truncatechars:20 }}</a>
         {% elif payment.stripe_charge_id %}
-        <a href="https://dashboard.stripe.com/test/payments/{{ payment.stripe_charge_id }}" target="_blank" rel="noopener" class="mono" style="font-size: 0.78rem;">{{ payment.stripe_charge_id|truncatechars:20 }}</a>
+        <a href="https://dashboard.stripe.com/{% if conference.stripe_secret_key|slice:':8' == 'sk_test_' %}test/{% endif %}payments/{{ payment.stripe_charge_id }}" target="_blank" rel="noopener" class="mono" style="font-size: 0.78rem;">{{ payment.stripe_charge_id|truncatechars:20 }}</a>
         {% else %}
         <span style="color: var(--color-text-muted);">--</span>
         {% endif %}
