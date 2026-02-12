@@ -25,6 +25,7 @@ dev = [
   { include-group = "docs" },
   { include-group = "lint" },
   { include-group = "test" },
+  "python-dotenv>=1.2.1",
 ]
 
 [project]
@@ -47,6 +48,7 @@ classifiers = [
 dependencies = [
     "django>=5.2",
     "django-fernet-encrypted-fields>=0.3.1",
+    "pretalx-client>=0.1.0",
     "stripe>=12.0.0",
 ]
 description = "Modern conference management plugin for Django"
@@ -171,7 +173,7 @@ testpaths = ["tests"]
 exclude = ["refcode/"]
 fix = true
 line-length = 120
-src = ["src/django_program", "tests"]
+src = ["src/django_program", "tests", "packages/pretalx-client/src/pretalx_client"]
 target-version = "py314"
 
 [tool.ruff.format]
@@ -199,7 +201,7 @@ ignore = [
 select = ["ALL"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["django_program", "tests"]
+known-first-party = ["django_program", "pretalx_client", "tests"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/migrations/**/*.*" = [
@@ -224,6 +226,46 @@ known-first-party = ["django_program", "tests"]
   "INP001", # Implicit namespace package (standalone Django project)
   "PLC0415", # Import not at top level (Django manage.py pattern)
   "S105",   # Hardcoded secret key (dev-only)
+]
+"scripts/**/*.*" = [
+  "D",        # Docstrings (utility scripts)
+  "INP001",   # Implicit namespace package
+  "S",        # Security (local dev scripts)
+  "T201",     # Print statements (CLI scripts)
+  "ANN",      # Type annotations (utility scripts)
+  "C901",     # Complexity (codegen functions are inherently complex)
+  "PLR0912",  # Too many branches (codegen)
+  "PLR0915",  # Too many statements (codegen)
+]
+"packages/**/tests/**/*.*" = [
+  "A",
+  "ANN",
+  "ARG",
+  "B",
+  "BLE",
+  "C901",
+  "D",
+  "DTZ",
+  "EM",
+  "ERA001",
+  "F841",
+  "FBT",
+  "G",
+  "N",
+  "PGH",
+  "PIE",
+  "PLR",
+  "PLW",
+  "PTH",
+  "RET504",
+  "RSE",
+  "S",
+  "S101",
+  "SIM",
+  "SLF001",
+  "TCH",
+  "TRY",
+  "UP006",
 ]
 "tests/**/*.*" = [
   "A",
@@ -275,8 +317,14 @@ unsupported-operator = "warn"
 invalid-argument-type = "warn"
 
 [tool.ty.src]
-exclude = ["docs/conf.py", "tests/", "refcode/"]
+exclude = ["docs/conf.py", "tests/", "refcode/", "packages/*/tests/", "scripts/"]
 
 [tool.uv]
 default-groups = ["dev"]
 constraint-dependencies = ["django>=5.2,<5.3"]
+
+[tool.uv.sources]
+pretalx-client = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]

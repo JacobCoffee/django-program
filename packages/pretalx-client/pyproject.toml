@@ -1,0 +1,122 @@
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.9.11,<0.11.0"]
+
+[project]
+authors = [{ name = "Jacob Coffee", email = "jacob@python.org" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
+]
+dependencies = ["httpx>=0.28.1"]
+description = "Standalone Python client for the Pretalx REST API"
+keywords = ["pretalx", "conference", "schedule", "api", "client"]
+license = { text = "MIT" }
+name = "pretalx-client"
+readme = "README.md"
+requires-python = ">=3.14"
+version = "0.1.0"
+
+[project.urls]
+Documentation = "https://github.com/JacobCoffee/django-program"
+"Issue Tracker" = "https://github.com/JacobCoffee/django-program/issues"
+Repository = "https://github.com/JacobCoffee/django-program"
+
+[tool.pytest.ini_options]
+addopts = ["-v", "--strict-markers", "--tb=short"]
+markers = [
+  "unit: mark test as unit test",
+  "integration: mark test as integration test",
+]
+python_classes = ["Test*"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+testpaths = ["tests"]
+
+[tool.ruff]
+fix = true
+line-length = 120
+src = ["src/pretalx_client"]
+target-version = "py314"
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 88
+indent-style = "space"
+quote-style = "double"
+
+[tool.ruff.lint]
+fixable = ["ALL"]
+ignore = [
+  "COM812", # Missing trailing comma (conflicts with formatter)
+  "ISC001", # Single-line string concatenation (conflicts with formatter)
+  "ERA001", # Commented-out code
+  "TD",     # TODOs
+  "FIX002", # Line contains TODO
+  "EM101",  # Exception string literal
+  "EM102",  # Exception f-string literal
+  "TRY003", # Long exception message
+  "D105",   # Missing docstring in magic method
+  "D106",   # Missing docstring in public nested class
+]
+select = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pretalx_client"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/generated/**/*.*" = [
+  "ANN",      # Type annotations (auto-generated)
+  "ARG",      # Unused arguments (auto-generated signatures)
+  "C901",     # Complexity (auto-generated methods with many params)
+  "D",        # Docstrings (auto-generated)
+  "N",        # Naming conventions (auto-generated camelCase etc.)
+  "TC",       # Type-checking imports (auto-generated)
+  "UP",       # pyupgrade (auto-generated patterns)
+  "FBT",      # Boolean trap (auto-generated signatures)
+  "PLR",      # Pylint refactor (auto-generated complexity)
+  "A002",     # Shadowing builtins in args (auto-generated param names like 'id')
+  "A003",     # Shadowing builtins (auto-generated field names like 'id', 'type')
+  "RUF009",   # Mutable default in dataclass (auto-generated)
+]
+"tests/**/*.*" = [
+  "A",
+  "ANN",
+  "ARG",
+  "B",
+  "BLE",
+  "C901",
+  "D",
+  "DTZ",
+  "EM",
+  "ERA001",
+  "F841",
+  "FBT",
+  "G",
+  "N",
+  "PGH",
+  "PIE",
+  "PLR",
+  "PLW",
+  "PTH",
+  "RET504",
+  "RSE",
+  "S",
+  "S101",
+  "SIM",
+  "SLF001",
+  "TCH",
+  "TRY",
+  "UP006",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

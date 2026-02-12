@@ -1,0 +1,76 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}{{ talk.title }}{% endblock %}
+
+{% block content %}
+<a href="{% url 'pretalx:schedule' conference.slug %}" class="back-link">Back to schedule</a>
+
+<article>
+  <div class="page-header">
+    <h2>{{ talk.title }}</h2>
+  </div>
+
+  <div class="talk-meta">
+    {% if talk.submission_type %}
+    <span class="talk-meta-item">
+      <span class="talk-meta-label">Type</span> {{ talk.submission_type }}
+    </span>
+    {% endif %}
+
+    {% if talk.track %}
+    <span class="talk-meta-item">
+      <span class="talk-meta-label">Track</span> {{ talk.track }}
+    </span>
+    {% endif %}
+
+    {% if talk.duration %}
+    <span class="talk-meta-item">
+      <span class="talk-meta-label">Duration</span> {{ talk.duration }} min
+    </span>
+    {% endif %}
+
+    {% if talk.room %}
+    <span class="talk-meta-item">
+      <span class="talk-meta-label">Room</span> {{ talk.room.name }}
+    </span>
+    {% endif %}
+
+    {% if talk.slot_start %}
+    <span class="talk-meta-item">
+      <span class="talk-meta-label">Scheduled</span> {{ talk.slot_start|date:"l, N j" }} {{ talk.slot_start|time:"H:i" }}&ndash;{{ talk.slot_end|time:"H:i" }}
+    </span>
+    {% endif %}
+  </div>
+
+  {% if talk.abstract %}
+  <section class="talk-section">
+    <h3>Abstract</h3>
+    <div class="talk-section-body">
+      <p>{{ talk.abstract }}</p>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if talk.description %}
+  <section class="talk-section">
+    <h3>Description</h3>
+    <div class="talk-section-body">
+      {{ talk.description|linebreaks }}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if speakers %}
+  <section class="talk-section">
+    <h3>Speaker{{ speakers|length|pluralize }}</h3>
+    <ul class="talk-speakers-list">
+      {% for speaker in speakers %}
+      <li>
+        <a href="{% url 'pretalx:speaker-detail' conference.slug speaker.pretalx_code %}">{{ speaker.name }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</article>
+{% endblock %}

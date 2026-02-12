@@ -1,0 +1,349 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}{{ conference.name }}{% endblock %}
+
+{% block page_title %}
+<h1>{{ conference.name }}</h1>
+<p>Conference dashboard and overview</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:conference-edit' conference.slug %}" class="btn btn-primary">Edit Conference</a>
+{% endblock %}
+
+{% block content %}
+<style>
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .sync-progress-track {
+    height: 6px;
+    background: var(--color-border, #e5e7eb);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .sync-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--color-primary, #2563eb);
+    border-radius: 3px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .sync-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    font-size: 0.85rem;
+    color: var(--color-text-muted, #9ca3af);
+    transition: color 0.3s;
+  }
+  .sync-step.active {
+    color: var(--color-primary, #2563eb);
+    font-weight: 500;
+  }
+  .sync-step.done { color: var(--color-success-text, #166534); }
+  .sync-step.step-error { color: var(--color-danger, #dc2626); }
+  .sync-step-spinner {
+    display: inline-block;
+    width: 0.85rem;
+    height: 0.85rem;
+    border: 2px solid var(--color-border, #e5e7eb);
+    border-top-color: var(--color-primary, #2563eb);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  .sync-step-icon {
+    flex-shrink: 0;
+    width: 1rem;
+    text-align: center;
+    font-size: 0.8rem;
+  }
+  .sync-step-icon.active { animation: pulse 1.2s ease-in-out infinite; }
+</style>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <a href="{% url 'manage:room-list' conference.slug %}">
+      <div class="stat-card-value">{{ stats.rooms }}</div>
+      <div class="stat-card-label">Rooms</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:speaker-list' conference.slug %}">
+      <div class="stat-card-value">{{ stats.speakers }}</div>
+      <div class="stat-card-label">Speakers</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:talk-list' conference.slug %}">
+      <div class="stat-card-value">{{ stats.talks }}</div>
+      <div class="stat-card-label">Talks</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:schedule-list' conference.slug %}">
+      <div class="stat-card-value">{{ stats.schedule_slots }}</div>
+      <div class="stat-card-label">Schedule Slots</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:section-list' conference.slug %}">
+      <div class="stat-card-value">{{ stats.sections }}</div>
+      <div class="stat-card-label">Sections</div>
+    </a>
+  </div>
+  {% if stats.unscheduled_talks %}
+  <div class="stat-card" style="border-color: var(--color-warning-border, #fde68a); background: var(--color-warning-bg, #fffbeb);">
+    <a href="{% url 'manage:talk-list' conference.slug %}?scheduled=no">
+      <div class="stat-card-value" style="color: var(--color-warning-text, #92400e);">{{ stats.unscheduled_talks }}</div>
+      <div class="stat-card-label" style="color: var(--color-warning-text, #92400e);">Unscheduled Talks</div>
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+<h2 class="section-heading">Conference Details</h2>
+<div class="info-grid">
+  <div class="info-item">
+    <div class="info-item-label">Start Date</div>
+    <div class="info-item-value">{{ conference.start_date|date:"N j, Y" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">End Date</div>
+    <div class="info-item-value">{{ conference.end_date|date:"N j, Y" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Venue</div>
+    <div class="info-item-value">{{ conference.venue|default:"Not set" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Timezone</div>
+    <div class="info-item-value">{{ conference.timezone }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Pretalx Slug</div>
+    <div class="info-item-value">
+      {% if conference.pretalx_event_slug %}
+      <span class="mono">{{ conference.pretalx_event_slug }}</span>
+      {% else %}
+      Not configured
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if conference.pretalx_event_slug %}
+<h2 class="section-heading">Pretalx Sync</h2>
+<div class="sync-panel" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+
+  <!-- Sync form -->
+  <div id="sync-form-container">
+    <p style="margin-bottom: 1rem; color: var(--color-text-secondary); font-size: 0.9rem;">
+      Pull data from Pretalx event <span class="mono">{{ conference.pretalx_event_slug }}</span>.
+      Select what to sync or leave all unchecked to sync everything.
+    </p>
+    <form method="post" action="{% url 'manage:sync-pretalx' conference.slug %}" id="sync-form" style="display: flex; flex-wrap: wrap; align-items: center; gap: 1rem;">
+      {% csrf_token %}
+      <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="sync_rooms"> Rooms
+      </label>
+      <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="sync_speakers"> Speakers
+      </label>
+      <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="sync_talks"> Talks
+      </label>
+      <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="sync_schedule"> Schedule
+      </label>
+      <button type="submit" class="btn btn-primary" id="sync-btn" style="margin-left: auto;">Sync from Pretalx</button>
+    </form>
+  </div>
+
+  <!-- Sync progress (hidden until sync starts) -->
+  <div id="sync-progress-container" style="display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
+      <span id="sync-title" style="font-weight: 600; font-size: 0.95rem; color: var(--color-text);">Syncing from Pretalx...</span>
+      <span id="sync-pct" style="font-size: 0.8rem; font-weight: 600; color: var(--color-primary, #2563eb); font-family: var(--font-mono);">0%</span>
+    </div>
+    <div class="sync-progress-track" style="margin-bottom: 1rem;">
+      <div class="sync-progress-fill" id="sync-bar"></div>
+    </div>
+    <div id="sync-steps"></div>
+    <div id="sync-result" style="display: none; margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); font-size: 0.85rem;"></div>
+  </div>
+</div>
+{% else %}
+<h2 class="section-heading">Pretalx Sync</h2>
+<div style="background: var(--color-warning-bg); border: 1px solid var(--color-warning-border); border-radius: var(--radius-md); padding: 1rem 1.25rem; font-size: 0.9rem; color: var(--color-warning);">
+  No Pretalx event slug configured.
+  <a href="{% url 'manage:conference-edit' conference.slug %}">Set it in Conference Settings</a> to enable syncing.
+</div>
+{% endif %}
+
+{% if conference.pretalx_event_slug %}
+<script>
+(function() {
+  var form = document.getElementById('sync-form');
+  if (!form) return;
+
+  var formContainer = document.getElementById('sync-form-container');
+  var progressContainer = document.getElementById('sync-progress-container');
+  var syncBar = document.getElementById('sync-bar');
+  var syncPct = document.getElementById('sync-pct');
+  var syncTitle = document.getElementById('sync-title');
+  var syncSteps = document.getElementById('sync-steps');
+  var syncResult = document.getElementById('sync-result');
+
+  function setProgress(step, total) {
+    var pct = Math.round((step / total) * 100);
+    syncBar.style.width = pct + '%';
+    syncPct.textContent = pct + '%';
+  }
+
+  function addStep(idx, label, status) {
+    var el = document.getElementById('sync-step-' + idx);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'sync-step-' + idx;
+      el.className = 'sync-step';
+      var iconSpan = document.createElement('span');
+      iconSpan.className = 'sync-step-icon';
+      iconSpan.id = 'sync-icon-' + idx;
+      var textSpan = document.createElement('span');
+      textSpan.id = 'sync-text-' + idx;
+      el.appendChild(iconSpan);
+      el.appendChild(textSpan);
+      syncSteps.appendChild(el);
+    }
+    var icon = document.getElementById('sync-icon-' + idx);
+    var text = document.getElementById('sync-text-' + idx);
+    text.textContent = label;
+
+    if (status === 'in_progress') {
+      el.className = 'sync-step active';
+      icon.className = 'sync-step-icon';
+      icon.innerHTML = '<span class="sync-step-spinner"></span>';
+    } else if (status === 'done') {
+      el.className = 'sync-step done';
+      icon.className = 'sync-step-icon';
+      icon.innerHTML = '&#10003;';
+    } else if (status === 'step_error') {
+      el.className = 'sync-step step-error';
+      icon.className = 'sync-step-icon';
+      icon.innerHTML = '&#10007;';
+    }
+  }
+
+  function showResult(message, isError, isWarning) {
+    syncResult.style.display = 'block';
+    syncResult.textContent = message;
+    if (isError) {
+      syncResult.style.background = 'var(--color-danger-bg, #fef2f2)';
+      syncResult.style.border = '1px solid var(--color-danger-border, #fecaca)';
+      syncResult.style.color = 'var(--color-danger, #dc2626)';
+      syncTitle.textContent = 'Sync Failed';
+      syncTitle.style.color = 'var(--color-danger, #dc2626)';
+    } else if (isWarning) {
+      syncResult.style.background = 'var(--color-warning-bg, #fffbeb)';
+      syncResult.style.border = '1px solid var(--color-warning-border, #fde68a)';
+      syncResult.style.color = 'var(--color-warning-text, #92400e)';
+      syncTitle.textContent = 'Sync Completed with Warnings';
+      syncTitle.style.color = 'var(--color-warning-text, #92400e)';
+    } else {
+      syncResult.style.background = 'var(--color-success-bg, #f0fdf4)';
+      syncResult.style.border = '1px solid var(--color-success-border, #bbf7d0)';
+      syncResult.style.color = 'var(--color-success-text, #166534)';
+      syncTitle.textContent = 'Sync Complete!';
+      syncTitle.style.color = 'var(--color-success-text, #166534)';
+      syncBar.style.background = 'var(--color-success-text, #166534)';
+    }
+    syncPct.textContent = '100%';
+    syncBar.style.width = '100%';
+
+    // Show "done" link to reload the page
+    var reloadLink = document.createElement('a');
+    reloadLink.href = window.location.href;
+    reloadLink.textContent = ' Refresh dashboard';
+    reloadLink.style.fontWeight = '600';
+    syncResult.appendChild(reloadLink);
+  }
+
+  function handleEvent(data) {
+    if (data.status === 'in_progress') {
+      addStep(data.step, data.label, 'in_progress');
+      setProgress(data.step - 1, data.total);
+    } else if (data.status === 'done') {
+      addStep(data.step, data.label, 'done');
+      setProgress(data.step, data.total);
+    } else if (data.status === 'step_error') {
+      addStep(data.step, data.label, 'step_error');
+      setProgress(data.step, data.total);
+    } else if (data.status === 'error') {
+      showResult(data.message, true, false);
+    } else if (data.status === 'complete') {
+      showResult(data.message, false, data.warning);
+    }
+  }
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    formContainer.style.display = 'none';
+    progressContainer.style.display = 'block';
+    syncSteps.innerHTML = '';
+    syncResult.style.display = 'none';
+    syncBar.style.width = '0%';
+    syncBar.style.background = 'var(--color-primary, #2563eb)';
+    syncPct.textContent = '0%';
+    syncTitle.textContent = 'Syncing from Pretalx...';
+    syncTitle.style.color = 'var(--color-text)';
+
+    var formData = new FormData(form);
+
+    fetch('{% url "manage:sync-pretalx-stream" conference.slug %}', {
+      method: 'POST',
+      body: formData,
+    }).then(function(response) {
+      if (!response.ok) {
+        showResult('Server returned ' + response.status, true, false);
+        return;
+      }
+      var reader = response.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+
+      function read() {
+        reader.read().then(function(result) {
+          if (result.done) return;
+          buffer += decoder.decode(result.value, {stream: true});
+          var parts = buffer.split('\n\n');
+          buffer = parts.pop();
+          for (var i = 0; i < parts.length; i++) {
+            var part = parts[i].trim();
+            if (part.indexOf('data: ') === 0) {
+              try {
+                var data = JSON.parse(part.substring(6));
+                handleEvent(data);
+              } catch (err) { /* skip malformed */ }
+            }
+          }
+          read();
+        }).catch(function(err) {
+          showResult('Connection lost: ' + err.message, true, false);
+        });
+      }
+      read();
+    }).catch(function(err) {
+      showResult('Network error: ' + err.message, true, false);
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

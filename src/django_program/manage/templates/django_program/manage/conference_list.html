@@ -1,0 +1,41 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Conferences{% endblock %}
+
+{% block page_title %}
+<h1>Conferences</h1>
+<p>Select a conference to manage</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:import-pretalx' %}" class="btn btn-primary">Import from Pretalx</a>
+{% endblock %}
+
+{% block content %}
+{% if conferences %}
+<div class="conference-grid">
+  {% for conf in conferences %}
+  <div class="card conference-card">
+    <a href="{% url 'manage:dashboard' conf.slug %}">
+      <div class="card-body">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+          <div class="conference-card-name">{{ conf.name }}</div>
+          {% if conf.is_active %}
+          <span class="badge badge--active">Active</span>
+          {% else %}
+          <span class="badge badge--inactive">Inactive</span>
+          {% endif %}
+        </div>
+        <div class="conference-card-slug">{{ conf.slug }}</div>
+        <div class="conference-card-dates">{{ conf.start_date|date:"N j, Y" }} &ndash; {{ conf.end_date|date:"N j, Y" }}</div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>No conferences found.</p>
+</div>
+{% endif %}
+{% endblock %}

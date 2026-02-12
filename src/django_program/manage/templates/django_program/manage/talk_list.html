@@ -1,0 +1,93 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Talks{% endblock %}
+
+{% block page_title %}
+<h1>{% if current_type %}{{ current_type }}{% else %}Talks{% endif %}</h1>
+<p>{% if current_type %}Filtered by submission type{% else %}Talk submissions and scheduling{% endif %}</p>
+{% endblock %}
+
+{% block content %}
+<form method="get" class="filter-bar">
+  <input type="text" name="q" value="{{ search_query|default:'' }}" placeholder="Search by title...">
+  <select name="state" onchange="this.form.submit()">
+    <option value="">All states</option>
+    <option value="confirmed" {% if current_state == 'confirmed' %}selected{% endif %}>Confirmed</option>
+    <option value="accepted" {% if current_state == 'accepted' %}selected{% endif %}>Accepted</option>
+    <option value="submitted" {% if current_state == 'submitted' %}selected{% endif %}>Submitted</option>
+  </select>
+  <select name="scheduled" onchange="this.form.submit()">
+    <option value="">All talks</option>
+    <option value="yes" {% if current_scheduled == 'yes' %}selected{% endif %}>Scheduled</option>
+    <option value="no" {% if current_scheduled == 'no' %}selected{% endif %}>Unscheduled</option>
+  </select>
+  <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+  {% if search_query or current_state or current_scheduled %}
+  <a href="{% if current_type_slug %}{% url 'manage:talk-list-by-type' conference.slug current_type_slug %}{% else %}{% url 'manage:talk-list' conference.slug %}{% endif %}" class="btn btn-sm btn-secondary">Clear</a>
+  {% endif %}
+  {% if current_type %}
+  <a href="{% url 'manage:talk-list' conference.slug %}" class="btn btn-sm btn-secondary">All Types</a>
+  {% endif %}
+</form>
+
+{% if talks %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Type</th>
+      <th>Track</th>
+      <th>State</th>
+      <th>Room</th>
+      <th>Scheduled</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for talk in talks %}
+    <tr>
+      <td>
+        <a href="{% url 'manage:talk-detail' conference.slug talk.pk %}">{{ talk.title }}</a>
+        {% if talk.synced_at %}
+        <span class="badge badge--synced" style="margin-left: 0.4rem;">Synced</span>
+        {% endif %}
+      </td>
+      <td>{% if talk.submission_type %}{{ talk.submission_type }}{% else %}&mdash;{% endif %}</td>
+      <td>{% if talk.track %}{{ talk.track }}{% else %}&mdash;{% endif %}</td>
+      <td>
+        {% if talk.state == 'confirmed' %}
+        <span class="badge badge--confirmed">{{ talk.state }}</span>
+        {% elif talk.state == 'accepted' %}
+        <span class="badge badge--accepted">{{ talk.state }}</span>
+        {% elif talk.state == 'submitted' %}
+        <span class="badge badge--submitted">{{ talk.state }}</span>
+        {% elif talk.state %}
+        <span class="badge badge--other">{{ talk.state }}</span>
+        {% else %}
+        &mdash;
+        {% endif %}
+      </td>
+      <td>{% if talk.room %}{{ talk.room.name }}{% else %}&mdash;{% endif %}</td>
+      <td>
+        {% if talk.slot_start %}
+        <span class="mono">{{ talk.slot_start|date:"N j, H:i" }}</span>
+        {% else %}
+        <span class="badge badge--warning">Unscheduled</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{% url 'manage:talk-edit' conference.slug talk.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>{% if search_query or current_state or current_scheduled %}No talks match your filters.{% else %}No talks synced for this conference.{% endif %}</p>
+</div>
+{% endif %}
+{% endblock %}

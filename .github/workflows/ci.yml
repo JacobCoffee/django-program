@@ -6,6 +6,7 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "packages/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/**"
@@ -14,6 +15,7 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "packages/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/**"
@@ -71,7 +73,7 @@ jobs:
         run: uv run ruff format --check
 
       - name: Run ty type checker
-        run: uvx ty check src
+        run: uvx ty check src packages/pretalx-client/src
 
   test-smoke:
     name: Test Smoke (3.14/Django ${{ matrix.django }}/${{ matrix.os }})
@@ -108,7 +110,9 @@ jobs:
         run: uv pip install --no-config 'django~=${{ matrix.django }}.0'
 
       - name: Run tests
-        run: uv run pytest tests/ -v
+        run: |
+          uv run pytest tests/ -v
+          uv run pytest packages/pretalx-client/tests/ -v
 
   test-full:
     name: Test (3.14/${{ matrix.os }})
@@ -140,7 +144,9 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run tests with coverage
-        run: uv run pytest tests/ -v --cov=src/django_program --cov-report=term-missing --cov-report=xml
+        run: |
+          uv run pytest tests/ -v --cov=src/django_program --cov-report=term-missing --cov-report=xml
+          uv run pytest packages/pretalx-client/tests/ -v
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'macos-latest'

@@ -1,0 +1,215 @@
+{% extends "django_program/manage/base.html" %}
+{% load tz %}
+
+{% block title %}Schedule{% endblock %}
+
+{% block page_title %}
+<h1>Schedule</h1>
+<p>Schedule slots grouped by date</p>
+{% endblock %}
+
+{% block content %}
+<style>
+  .schedule-date-group {
+    margin-bottom: 2.5rem;
+  }
+
+  .schedule-date-header {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--color-text);
+    margin: 0 0 0.75rem;
+    padding: 0.6rem 1rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    letter-spacing: -0.01em;
+  }
+
+  .schedule-date-header::before {
+    content: "";
+    display: inline-block;
+    width: 4px;
+    height: 1.1em;
+    background: var(--color-primary);
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .schedule-date-count {
+    margin-left: auto;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .schedule-table .time-cell {
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--color-text-secondary);
+    letter-spacing: 0.01em;
+    width: 11rem;
+  }
+
+  .schedule-table .title-cell {
+    font-weight: 500;
+    min-width: 22rem;
+    line-height: 1.35;
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+
+  .schedule-table .title-cell a {
+    font-weight: 500;
+  }
+
+  .schedule-table .type-cell {
+    width: 12rem;
+    white-space: nowrap;
+  }
+
+  .schedule-table .type-cell .badge {
+    white-space: nowrap;
+  }
+
+  .schedule-table .room-cell {
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    width: 11rem;
+    word-break: keep-all;
+    overflow-wrap: normal;
+  }
+
+  .schedule-table .speakers-cell {
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+  }
+
+  .schedule-table .track-cell {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    width: 11rem;
+  }
+
+  .schedule-table .actions-cell {
+    width: 6rem;
+    white-space: nowrap;
+  }
+
+  .schedule-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  /* Submission type badges */
+  .badge--tutorial      { background: #ccfbf1; color: #0f766e; }
+  .badge--talk-sub      { background: #e0e7ff; color: #4338ca; }
+  .badge--poster        { background: #fef3c7; color: #92400e; }
+  .badge--charlas       { background: #ffe4e6; color: #be123c; }
+  .badge--sponsor-pres  { background: #f1f5f9; color: #475569; }
+  .badge--education     { background: #dbeafe; color: #1d4ed8; }
+
+  /* Non-talk slot type badges (inherit from base where possible) */
+  .badge--slot-break    { background: var(--color-break-bg); color: var(--color-break-text); }
+  .badge--slot-social   { background: var(--color-social-bg); color: var(--color-social-text); }
+  .badge--slot-other    { background: var(--color-border-light); color: var(--color-text-muted); }
+
+  /* Break/social rows get a subtle background tint */
+  .schedule-table tr.row--break td { background: #fffdf5; }
+  .schedule-table tr.row--social td { background: #f8faff; }
+  .schedule-table tr.row--other td { background: var(--color-bg); }
+</style>
+
+{% if grouped_slots %}
+  {% for day, slots in grouped_slots %}
+  <div class="schedule-date-group">
+    <div class="schedule-date-header">
+      {{ day|date:"l, N j, Y" }}
+      <span class="schedule-date-count">{{ slots|length }} slot{{ slots|length|pluralize }}</span>
+    </div>
+
+    <div class="schedule-table-wrap">
+    <table class="data-table schedule-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Title</th>
+          <th>Type</th>
+          <th>Room</th>
+          <th>Track</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for slot in slots %}
+        <tr class="{% if slot.slot_type == 'break' %}row--break{% elif slot.slot_type == 'social' %}row--social{% elif slot.slot_type == 'other' %}row--other{% endif %}">
+          <td class="time-cell">{{ slot.start|time:"H:i" }}&thinsp;&ndash;&thinsp;{{ slot.end|time:"H:i" }}</td>
+          <td class="title-cell">
+            {% if slot.talk %}
+              <a href="{% url 'manage:talk-detail' conference.slug slot.talk.pk %}">{{ slot.display_title }}</a>
+            {% else %}
+              {{ slot.display_title }}
+            {% endif %}
+          </td>
+          <td class="type-cell">
+            {% if slot.talk and slot.talk.submission_type %}
+              {% with sub_type=slot.talk.submission_type %}
+                {% if "Tutorial" in sub_type %}
+                  <span class="badge badge--tutorial">Tutorial</span>
+                {% elif "Poster" in sub_type %}
+                  <span class="badge badge--poster">Poster</span>
+                {% elif "Charlas" in sub_type %}
+                  <span class="badge badge--charlas">Charlas</span>
+                {% elif "Sponsor" in sub_type %}
+                  <span class="badge badge--sponsor-pres">Sponsor</span>
+                {% elif "Education" in sub_type %}
+                  <span class="badge badge--education">Education Summit</span>
+                {% elif "Talk" in sub_type %}
+                  <span class="badge badge--talk-sub">{{ sub_type }}</span>
+                {% else %}
+                  <span class="badge badge--talk-sub">{{ sub_type }}</span>
+                {% endif %}
+              {% endwith %}
+            {% elif slot.slot_type == 'break' %}
+              <span class="badge badge--slot-break">Break</span>
+            {% elif slot.slot_type == 'social' %}
+              <span class="badge badge--slot-social">Social</span>
+            {% elif slot.slot_type == 'other' %}
+              <span class="badge badge--slot-other">Other</span>
+            {% else %}
+              <span class="badge badge--talk">{{ slot.get_slot_type_display }}</span>
+            {% endif %}
+          </td>
+          <td class="room-cell">{% if slot.room %}{{ slot.room.name }}{% else %}&mdash;{% endif %}</td>
+          <td class="track-cell">
+            {% if slot.talk and slot.talk.track %}
+              {{ slot.talk.track }}
+            {% else %}
+              &mdash;
+            {% endif %}
+          </td>
+          <td class="actions-cell">
+            <a href="{% url 'manage:slot-edit' conference.slug slot.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>No schedule slots defined for this conference.</p>
+</div>
+{% endif %}
+{% endblock %}

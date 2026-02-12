@@ -1,0 +1,31 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Speakers{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Speakers</h2>
+</div>
+
+<div class="speaker-grid">
+  {% for speaker in speakers %}
+  <a href="{% url 'pretalx:speaker-detail' conference.slug speaker.pretalx_code %}" class="card speaker-card">
+    <div class="card-body speaker-card">
+      {% if speaker.avatar_url %}
+      <img src="{{ speaker.avatar_url }}" alt="{{ speaker.name }}" class="speaker-avatar" loading="lazy">
+      {% else %}
+      <span class="speaker-avatar-placeholder" aria-hidden="true">{{ speaker.name|first }}</span>
+      {% endif %}
+      <div class="speaker-info">
+        <div class="speaker-name">{{ speaker.name }}</div>
+        {% if speaker.biography %}
+        <p class="speaker-bio-preview">{{ speaker.biography|striptags|truncatewords:20 }}</p>
+        {% endif %}
+      </div>
+    </div>
+  </a>
+  {% empty %}
+  <p class="speaker-empty">No speakers synced yet.</p>
+  {% endfor %}
+</div>
+{% endblock %}

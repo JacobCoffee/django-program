@@ -4,9 +4,13 @@ Extends the test settings pattern with a persistent SQLite database,
 static file serving, and DEBUG mode for local development.
 """
 
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = "example-dev-key-not-for-production"
 SALT_KEY = "example-salt-key-not-for-production"
@@ -25,6 +29,7 @@ INSTALLED_APPS = [
     "django_program.pretalx",
     "django_program.sponsors",
     "django_program.programs",
+    "django_program.manage",
 ]
 
 MIDDLEWARE = [
@@ -65,3 +70,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/manage/"
+
+DJANGO_PROGRAM = {
+    "pretalx": {
+        "base_url": os.environ.get("PRETALX_BASE_URL", "https://pretalx.com"),
+        "token": os.environ.get("PRETALX_TOKEN", ""),
+    },
+}

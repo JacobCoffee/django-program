@@ -1,0 +1,70 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Schedule{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Schedule</h2>
+</div>
+
+{% for day, slots in days %}
+<section class="schedule-day">
+  <details class="schedule-day-disclosure" {% if day >= today %}open{% endif %}>
+  <summary class="schedule-day-heading">
+    <span>{{ day|date:"l, N j, Y" }}</span>
+    <span class="schedule-day-meta">{{ slots|length }} slot{{ slots|length|pluralize }}</span>
+  </summary>
+  <table class="schedule-table">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Room</th>
+        <th>Session</th>
+        <th>Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for slot in slots %}
+      <tr>
+        <td class="schedule-time">{{ slot.start|time:"H:i" }} &ndash; {{ slot.end|time:"H:i" }}</td>
+        <td class="schedule-room">{{ slot.room.name|default:"" }}</td>
+        <td class="schedule-session">
+          {% if slot.talk %}
+          <a href="{% url 'pretalx:talk-detail' conference.slug slot.talk.pretalx_code %}">{{ slot.display_title }}</a>
+          {% else %}
+          {{ slot.display_title }}
+          {% endif %}
+        </td>
+        <td class="schedule-type">
+          {% if slot.talk and slot.talk.submission_type %}
+            {% with sub_type=slot.talk.submission_type %}
+              {% if "Tutorial" in sub_type %}
+              <span class="slot-badge slot-badge--tutorial">Tutorial</span>
+              {% elif "Poster" in sub_type %}
+              <span class="slot-badge slot-badge--poster">Poster</span>
+              {% elif "Charlas" in sub_type %}
+              <span class="slot-badge slot-badge--charlas">Charlas</span>
+              {% elif "Sponsor" in sub_type %}
+              <span class="slot-badge slot-badge--sponsor-pres">Sponsor Presentation</span>
+              {% elif "Education" in sub_type %}
+              <span class="slot-badge slot-badge--education">Education Summit</span>
+              {% elif "Talk" in sub_type %}
+              <span class="slot-badge slot-badge--talk-sub">{{ sub_type }}</span>
+              {% else %}
+              <span class="slot-badge slot-badge--talk-sub">{{ sub_type }}</span>
+              {% endif %}
+            {% endwith %}
+          {% else %}
+          <span class="slot-badge slot-badge--{{ slot.slot_type }}">{{ slot.get_slot_type_display }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </details>
+</section>
+{% empty %}
+<p class="schedule-empty">No schedule data available yet.</p>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,641 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Import from Pretalx{% endblock %}
+
+{% block page_title %}
+<h1>Import from Pretalx</h1>
+<p>Bootstrap a new conference by importing event data from Pretalx</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:conference-list' %}" class="btn btn-secondary">Cancel</a>
+{% endblock %}
+
+{% block content %}
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .progress-track {
+    height: 6px;
+    background: var(--color-border, #e5e7eb);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--color-primary, #2563eb);
+    border-radius: 3px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .import-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    font-size: 0.9rem;
+    color: var(--color-text-muted, #9ca3af);
+    transition: color 0.3s;
+  }
+  .import-step.active {
+    color: var(--color-primary, #2563eb);
+    font-weight: 500;
+  }
+  .import-step.done {
+    color: var(--color-success-text, #166534);
+  }
+  .import-step.step-error {
+    color: var(--color-danger, #dc2626);
+  }
+  .step-icon {
+    flex-shrink: 0;
+    width: 1.25rem;
+    height: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    margin-top: 0.1rem;
+  }
+  .step-icon.pending { color: var(--color-text-muted, #9ca3af); }
+  .step-icon.active {
+    color: var(--color-primary, #2563eb);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .step-icon.done { color: var(--color-success-text, #166534); }
+  .step-icon.step-error { color: var(--color-danger, #dc2626); }
+  .step-spinner {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--color-border, #e5e7eb);
+    border-top-color: var(--color-primary, #2563eb);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  .step-detail {
+    font-size: 0.8rem;
+    color: var(--color-danger, #dc2626);
+    margin-top: 0.15rem;
+    opacity: 0.85;
+  }
+
+  /* Autocomplete dropdown */
+  .slug-autocomplete-wrapper {
+    position: relative;
+  }
+  .slug-autocomplete-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    margin-top: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+    background: var(--color-surface, #ffffff);
+    border: 1px solid var(--color-border, #e2e4e9);
+    border-radius: var(--radius-sm, 6px);
+    box-shadow: var(--shadow-md, 0 2px 8px rgba(0, 0, 0, 0.08));
+  }
+  .slug-autocomplete-dropdown.is-open {
+    display: block;
+  }
+  .slug-ac-item {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    transition: background 0.1s ease;
+    border-bottom: 1px solid var(--color-border-light, #f0f1f4);
+  }
+  .slug-ac-item:last-child {
+    border-bottom: none;
+  }
+  .slug-ac-item:hover,
+  .slug-ac-item.is-highlighted {
+    background: var(--color-primary-light, #e8e6f8);
+  }
+  .slug-ac-item-slug {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-primary, #4338ca);
+  }
+  .slug-ac-item-detail {
+    font-size: 0.78rem;
+    color: var(--color-text-muted, #8889a0);
+    margin-top: 0.1rem;
+  }
+  .slug-ac-status {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--color-text-muted, #8889a0);
+  }
+</style>
+
+<!-- Form container -->
+<div id="form-container" style="width: 100%;">
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+    <p style="margin-bottom: 1.25rem; color: var(--color-text-secondary); font-size: 0.9rem; line-height: 1.6;">
+      Enter a Pretalx event slug to fetch event metadata (name, dates, timezone) and
+      automatically sync rooms, speakers, talks, and the schedule.
+    </p>
+
+    {% if has_configured_token %}
+    <p style="margin-bottom: 1.25rem; padding: 0.5rem 0.75rem; background: var(--color-success-bg, #f0fdf4); border: 1px solid var(--color-success-border, #bbf7d0); border-radius: var(--radius-sm); font-size: 0.8rem; color: var(--color-success-text, #166534);">
+      A Pretalx API token is configured in settings. You can override it below if needed.
+    </p>
+    {% else %}
+    <p style="margin-bottom: 1.25rem; padding: 0.5rem 0.75rem; background: var(--color-warning-bg, #fffbeb); border: 1px solid var(--color-warning-border, #fde68a); border-radius: var(--radius-sm); font-size: 0.8rem; color: var(--color-warning-text, #92400e);">
+      No Pretalx API token configured. Provide one below if the event requires authentication.
+    </p>
+    {% endif %}
+
+    <form method="post" id="import-form" autocomplete="off">
+      {% csrf_token %}
+
+      {% for field in form %}
+      <div style="margin-bottom: 1.25rem;">
+        <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; color: var(--color-text);">
+          {{ field.label }}
+        </label>
+        <input
+          type="{{ field.field.widget.input_type|default:'text' }}"
+          name="{{ field.html_name }}"
+          id="{{ field.id_for_label }}"
+          value="{{ field.value|default:'' }}"
+          {% if field.field.required %}required{% endif %}
+          {% if field.field.max_length %}maxlength="{{ field.field.max_length }}"{% endif %}
+          {% for attr_name, attr_value in field.field.widget.attrs.items %}
+          {{ attr_name }}="{{ attr_value }}"
+          {% endfor %}
+          placeholder="{{ field.field.help_text }}"
+          style="width: 100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.9rem; font-family: var(--font-mono); background: var(--color-bg);"
+        >
+        {% if field.help_text %}
+        <p style="margin-top: 0.3rem; font-size: 0.8rem; color: var(--color-text-muted);">{{ field.help_text }}</p>
+        {% endif %}
+        {% if field.errors %}
+        <ul style="margin-top: 0.3rem; list-style: none; padding: 0;">
+          {% for error in field.errors %}
+          <li style="font-size: 0.85rem; color: var(--color-danger);">{{ error }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      <div style="display: flex; align-items: center; gap: 0.75rem; padding-top: 0.5rem;">
+        <button type="submit" class="btn btn-primary" id="import-btn">Import Conference</button>
+        <span style="font-size: 0.8rem; color: var(--color-text-muted);">This may take a moment for large events</span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Progress container (hidden until import starts) -->
+<div id="progress-container" style="display: none; width: 100%;">
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
+      <span id="progress-title" style="font-weight: 700; font-size: 1rem; color: var(--color-text);">Importing from Pretalx...</span>
+      <span id="progress-pct" style="font-size: 0.85rem; font-weight: 600; color: var(--color-primary, #2563eb); font-family: var(--font-mono);">0%</span>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress-track" style="margin-bottom: 1.5rem;">
+      <div class="progress-fill" id="progress-bar"></div>
+    </div>
+
+    <!-- Steps list -->
+    <div id="progress-steps">
+      <div class="import-step" data-step="1" id="step-1">
+        <span class="step-icon pending" id="icon-1">&bull;</span>
+        <span class="step-text" id="text-1">Fetch event metadata</span>
+      </div>
+      <div class="import-step" data-step="2" id="step-2">
+        <span class="step-icon pending" id="icon-2">&bull;</span>
+        <span class="step-text" id="text-2">Create conference</span>
+      </div>
+      <div class="import-step" data-step="3" id="step-3">
+        <span class="step-icon pending" id="icon-3">&bull;</span>
+        <span class="step-text" id="text-3">Sync rooms</span>
+      </div>
+      <div class="import-step" data-step="4" id="step-4">
+        <span class="step-icon pending" id="icon-4">&bull;</span>
+        <span class="step-text" id="text-4">Sync speakers</span>
+      </div>
+      <div class="import-step" data-step="5" id="step-5">
+        <span class="step-icon pending" id="icon-5">&bull;</span>
+        <span class="step-text" id="text-5">Sync talks</span>
+      </div>
+      <div class="import-step" data-step="6" id="step-6">
+        <span class="step-icon pending" id="icon-6">&bull;</span>
+        <span class="step-text" id="text-6">Sync schedule slots</span>
+      </div>
+    </div>
+
+    <!-- Error banner (hidden) -->
+    <div id="error-banner" style="display: none; margin-top: 1.25rem; padding: 0.75rem 1rem; background: var(--color-danger-bg, #fef2f2); border: 1px solid var(--color-danger-border, #fecaca); border-radius: var(--radius-sm); color: var(--color-danger, #dc2626); font-size: 0.9rem;">
+      <strong>Import failed:</strong> <span id="error-message"></span>
+    </div>
+
+    <!-- Success banner (hidden) -->
+    <div id="success-banner" style="display: none; margin-top: 1.25rem; padding: 0.75rem 1rem; background: var(--color-success-bg, #f0fdf4); border: 1px solid var(--color-success-border, #bbf7d0); border-radius: var(--radius-sm); color: var(--color-success-text, #166534); font-size: 0.9rem;">
+      <span id="success-message"></span>
+    </div>
+
+    <!-- Action buttons (hidden) -->
+    <div id="progress-actions" style="display: none; margin-top: 1.25rem; gap: 0.75rem;">
+      <a id="action-dashboard" href="#" class="btn btn-primary" style="display: none;">Go to Dashboard &rarr;</a>
+      <a id="action-retry" href="{% url 'manage:import-pretalx' %}" class="btn btn-secondary" style="display: none;">Try Again</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var form = document.getElementById('import-form');
+  var formContainer = document.getElementById('form-container');
+  var progressContainer = document.getElementById('progress-container');
+  var progressBar = document.getElementById('progress-bar');
+  var progressPct = document.getElementById('progress-pct');
+  var progressTitle = document.getElementById('progress-title');
+  var errorBanner = document.getElementById('error-banner');
+  var errorMessage = document.getElementById('error-message');
+  var successBanner = document.getElementById('success-banner');
+  var successMessage = document.getElementById('success-message');
+  var actionDashboard = document.getElementById('action-dashboard');
+  var actionRetry = document.getElementById('action-retry');
+  var progressActions = document.getElementById('progress-actions');
+
+  function setProgress(step, total) {
+    var pct = Math.round((step / total) * 100);
+    progressBar.style.width = pct + '%';
+    progressPct.textContent = pct + '%';
+  }
+
+  function setStepActive(step, label) {
+    var el = document.getElementById('step-' + step);
+    var icon = document.getElementById('icon-' + step);
+    var text = document.getElementById('text-' + step);
+    if (!el) return;
+    el.className = 'import-step active';
+    icon.className = 'step-icon active';
+    icon.innerHTML = '<span class="step-spinner"></span>';
+    if (label) text.textContent = label;
+  }
+
+  function setStepDone(step, label) {
+    var el = document.getElementById('step-' + step);
+    var icon = document.getElementById('icon-' + step);
+    var text = document.getElementById('text-' + step);
+    if (!el) return;
+    el.className = 'import-step done';
+    icon.className = 'step-icon done';
+    icon.innerHTML = '&#10003;';
+    if (label) text.textContent = label;
+  }
+
+  function setStepError(step, label, detail) {
+    var el = document.getElementById('step-' + step);
+    var icon = document.getElementById('icon-' + step);
+    var text = document.getElementById('text-' + step);
+    if (!el) return;
+    el.className = 'import-step step-error';
+    icon.className = 'step-icon step-error';
+    icon.innerHTML = '&#10007;';
+    if (label) text.textContent = label;
+    if (detail) {
+      var detailEl = document.createElement('div');
+      detailEl.className = 'step-detail';
+      detailEl.textContent = detail;
+      el.appendChild(detailEl);
+    }
+  }
+
+  function showError(message) {
+    progressTitle.textContent = 'Import Failed';
+    progressTitle.style.color = 'var(--color-danger, #dc2626)';
+    errorBanner.style.display = 'block';
+    errorMessage.textContent = message;
+    progressActions.style.display = 'flex';
+    actionRetry.style.display = 'inline-flex';
+  }
+
+  function showComplete(message, redirectUrl, isWarning) {
+    if (isWarning) {
+      progressTitle.textContent = 'Import Completed with Warnings';
+      progressTitle.style.color = 'var(--color-warning-text, #92400e)';
+    } else {
+      progressTitle.textContent = 'Import Complete!';
+      progressTitle.style.color = 'var(--color-success-text, #166534)';
+    }
+    progressBar.style.background = isWarning
+      ? 'var(--color-warning-border, #fde68a)'
+      : 'var(--color-success-text, #166534)';
+    progressPct.textContent = '100%';
+    progressBar.style.width = '100%';
+    successBanner.style.display = 'block';
+    successMessage.textContent = message;
+    progressActions.style.display = 'flex';
+    actionDashboard.style.display = 'inline-flex';
+    actionDashboard.href = redirectUrl;
+  }
+
+  function handleEvent(data) {
+    if (data.status === 'in_progress') {
+      setStepActive(data.step, data.label);
+      setProgress(data.step - 1, data.total);
+    } else if (data.status === 'done') {
+      setStepDone(data.step, data.label);
+      setProgress(data.step, data.total);
+    } else if (data.status === 'step_error') {
+      setStepError(data.step, data.label, data.detail);
+      setProgress(data.step, data.total);
+    } else if (data.status === 'error') {
+      if (data.step) {
+        setStepError(data.step, data.message);
+      }
+      showError(data.message);
+    } else if (data.status === 'complete') {
+      showComplete(data.message, data.redirect, data.warning);
+    }
+  }
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    formContainer.style.display = 'none';
+    progressContainer.style.display = 'block';
+    progressActions.style.display = 'none';
+
+    var formData = new FormData(form);
+
+    fetch('{% url "manage:import-pretalx-stream" %}', {
+      method: 'POST',
+      body: formData,
+    }).then(function(response) {
+      if (!response.ok) {
+        showError('Server returned ' + response.status + '. Please try again.');
+        return;
+      }
+      var reader = response.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+
+      function read() {
+        reader.read().then(function(result) {
+          if (result.done) return;
+          buffer += decoder.decode(result.value, {stream: true});
+          var parts = buffer.split('\n\n');
+          buffer = parts.pop();
+          for (var i = 0; i < parts.length; i++) {
+            var part = parts[i].trim();
+            if (part.indexOf('data: ') === 0) {
+              try {
+                var data = JSON.parse(part.substring(6));
+                handleEvent(data);
+              } catch (err) { /* skip malformed */ }
+            }
+          }
+          read();
+        }).catch(function(err) {
+          showError('Connection lost: ' + err.message);
+        });
+      }
+      read();
+    }).catch(function(err) {
+      showError('Network error: ' + err.message);
+    });
+  });
+})();
+</script>
+
+<script>
+(function() {
+  var SEARCH_URL = '{% url "manage:pretalx-event-search" %}';
+  var HAS_CONFIGURED_TOKEN = {{ has_configured_token|yesno:"true,false" }};
+  var DEBOUNCE_MS = 300;
+
+  var slugInput = document.getElementById('id_pretalx_event_slug');
+  var tokenInput = document.getElementById('id_api_token');
+  if (!slugInput) return;
+
+  // Wrap the input in a relative-positioned container
+  var wrapper = document.createElement('div');
+  wrapper.className = 'slug-autocomplete-wrapper';
+  slugInput.parentNode.insertBefore(wrapper, slugInput);
+  wrapper.appendChild(slugInput);
+
+  // Create the dropdown
+  var dropdown = document.createElement('div');
+  dropdown.className = 'slug-autocomplete-dropdown';
+  dropdown.id = 'slug-ac-dropdown';
+  wrapper.appendChild(dropdown);
+
+  var debounceTimer = null;
+  var abortController = null;
+  var highlightedIndex = -1;
+
+  function getTokenValue() {
+    return tokenInput ? tokenInput.value.trim() : '';
+  }
+
+  function hasToken() {
+    return HAS_CONFIGURED_TOKEN || getTokenValue().length > 0;
+  }
+
+  function openDropdown() {
+    dropdown.classList.add('is-open');
+  }
+
+  function closeDropdown() {
+    dropdown.classList.remove('is-open');
+    highlightedIndex = -1;
+  }
+
+  function setDropdownStatus(text) {
+    dropdown.innerHTML = '';
+    var el = document.createElement('div');
+    el.className = 'slug-ac-status';
+    el.textContent = text;
+    dropdown.appendChild(el);
+    openDropdown();
+  }
+
+  function renderResults(results) {
+    dropdown.innerHTML = '';
+    highlightedIndex = -1;
+
+    if (results.length === 0) {
+      setDropdownStatus('No events found');
+      return;
+    }
+
+    for (var i = 0; i < results.length; i++) {
+      var ev = results[i];
+      var item = document.createElement('div');
+      item.className = 'slug-ac-item';
+      item.setAttribute('data-slug', ev.slug);
+      item.setAttribute('data-index', i);
+
+      var slugLine = document.createElement('div');
+      slugLine.className = 'slug-ac-item-slug';
+      slugLine.textContent = ev.slug;
+      item.appendChild(slugLine);
+
+      var detailParts = [];
+      if (ev.name && ev.name !== ev.slug) {
+        detailParts.push(ev.name);
+      }
+      if (ev.date_from && ev.date_to) {
+        detailParts.push(ev.date_from + ' \u2192 ' + ev.date_to);
+      } else if (ev.date_from) {
+        detailParts.push(ev.date_from);
+      }
+      if (detailParts.length > 0) {
+        var detail = document.createElement('div');
+        detail.className = 'slug-ac-item-detail';
+        detail.textContent = detailParts.join(' \u2014 ');
+        item.appendChild(detail);
+      }
+
+      item.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        selectItem(this.getAttribute('data-slug'));
+      });
+
+      dropdown.appendChild(item);
+    }
+
+    openDropdown();
+  }
+
+  function selectItem(slug) {
+    slugInput.value = slug;
+    closeDropdown();
+    slugInput.focus();
+  }
+
+  function updateHighlight() {
+    var items = dropdown.querySelectorAll('.slug-ac-item');
+    for (var i = 0; i < items.length; i++) {
+      if (i === highlightedIndex) {
+        items[i].classList.add('is-highlighted');
+        items[i].scrollIntoView({ block: 'nearest' });
+      } else {
+        items[i].classList.remove('is-highlighted');
+      }
+    }
+  }
+
+  function doSearch(query) {
+    if (abortController) {
+      abortController.abort();
+    }
+
+    if (!hasToken()) {
+      closeDropdown();
+      return;
+    }
+
+    abortController = new AbortController();
+    var params = '?q=' + encodeURIComponent(query);
+    var tokenVal = getTokenValue();
+    if (tokenVal) {
+      params += '&token=' + encodeURIComponent(tokenVal);
+    }
+
+    setDropdownStatus('Searching\u2026');
+
+    fetch(SEARCH_URL + params, { signal: abortController.signal })
+      .then(function(response) {
+        if (!response.ok) {
+          closeDropdown();
+          return;
+        }
+        return response.json();
+      })
+      .then(function(data) {
+        if (data) {
+          renderResults(data);
+        }
+      })
+      .catch(function(err) {
+        if (err.name !== 'AbortError') {
+          closeDropdown();
+        }
+      });
+  }
+
+  slugInput.addEventListener('input', function() {
+    var val = this.value.trim();
+    clearTimeout(debounceTimer);
+
+    if (val.length < 1) {
+      closeDropdown();
+      return;
+    }
+
+    debounceTimer = setTimeout(function() {
+      doSearch(val);
+    }, DEBOUNCE_MS);
+  });
+
+  slugInput.addEventListener('keydown', function(e) {
+    if (!dropdown.classList.contains('is-open')) return;
+
+    var items = dropdown.querySelectorAll('.slug-ac-item');
+    var count = items.length;
+    if (count === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlightedIndex = (highlightedIndex + 1) % count;
+      updateHighlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlightedIndex = highlightedIndex <= 0 ? count - 1 : highlightedIndex - 1;
+      updateHighlight();
+    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+      e.preventDefault();
+      var selectedSlug = items[highlightedIndex].getAttribute('data-slug');
+      selectItem(selectedSlug);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeDropdown();
+    }
+  });
+
+  slugInput.addEventListener('focus', function() {
+    var val = this.value.trim();
+    if (val.length >= 1 && dropdown.children.length > 0) {
+      openDropdown();
+    }
+  });
+
+  slugInput.addEventListener('blur', function() {
+    // Small delay so mousedown on dropdown items fires first
+    setTimeout(closeDropdown, 150);
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!wrapper.contains(e.target)) {
+      closeDropdown();
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeDropdown();
+    }
+  });
+})();
+</script>
+{% endblock %}

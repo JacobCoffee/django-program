@@ -1,0 +1,118 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Talk Detail{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:talk-list' conference.slug %}">Talks</a>
+  <span class="breadcrumb-separator"></span>
+  <span>{{ talk.title }}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>{{ talk.title }}</h1>
+<p>Talk details</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:talk-edit' conference.slug talk.pk %}" class="btn btn-secondary">Edit</a>
+{% endblock %}
+
+{% block content %}
+<div class="card card--static" style="margin-bottom: 1.25rem;">
+  <div class="card-body">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem 1rem;">
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Submission Type</div>
+        <div>{% if talk.submission_type %}{{ talk.submission_type }}{% else %}&mdash;{% endif %}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Track</div>
+        <div>{% if talk.track %}{{ talk.track }}{% else %}&mdash;{% endif %}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">State</div>
+        <div>{% if talk.state %}{{ talk.state }}{% else %}&mdash;{% endif %}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Duration</div>
+        <div>{% if talk.duration %}{{ talk.duration }} min{% else %}&mdash;{% endif %}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Room</div>
+        <div>{% if talk.room %}{{ talk.room.name }}{% else %}&mdash;{% endif %}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Pretalx Code</div>
+        <div><span class="mono">{{ talk.pretalx_code }}</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card card--static" style="margin-bottom: 1.25rem;">
+  <div class="card-body">
+    <h2 class="section-heading">Speakers</h2>
+    {% if talk.speakers.exists %}
+    <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+      {% for speaker in talk.speakers.all %}
+      <li>
+        <a href="{% url 'manage:speaker-detail' conference.slug speaker.pk %}" class="badge badge--talk" style="font-size: 0.8rem;">
+          {{ speaker.name }}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state" style="margin-top: 0.75rem;">
+      <p>No speakers linked to this talk.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if talk.abstract %}
+<div class="card card--static" style="margin-bottom: 1.25rem;">
+  <div class="card-body">
+    <h2 class="section-heading">Abstract</h2>
+    <div>{{ talk.abstract|linebreaks }}</div>
+  </div>
+</div>
+{% endif %}
+
+{% if talk.description %}
+<div class="card card--static" style="margin-bottom: 1.25rem;">
+  <div class="card-body">
+    <h2 class="section-heading">Description</h2>
+    <div>{{ talk.description|linebreaks }}</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card card--static">
+  <div class="card-body">
+    <h2 class="section-heading">Schedule Slots</h2>
+    {% if talk_slots %}
+    <ul style="list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem;">
+      {% for slot in talk_slots %}
+      <li style="padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface);">
+        <a href="{% url 'manage:slot-edit' conference.slug slot.pk %}" style="font-weight: 600;">
+          {{ slot.start|date:"N j, H:i" }} - {{ slot.end|time:"H:i" }}
+        </a>
+        <div style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: 0.2rem;">
+          {% if slot.room %}{{ slot.room.name }}{% else %}No room{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state" style="margin-top: 0.75rem;">
+      <p>No schedule slots linked to this talk.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
