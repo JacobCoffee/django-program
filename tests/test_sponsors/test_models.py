@@ -55,3 +55,37 @@ def test_sponsor_benefit_str(sponsor: Sponsor):
         name="Logo on website",
     )
     assert str(benefit) == "Logo on website - Acme Corp"
+
+
+@pytest.mark.django_db
+def test_sponsor_external_id_field(conference: Conference, level: SponsorLevel):
+    sponsor = Sponsor.objects.create(
+        conference=conference,
+        level=level,
+        name="ExtID Corp",
+        external_id="psf-123",
+    )
+    sponsor.refresh_from_db()
+    assert sponsor.external_id == "psf-123"
+
+
+@pytest.mark.django_db
+def test_sponsor_external_id_default(sponsor: Sponsor):
+    assert sponsor.external_id == ""
+
+
+@pytest.mark.django_db
+def test_sponsor_logo_url_field(conference: Conference, level: SponsorLevel):
+    sponsor = Sponsor.objects.create(
+        conference=conference,
+        level=level,
+        name="LogoURL Corp",
+        logo_url="https://example.com/logo.png",
+    )
+    sponsor.refresh_from_db()
+    assert sponsor.logo_url == "https://example.com/logo.png"
+
+
+@pytest.mark.django_db
+def test_sponsor_logo_url_default(sponsor: Sponsor):
+    assert sponsor.logo_url == ""

@@ -17,12 +17,23 @@
 {% endblock %}
 
 {% block content %}
+{% if is_synced %}
+<div class="sync-banner">
+  <span>&#128274;</span>
+  This sponsor was synced from the PSF API (ID: {{ sponsor.external_id }}).
+  Synced fields are locked. Run a new sync to update PSF data.
+</div>
+{% endif %}
+
 <div class="form-container">
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     {% for field in form %}
-    <div class="form-group">
-      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    <div class="form-group {% if is_synced and field.name in synced_fields %}form-group--locked{% endif %}">
+      <label for="{{ field.id_for_label }}">
+        {{ field.label }}
+        {% if is_synced and field.name in synced_fields %}<span class="lock-icon" title="Synced from PSF">&#128274;</span>{% endif %}
+      </label>
       {{ field }}
       {% if field.help_text %}
       <span class="helptext">{{ field.help_text }}</span>

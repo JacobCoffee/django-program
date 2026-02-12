@@ -199,7 +199,20 @@ class SponsorLevelForm(forms.ModelForm):
 
 
 class SponsorForm(forms.ModelForm):
-    """Form for editing a sponsor."""
+    """Form for editing a sponsor.
+
+    When the sponsor has an ``external_id`` (synced from the PSF API),
+    fields that come from the upstream API are disabled to prevent
+    overwriting synced data.
+    """
+
+    SYNCED_FIELDS: list[str] = [
+        "name",
+        "level",
+        "website_url",
+        "logo_url",
+        "description",
+    ]
 
     class Meta:
         model = Sponsor
@@ -208,8 +221,18 @@ class SponsorForm(forms.ModelForm):
             "level",
             "website_url",
             "logo",
+            "logo_url",
             "description",
             "contact_name",
             "contact_email",
             "is_active",
         ]
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        """Initialise the form and disable synced fields when locked by PSF sync."""
+        self.is_synced: bool = kwargs.pop("is_synced", False)  # type: ignore[arg-type]
+        super().__init__(*args, **kwargs)
+        if self.is_synced:
+            for field_name in self.SYNCED_FIELDS:
+                if field_name in self.fields:
+                    self.fields[field_name].disabled = True

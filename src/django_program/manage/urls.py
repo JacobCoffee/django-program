@@ -34,6 +34,7 @@ from django_program.manage.views import (
     SponsorManageListView,
     SyncPretalxStreamView,
     SyncPretalxView,
+    SyncSponsorsView,
     TalkDetailView,
     TalkEditView,
     TalkListView,
@@ -50,6 +51,7 @@ urlpatterns = [
     path("<slug:conference_slug>/edit/", ConferenceEditView.as_view(), name="conference-edit"),
     path("<slug:conference_slug>/sync/", SyncPretalxView.as_view(), name="sync-pretalx"),
     path("<slug:conference_slug>/sync/stream/", SyncPretalxStreamView.as_view(), name="sync-pretalx-stream"),
+    path("<slug:conference_slug>/sync-sponsors/", SyncSponsorsView.as_view(), name="sync-sponsors"),
     path("<slug:conference_slug>/sections/", SectionListView.as_view(), name="section-list"),
     path("<slug:conference_slug>/sections/add/", SectionCreateView.as_view(), name="section-add"),
     path(

@@ -42,6 +42,8 @@ from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.pretalx.sync import PretalxSyncService
 from django_program.settings import get_config
 from django_program.sponsors.models import Sponsor, SponsorLevel
+from django_program.sponsors.profiles.resolver import resolve_sponsor_profile
+from django_program.sponsors.sync import SponsorSyncService
 from pretalx_client.adapters.normalization import localized as _localized
 from pretalx_client.client import PretalxClient
 
@@ -608,6 +610,12 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             "sponsors": Sponsor.objects.filter(conference=conference).count(),
             "sponsor_levels": SponsorLevel.objects.filter(conference=conference).count(),
         }
+
+        sponsor_profile = resolve_sponsor_profile(
+            event_slug=conference.pretalx_event_slug or "",
+            conference_slug=str(conference.slug),
+        )
+        context["has_psf_sponsor_sync"] = sponsor_profile.has_api_sync
 
         return context
 
@@ -1191,7 +1199,11 @@ class SponsorLevelListView(ManagePermissionMixin, ListView):
 
     def get_queryset(self) -> QuerySet[SponsorLevel]:
         """Return sponsor levels for the current conference."""
-        return SponsorLevel.objects.filter(conference=self.conference).order_by("order", "name")
+        return (
+            SponsorLevel.objects.filter(conference=self.conference)
+            .annotate(sponsor_count=Count("sponsors"))
+            .order_by("order", "name")
+        )
 
 
 class SponsorLevelEditView(ManagePermissionMixin, UpdateView):
@@ -1266,22 +1278,34 @@ class SponsorManageListView(ManagePermissionMixin, ListView):
 
 
 class SponsorEditView(ManagePermissionMixin, UpdateView):
-    """Edit a sponsor."""
+    """Edit a sponsor.
+
+    Fields synced from the PSF API are disabled when the sponsor has
+    an ``external_id``.
+    """
 
     template_name = "django_program/manage/sponsor_edit.html"
     form_class = SponsorForm
     context_object_name = "sponsor"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add ``active_nav`` and benefits to the template context."""
+        """Add ``active_nav``, sync status, and benefits to the template context."""
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "sponsors"
         context["benefits"] = self.object.benefits.all()
+        context["is_synced"] = bool(self.object.external_id)
+        context["synced_fields"] = SponsorForm.SYNCED_FIELDS
         return context
 
     def get_queryset(self) -> QuerySet[Sponsor]:
         """Scope to the current conference."""
         return Sponsor.objects.filter(conference=self.conference).select_related("level")
+
+    def get_form_kwargs(self) -> dict[str, Any]:
+        """Pass the sync status to the form."""
+        kwargs = super().get_form_kwargs()
+        kwargs["is_synced"] = bool(self.object.external_id)
+        return kwargs
 
     def get_form(self, form_class: type[SponsorForm] | None = None) -> SponsorForm:
         """Scope the level queryset to the current conference."""
@@ -1310,7 +1334,14 @@ class SponsorCreateView(ManagePermissionMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "sponsors"
         context["is_create"] = True
+        context["is_synced"] = False
         return context
+
+    def get_form_kwargs(self) -> dict[str, Any]:
+        """Pass is_synced=False so all fields are editable."""
+        kwargs = super().get_form_kwargs()
+        kwargs["is_synced"] = False
+        return kwargs
 
     def get_form(self, form_class: type[SponsorForm] | None = None) -> SponsorForm:
         """Scope the level queryset to the current conference."""
@@ -1396,6 +1427,38 @@ class SyncPretalxView(ManagePermissionMixin, View):
                 messages.success(request, f"Synced {', '.join(parts)}.")
         except RuntimeError as exc:
             messages.error(request, f"Sync failed: {exc}")
+
+        return redirect("manage:dashboard", conference_slug=self.conference.slug)
+
+
+class SyncSponsorsView(ManagePermissionMixin, View):
+    """Trigger a PSF sponsor sync for the current conference.
+
+    Accepts POST requests. Only available for PyCon US conferences
+    where the sponsor profile supports API sync.
+    """
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Run the PSF sponsor sync and redirect back to the dashboard.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments (unused).
+
+        Returns:
+            A redirect to the conference dashboard with a flash message.
+        """
+        try:
+            service = SponsorSyncService(self.conference)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect("manage:dashboard", conference_slug=self.conference.slug)
+
+        try:
+            results = service.sync_all()
+            messages.success(request, f"Synced {results['sponsors']} sponsors from PSF.")
+        except RuntimeError as exc:
+            messages.error(request, f"Sponsor sync failed: {exc}")
 
         return redirect("manage:dashboard", conference_slug=self.conference.slug)
 

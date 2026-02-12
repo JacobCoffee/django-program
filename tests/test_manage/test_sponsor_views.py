@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import User
@@ -184,3 +185,98 @@ def test_sponsor_edit_get_with_benefits(authed_client: Client, conference, spons
     assert response.status_code == 200
     assert response.context["sponsor"] == sponsor
     assert benefit in response.context["benefits"]
+    assert response.context["is_synced"] is False
+
+
+@pytest.mark.django_db
+def test_sponsor_edit_synced_fields_locked(authed_client: Client, conference, level):
+    synced_sponsor = Sponsor.objects.create(conference=conference, level=level, name="PSF Corp", external_id="psf-42")
+    url = reverse("manage:sponsor-edit", kwargs={"conference_slug": conference.slug, "pk": synced_sponsor.pk})
+    response = authed_client.get(url)
+    assert response.status_code == 200
+    assert response.context["is_synced"] is True
+    form = response.context["form"]
+    assert form.fields["name"].disabled is True
+    assert form.fields["level"].disabled is True
+    assert form.fields["website_url"].disabled is True
+    assert form.fields["description"].disabled is True
+    assert form.fields["contact_name"].disabled is False
+    assert form.fields["contact_email"].disabled is False
+    assert form.fields["is_active"].disabled is False
+
+
+@pytest.mark.django_db
+def test_sponsor_edit_unsynced_fields_editable(authed_client: Client, conference, sponsor):
+    url = reverse("manage:sponsor-edit", kwargs={"conference_slug": conference.slug, "pk": sponsor.pk})
+    response = authed_client.get(url)
+    form = response.context["form"]
+    assert form.fields["name"].disabled is False
+    assert form.fields["level"].disabled is False
+
+
+# ---- PSF Sponsor Sync views ----
+
+
+@pytest.fixture
+def pyconus_conference(db):
+    return Conference.objects.create(
+        name="PyCon US 2027",
+        slug="pycon-us-2027",
+        start_date=date(2027, 5, 14),
+        end_date=date(2027, 5, 22),
+        timezone="America/New_York",
+        pretalx_event_slug="pyconus2027",
+        is_active=True,
+    )
+
+
+@pytest.mark.django_db
+def test_dashboard_shows_psf_sync_for_pyconus(authed_client: Client, pyconus_conference):
+    url = reverse("manage:dashboard", kwargs={"conference_slug": pyconus_conference.slug})
+    response = authed_client.get(url)
+    assert response.status_code == 200
+    assert response.context["has_psf_sponsor_sync"] is True
+
+
+@pytest.mark.django_db
+def test_dashboard_hides_psf_sync_for_non_pyconus(authed_client: Client, conference):
+    url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+    response = authed_client.get(url)
+    assert response.status_code == 200
+    assert response.context["has_psf_sponsor_sync"] is False
+
+
+@pytest.mark.django_db
+@patch("django_program.manage.views.SponsorSyncService")
+def test_sync_sponsors_view_success(mock_service_cls, authed_client: Client, pyconus_conference):
+    mock_service = mock_service_cls.return_value
+    mock_service.sync_all.return_value = {"sponsors": 5}
+
+    url = reverse("manage:sync-sponsors", kwargs={"conference_slug": pyconus_conference.slug})
+    response = authed_client.post(url)
+
+    assert response.status_code == 302
+    mock_service.sync_all.assert_called_once()
+
+
+@pytest.mark.django_db
+@patch("django_program.manage.views.SponsorSyncService")
+def test_sync_sponsors_view_value_error(mock_service_cls, authed_client: Client, conference):
+    mock_service_cls.side_effect = ValueError("Not supported")
+
+    url = reverse("manage:sync-sponsors", kwargs={"conference_slug": conference.slug})
+    response = authed_client.post(url)
+
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+@patch("django_program.manage.views.SponsorSyncService")
+def test_sync_sponsors_view_runtime_error(mock_service_cls, authed_client: Client, pyconus_conference):
+    mock_service = mock_service_cls.return_value
+    mock_service.sync_all.side_effect = RuntimeError("API failed")
+
+    url = reverse("manage:sync-sponsors", kwargs={"conference_slug": pyconus_conference.slug})
+    response = authed_client.post(url)
+
+    assert response.status_code == 302

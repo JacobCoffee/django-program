@@ -41,11 +41,23 @@ class PretalxConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PSFSponsorConfig:
+    """PSF sponsorship API configuration for PyCon US conferences."""
+
+    api_url: str = "https://www.python.org/api/v2"
+    token: str | None = None
+    auth_scheme: str = "Token"
+    publisher: str = "pycon"
+    flight: str = "sponsors"
+
+
+@dataclass(frozen=True, slots=True)
 class ProgramConfig:
     """Top-level django-program configuration."""
 
     stripe: StripeConfig = field(default_factory=StripeConfig)
     pretalx: PretalxConfig = field(default_factory=PretalxConfig)
+    psf_sponsors: PSFSponsorConfig = field(default_factory=PSFSponsorConfig)
     cart_expiry_minutes: int = 30
     pending_order_expiry_minutes: int = 15
     order_reference_prefix: str = "ORD"
@@ -70,16 +82,21 @@ def get_config() -> ProgramConfig:
 
     stripe_data = raw_data.pop("stripe", {})
     pretalx_data = raw_data.pop("pretalx", {})
+    psf_sponsors_data = raw_data.pop("psf_sponsors", {})
     if not isinstance(stripe_data, Mapping):
         msg = "DJANGO_PROGRAM['stripe'] must be a mapping (dict-like object)"
         raise TypeError(msg)
     if not isinstance(pretalx_data, Mapping):
         msg = "DJANGO_PROGRAM['pretalx'] must be a mapping (dict-like object)"
         raise TypeError(msg)
+    if not isinstance(psf_sponsors_data, Mapping):
+        msg = "DJANGO_PROGRAM['psf_sponsors'] must be a mapping (dict-like object)"
+        raise TypeError(msg)
 
     config = ProgramConfig(
         stripe=StripeConfig(**dict(stripe_data)),
         pretalx=PretalxConfig(**dict(pretalx_data)),
+        psf_sponsors=PSFSponsorConfig(**dict(psf_sponsors_data)),
         **raw_data,
     )
     _validate_program_config(config)

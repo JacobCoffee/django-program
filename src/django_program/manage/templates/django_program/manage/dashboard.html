@@ -192,6 +192,19 @@
 </div>
 {% endif %}
 
+{% if has_psf_sponsor_sync %}
+<h2 class="section-heading">PSF Sponsor Sync</h2>
+<div class="sync-panel" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+  <p style="margin-bottom: 1rem; color: var(--color-text-secondary); font-size: 0.9rem;">
+    Pull sponsor data from the Python Software Foundation sponsorship API.
+  </p>
+  <form method="post" action="{% url 'manage:sync-sponsors' conference.slug %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary">Sync Sponsors from PSF</button>
+  </form>
+</div>
+{% endif %}
+
 {% if conference.pretalx_event_slug %}
 <script>
 (function() {

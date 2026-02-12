@@ -27,20 +27,27 @@ def generate_comp_vouchers(sender: object, instance: Sponsor, created: bool, **k
     if comp_ticket_count <= 0:
         return
 
-    vouchers = [
-        Voucher(
-            conference=instance.conference,
-            code=f"SPONSOR-{instance.slug.upper()}-{i + 1}",
-            voucher_type=Voucher.VoucherType.COMP,
-            discount_value=0,
-            max_uses=1,
-            unlocks_hidden_tickets=True,
-            is_active=True,
+    slug_upper = (instance.slug or "").upper()
+    prefix = "SPONSOR-"
+
+    vouchers = []
+    for i in range(comp_ticket_count):
+        suffix = f"-{i + 1}"
+        max_slug_len = 100 - len(prefix) - len(suffix)
+        code = f"{prefix}{slug_upper[:max_slug_len]}{suffix}"
+        vouchers.append(
+            Voucher(
+                conference=instance.conference,
+                code=code,
+                voucher_type=Voucher.VoucherType.COMP,
+                discount_value=0,
+                max_uses=1,
+                unlocks_hidden_tickets=True,
+                is_active=True,
+            )
         )
-        for i in range(comp_ticket_count)
-    ]
 
     Voucher.objects.bulk_create(vouchers, ignore_conflicts=True)
 
 
-post_save.connect(generate_comp_vouchers, sender=Sponsor)
+post_save.connect(generate_comp_vouchers, sender=Sponsor, dispatch_uid="sponsors.generate_comp_vouchers")

@@ -33,6 +33,13 @@ TEMPLATES = [
         },
     },
 ]
+DJANGO_PROGRAM = {
+    "psf_sponsors": {
+        "api_url": "https://www.python.org/api/v2",
+        "publisher": "pycon",
+        "flight": "sponsors",
+    },
+}
 SECRET_KEY = "test-secret-key-not-for-production"
 SALT_KEY = "test-salt-key-not-for-production"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

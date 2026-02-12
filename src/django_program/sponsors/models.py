@@ -1,5 +1,6 @@
 """Sponsor level, sponsor, and benefit models for django-program."""
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
 
@@ -68,8 +69,19 @@ class Sponsor(models.Model):
     )
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, blank=True)
+    external_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="External identifier from the PSF sponsorship API.",
+    )
     website_url = models.URLField(blank=True, default="")
     logo = models.ImageField(upload_to="sponsors/logos/", blank=True, default="")
+    logo_url = models.URLField(
+        blank=True,
+        default="",
+        help_text="Remote logo URL from the PSF sponsorship API.",
+    )
     description = models.TextField(blank=True, default="")
     contact_name = models.CharField(max_length=200, blank=True, default="")
     contact_email = models.EmailField(blank=True, default="")
@@ -89,6 +101,12 @@ class Sponsor(models.Model):
         if not self.slug:
             self.slug = slugify(self.name)
         super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        """Validate that the sponsor's level belongs to the same conference."""
+        if self.level_id and self.conference_id and self.level.conference_id != self.conference_id:
+            msg = "Sponsor level must belong to the same conference as the sponsor."
+            raise ValidationError({"level": msg})
 
 
 class SponsorBenefit(models.Model):
