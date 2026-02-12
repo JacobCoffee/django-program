@@ -96,7 +96,7 @@
       <td><span style="font-size: 0.82rem;">{{ grant.get_application_type_display }}</span></td>
       <td>{{ grant.travel_from }}{% if grant.international %} <span style="font-size: 0.72rem; color: var(--color-primary);">intl</span>{% endif %}</td>
       <td>${{ grant.requested_amount }}</td>
-      <td>{% if grant.approved_amount %} ${{ grant.approved_amount }}{% else %}--{% endif %}</td>
+      <td>{% if grant.approved_amount is not None %}${{ grant.approved_amount }}{% else %}--{% endif %}</td>
       <td>
         {% if grant.receipt_count is not None %}{{ grant.receipt_count }}{% else %}--{% endif %}
       </td>
