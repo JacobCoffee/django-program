@@ -187,6 +187,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
+          uv run coverage combine
           uv run coverage report --show-missing --fail-under=100
           uv run coverage xml -o coverage.xml
 
