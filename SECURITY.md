@@ -2,20 +2,18 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+We support the latest LTS of Django (5.2) and above.
+Our libraries `django-program` and `pretalx-client` will revolve around this.
 
-| Version | Supported          |
+They are both versioned with semver, so breaking changes are (best-effort) guaranteed to happen in major version bumps only.
+In other words:
+
+| Version | Breaking Changes          |
 | ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| 1.0 -> 1.2   | No |
+| 1.2 -> 2.0   | Yes                |
+| 1.2 -> 1.2.3   | No |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
-
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Report via GHSA: https://github.com/JacobCoffee/django-program/security/advisories/new
