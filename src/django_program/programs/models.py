@@ -18,6 +18,7 @@ class Activity(models.Model):
         SPRINT = "sprint", "Sprint"
         WORKSHOP = "workshop", "Workshop"
         TUTORIAL = "tutorial", "Tutorial"
+        LIGHTNING_TALK = "lightning_talk", "Lightning Talk"
         SOCIAL = "social", "Social Event"
         OPEN_SPACE = "open_space", "Open Space"
         OTHER = "other", "Other"
