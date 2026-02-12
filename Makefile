@@ -12,7 +12,7 @@ UV            ?= uv $(UV_OPTS)
 .PHONY: install-uv install-prek upgrade
 .PHONY: ci
 .PHONY: act act-ci act-docs act-list
-.PHONY: test-cov test-fast build destroy
+.PHONY: test-cov test-fast test-seq build destroy
 .PHONY: pretalx-generate-http-client pretalx-codegen pretalx-sync-schema
 .PHONY: test-pretalx-client
 
@@ -102,8 +102,11 @@ test: ## Run the tests
 test-cov: ## Run tests with coverage report
 	@PYTHONDONTWRITEBYTECODE=1 $(UV) run --no-sync pytest --cov=src/django_program --cov-report=html --cov-report=term
 
-test-fast: ## Run tests without coverage (faster)
+test-fast: ## Run tests without coverage (faster, stop on first failure)
 	@PYTHONDONTWRITEBYTECODE=1 $(UV) run --no-sync pytest -x -q
+
+test-seq: ## Run tests sequentially (no parallelism, verbose)
+	@PYTHONDONTWRITEBYTECODE=1 $(UV) run --no-sync pytest -n0 -v
 
 test-pretalx-client: ## Run pretalx-client package tests
 	@PYTHONDONTWRITEBYTECODE=1 $(UV) run --no-sync pytest packages/pretalx-client/tests/ -v
