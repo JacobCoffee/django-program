@@ -11,6 +11,7 @@ from django.core.validators import RegexValidator
 
 from django_program.conference.models import Conference, Section
 from django_program.pretalx.models import Room, ScheduleSlot, Talk
+from django_program.programs.models import Activity, TravelGrant
 from django_program.sponsors.models import Sponsor, SponsorLevel
 
 
@@ -236,3 +237,39 @@ class SponsorForm(forms.ModelForm):
             for field_name in self.SYNCED_FIELDS:
                 if field_name in self.fields:
                     self.fields[field_name].disabled = True
+
+
+class ActivityForm(forms.ModelForm):
+    """Form for editing a conference activity."""
+
+    class Meta:
+        model = Activity
+        fields = [
+            "name",
+            "slug",
+            "activity_type",
+            "description",
+            "location",
+            "start_time",
+            "end_time",
+            "max_participants",
+            "requires_ticket",
+            "external_url",
+            "is_active",
+        ]
+        widgets = {
+            "start_time": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+            "end_time": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+        }
+
+
+class TravelGrantForm(forms.ModelForm):
+    """Form for reviewing a travel grant application."""
+
+    class Meta:
+        model = TravelGrant
+        fields = [
+            "status",
+            "approved_amount",
+            "reviewer_notes",
+        ]

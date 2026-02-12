@@ -1,0 +1,55 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Travel Grants{% endblock %}
+
+{% block page_title %}
+<h1>Travel Grants</h1>
+<p>Review and manage travel grant applications</p>
+{% endblock %}
+
+{% block content %}
+{% if grants %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Applicant</th>
+      <th>Traveling From</th>
+      <th>Requested</th>
+      <th>Approved</th>
+      <th>Status</th>
+      <th>Applied</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for grant in grants %}
+    <tr>
+      <td>{{ grant.user.get_full_name|default:grant.user.username }}</td>
+      <td>{{ grant.travel_from }}</td>
+      <td>${{ grant.requested_amount }}</td>
+      <td>{% if grant.approved_amount %} ${{ grant.approved_amount }}{% else %}--{% endif %}</td>
+      <td>
+        {% if grant.status == "pending" %}
+        <span class="badge badge--warning">Pending</span>
+        {% elif grant.status == "approved" %}
+        <span class="badge badge--active">Approved</span>
+        {% elif grant.status == "rejected" %}
+        <span class="badge badge--inactive">Rejected</span>
+        {% elif grant.status == "withdrawn" %}
+        <span class="badge badge--other">Withdrawn</span>
+        {% endif %}
+      </td>
+      <td>{{ grant.created_at|date:"N j, Y" }}</td>
+      <td>
+        <a href="{% url 'manage:travel-grant-review' conference.slug grant.pk %}" class="btn btn-sm btn-secondary">Review</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No travel grant applications yet.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -22,6 +22,7 @@ from django.db.models import Count, Q, QuerySet
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.timezone import localdate
 from django.views import View
@@ -29,6 +30,7 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 from django_program.conference.models import Conference, Section
 from django_program.manage.forms import (
+    ActivityForm,
     ConferenceForm,
     ImportFromPretalxForm,
     RoomForm,
@@ -37,9 +39,11 @@ from django_program.manage.forms import (
     SponsorForm,
     SponsorLevelForm,
     TalkForm,
+    TravelGrantForm,
 )
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.pretalx.sync import PretalxSyncService
+from django_program.programs.models import Activity, TravelGrant
 from django_program.settings import get_config
 from django_program.sponsors.models import Sponsor, SponsorLevel
 from django_program.sponsors.profiles.resolver import resolve_sponsor_profile
@@ -609,6 +613,8 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             "unscheduled_talks": Talk.objects.filter(conference=conference, slot_start__isnull=True).count(),
             "sponsors": Sponsor.objects.filter(conference=conference).count(),
             "sponsor_levels": SponsorLevel.objects.filter(conference=conference).count(),
+            "activities": Activity.objects.filter(conference=conference).count(),
+            "travel_grants": TravelGrant.objects.filter(conference=conference).count(),
         }
 
         sponsor_profile = resolve_sponsor_profile(
@@ -1358,6 +1364,127 @@ class SponsorCreateView(ManagePermissionMixin, CreateView):
     def get_success_url(self) -> str:
         """Redirect to the sponsor list."""
         return reverse("manage:sponsor-manage-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class ActivityManageListView(ManagePermissionMixin, ListView):
+    """List activities for the current conference."""
+
+    template_name = "django_program/manage/activity_list.html"
+    context_object_name = "activities"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "activities"
+        return context
+
+    def get_queryset(self) -> QuerySet[Activity]:
+        """Return activities for the current conference."""
+        return Activity.objects.filter(conference=self.conference).order_by("start_time", "name")
+
+
+class ActivityEditView(ManagePermissionMixin, UpdateView):
+    """Edit an activity."""
+
+    template_name = "django_program/manage/activity_edit.html"
+    form_class = ActivityForm
+    context_object_name = "activity"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and signup count to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "activities"
+        context["signup_count"] = self.object.signups.count()
+        return context
+
+    def get_queryset(self) -> QuerySet[Activity]:
+        """Scope to the current conference."""
+        return Activity.objects.filter(conference=self.conference)
+
+    def get_success_url(self) -> str:
+        """Redirect to the activity list."""
+        return reverse("manage:activity-list", kwargs={"conference_slug": self.conference.slug})
+
+    def form_valid(self, form: ActivityForm) -> HttpResponse:
+        """Save and flash success."""
+        messages.success(self.request, "Activity updated successfully.")
+        return super().form_valid(form)
+
+
+class ActivityCreateView(ManagePermissionMixin, CreateView):
+    """Create a new activity."""
+
+    template_name = "django_program/manage/activity_edit.html"
+    form_class = ActivityForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and ``is_create`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "activities"
+        context["is_create"] = True
+        return context
+
+    def form_valid(self, form: ActivityForm) -> HttpResponse:
+        """Assign the conference before saving."""
+        form.instance.conference = self.conference
+        messages.success(self.request, "Activity created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the activity list."""
+        return reverse("manage:activity-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class TravelGrantManageListView(ManagePermissionMixin, ListView):
+    """List travel grant applications for the current conference."""
+
+    template_name = "django_program/manage/travel_grant_list.html"
+    context_object_name = "grants"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "travel-grants"
+        return context
+
+    def get_queryset(self) -> QuerySet[TravelGrant]:
+        """Return travel grants for the current conference."""
+        qs = TravelGrant.objects.filter(conference=self.conference).select_related("user").order_by("-created_at")
+        status_filter = self.request.GET.get("status", "").strip()
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return qs
+
+
+class TravelGrantReviewView(ManagePermissionMixin, UpdateView):
+    """Review a travel grant application."""
+
+    template_name = "django_program/manage/travel_grant_edit.html"
+    form_class = TravelGrantForm
+    context_object_name = "grant"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "travel-grants"
+        return context
+
+    def get_queryset(self) -> QuerySet[TravelGrant]:
+        """Scope to the current conference."""
+        return TravelGrant.objects.filter(conference=self.conference).select_related("user")
+
+    def get_success_url(self) -> str:
+        """Redirect to the travel grants list."""
+        return reverse("manage:travel-grant-list", kwargs={"conference_slug": self.conference.slug})
+
+    def form_valid(self, form: TravelGrantForm) -> HttpResponse:
+        """Record the reviewer and flash success."""
+        form.instance.reviewed_by = self.request.user
+        form.instance.reviewed_at = timezone.now()
+        messages.success(self.request, "Travel grant updated successfully.")
+        return super().form_valid(form)
 
 
 class SyncPretalxView(ManagePermissionMixin, View):

@@ -1056,6 +1056,21 @@
           </li>
         </ul>
       </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Programs</div>
+        <ul class="sidebar-nav">
+          <li>
+            <a href="{% url 'manage:activity-list' conference.slug %}" class="{% if active_nav == 'activities' %}active{% endif %}">
+              <span class="sidebar-nav-icon">&#9654;</span> Activities
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'manage:travel-grant-list' conference.slug %}" class="{% if active_nav == 'travel-grants' %}active{% endif %}">
+              <span class="sidebar-nav-icon">&#9992;</span> Travel Grants
+            </a>
+          </li>
+        </ul>
+      </div>
     </nav>
     {% endif %}
 

@@ -1,0 +1,24 @@
+{% block title %}Apply for Travel Grant{% endblock %}
+
+{% block content %}
+<a href="{% url 'programs:activity-list' conference.slug %}">Back to activities</a>
+
+<h2>Apply for a Travel Grant</h2>
+
+<form method="post">
+  {% csrf_token %}
+  <div>
+    <label for="requested_amount">Requested Amount ($):</label>
+    <input type="number" id="requested_amount" name="requested_amount" step="0.01" min="0" required>
+  </div>
+  <div>
+    <label for="travel_from">Traveling From:</label>
+    <input type="text" id="travel_from" name="travel_from" maxlength="200" required>
+  </div>
+  <div>
+    <label for="reason">Why do you need a travel grant?</label>
+    <textarea id="reason" name="reason" required></textarea>
+  </div>
+  <button type="submit">Submit Application</button>
+</form>
+{% endblock %}

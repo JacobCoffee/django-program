@@ -10,6 +10,9 @@ Mount under a prefix in the host project::
 from django.urls import path
 
 from django_program.manage.views import (
+    ActivityCreateView,
+    ActivityEditView,
+    ActivityManageListView,
     ConferenceEditView,
     ConferenceListView,
     DashboardView,
@@ -38,6 +41,8 @@ from django_program.manage.views import (
     TalkDetailView,
     TalkEditView,
     TalkListView,
+    TravelGrantManageListView,
+    TravelGrantReviewView,
 )
 
 app_name = "manage"
@@ -95,5 +100,18 @@ urlpatterns = [
         "<slug:conference_slug>/sponsors/<int:pk>/edit/",
         SponsorEditView.as_view(),
         name="sponsor-edit",
+    ),
+    path("<slug:conference_slug>/activities/", ActivityManageListView.as_view(), name="activity-list"),
+    path("<slug:conference_slug>/activities/add/", ActivityCreateView.as_view(), name="activity-add"),
+    path(
+        "<slug:conference_slug>/activities/<int:pk>/edit/",
+        ActivityEditView.as_view(),
+        name="activity-edit",
+    ),
+    path("<slug:conference_slug>/travel-grants/", TravelGrantManageListView.as_view(), name="travel-grant-list"),
+    path(
+        "<slug:conference_slug>/travel-grants/<int:pk>/review/",
+        TravelGrantReviewView.as_view(),
+        name="travel-grant-review",
     ),
 ]

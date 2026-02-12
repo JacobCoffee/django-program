@@ -1,0 +1,56 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Activities{% endblock %}
+
+{% block page_title %}
+<h1>Activities</h1>
+<p>Sprints, workshops, social events, and more</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:activity-add' conference.slug %}" class="btn btn-primary">Add Activity</a>
+{% endblock %}
+
+{% block content %}
+{% if activities %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Start Time</th>
+      <th>Location</th>
+      <th>Signups</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for activity in activities %}
+    <tr>
+      <td>{{ activity.name }}</td>
+      <td>{{ activity.get_activity_type_display }}</td>
+      <td>{{ activity.start_time|default:"--" }}</td>
+      <td>{{ activity.location|default:"--" }}</td>
+      <td>{{ activity.signups.count }}{% if activity.max_participants %} / {{ activity.max_participants }}{% endif %}</td>
+      <td>
+        {% if activity.is_active %}
+        <span class="badge badge--active">Active</span>
+        {% else %}
+        <span class="badge badge--inactive">Inactive</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{% url 'manage:activity-edit' conference.slug activity.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No activities for this conference yet.</p>
+  <p><a href="{% url 'manage:activity-add' conference.slug %}" class="btn btn-primary">Add First Activity</a></p>
+</div>
+{% endif %}
+{% endblock %}

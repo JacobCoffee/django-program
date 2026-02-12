@@ -1,0 +1,50 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}{% if is_create %}Add Activity{% else %}Edit Activity{% endif %}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:activity-list' conference.slug %}">Activities</a>
+  <span class="breadcrumb-separator"></span>
+  <span>{% if is_create %}Add{% else %}Edit{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>{% if is_create %}Add Activity{% else %}Edit Activity: {{ activity.name }}{% endif %}</h1>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-group">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}
+      <span class="helptext">{{ field.help_text }}</span>
+      {% endif %}
+      {% if field.errors %}
+      <ul class="errorlist">
+        {% for error in field.errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{% if is_create %}Create Activity{% else %}Save Changes{% endif %}</button>
+      <a href="{% url 'manage:activity-list' conference.slug %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% if not is_create and signup_count %}
+<h2 class="section-heading" style="margin-top: 2rem;">Signups ({{ signup_count }})</h2>
+<p style="color: var(--color-text-secondary); font-size: 0.9rem;">{{ signup_count }} attendee{{ signup_count|pluralize }} signed up for this activity.</p>
+{% endif %}
+{% endblock %}

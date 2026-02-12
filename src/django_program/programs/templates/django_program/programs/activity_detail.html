@@ -1,0 +1,44 @@
+{% block title %}{{ activity.name }}{% endblock %}
+
+{% block content %}
+<a href="{% url 'programs:activity-list' conference.slug %}">Back to activities</a>
+
+<article>
+  <h2>{{ activity.name }}</h2>
+  <p>{{ activity.get_activity_type_display }}</p>
+
+  {% if activity.start_time %}<p>Starts: {{ activity.start_time }}</p>{% endif %}
+  {% if activity.end_time %}<p>Ends: {{ activity.end_time }}</p>{% endif %}
+  {% if activity.location %}<p>Location: {{ activity.location }}</p>{% endif %}
+
+  {% if activity.description %}
+  <div>{{ activity.description|linebreaks }}</div>
+  {% endif %}
+
+  {% if activity.external_url %}
+  <p><a href="{{ activity.external_url }}" target="_blank" rel="noopener">More details</a></p>
+  {% endif %}
+
+  {% if spots_remaining is not None %}
+  <p>{{ spots_remaining }} of {{ activity.max_participants }} spots remaining</p>
+  {% endif %}
+
+  {% if user.is_authenticated %}
+  <form method="post" action="{% url 'programs:activity-signup' conference.slug activity.slug %}">
+    {% csrf_token %}
+    <label for="note">Note (optional):</label>
+    <textarea id="note" name="note"></textarea>
+    <button type="submit">Sign Up</button>
+  </form>
+  {% endif %}
+
+  {% if signups %}
+  <h3>Signed Up ({{ signups.count }})</h3>
+  <ul>
+    {% for signup in signups %}
+    <li>{{ signup.user }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</article>
+{% endblock %}
