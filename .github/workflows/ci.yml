@@ -111,8 +111,8 @@ jobs:
 
       - name: Run tests
         run: |
-          uv run pytest tests/ -v
-          uv run pytest packages/pretalx-client/tests/ -v
+          uv run pytest tests/
+          uv run pytest packages/pretalx-client/tests/
 
   test-full:
     name: Test (3.14/${{ matrix.os }})
@@ -145,14 +145,15 @@ jobs:
 
       - name: Run tests
         run: |
-          uv run pytest tests/ -v --cov=src/django_program --cov-report= --cov-fail-under=0
-          uv run pytest packages/pretalx-client/tests/ -v
+          uv run pytest tests/ --cov=src/django_program --cov-report= --cov-fail-under=0
+          uv run pytest packages/pretalx-client/tests/
 
       - name: Upload coverage data artifact
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
           name: coverage-data
           path: .coverage*
+          include-hidden-files: true
 
   coverage:
     name: Coverage (3.14/macos-latest)
@@ -187,7 +188,6 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          uv run coverage combine
           uv run coverage report --show-missing --fail-under=100
           uv run coverage xml -o coverage.xml
 

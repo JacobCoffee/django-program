@@ -20,6 +20,7 @@ test = [
   "pytest-cov>=4.1.0",
   "pytest-django>=4.9.0",
   "pytest-sugar>=1.1.1",
+  "pytest-xdist>=3.8.0",
 ]
 dev = [
   { include-group = "docs" },
@@ -156,13 +157,25 @@ sort_commits = "oldest"
 tag_pattern = "v[0-9].*"
 
 [tool.pytest.ini_options]
-addopts = ["-v", "--strict-markers", "--tb=short"]
+addopts = [
+  "--strict-markers",
+  "--tb=short",
+  "-n", "auto",
+  "-p", "no:pastebin",
+  "-p", "no:doctest",
+  "-p", "no:legacypath",
+]
 DJANGO_SETTINGS_MODULE = "tests.settings"
+filterwarnings = [
+  "error",
+  "ignore:The default scheme will be changed:DeprecationWarning",
+]
 markers = [
   "unit: mark test as unit test",
   "integration: mark test as integration test",
   "e2e: mark test as end-to-end test",
 ]
+norecursedirs = ["docs", "*.egg-info", ".git", ".tox", "dist", "build", "refcode", "examples"]
 python_classes = ["Test*"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
