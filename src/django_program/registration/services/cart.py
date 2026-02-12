@@ -1,7 +1,7 @@
 """Cart management service for conference registration.
 
 Handles cart lifecycle, item management, voucher application, and pricing
-summary computation. All methods are stateless and operate on Cart model
+summary computation. All functions are stateless and operate on Cart model
 instances directly.
 """
 
@@ -47,317 +47,306 @@ class CartSummary:
     total: Decimal
 
 
-class CartService:
-    """Stateless service for cart operations.
+def get_or_create_cart(user: object, conference: object) -> Cart:
+    """Return the user's open cart, creating one if none exists.
 
-    All methods are static and enforce business rules around ticket
-    availability, quantity limits, voucher validation, and add-on
-    prerequisites.
+    Expires any stale open carts for this user and conference before
+    looking up or creating a fresh cart.
+
+    Args:
+        user: The authenticated user (AUTH_USER_MODEL instance).
+        conference: The conference to create the cart for.
+
+    Returns:
+        An open Cart instance with a valid expiry time.
     """
+    now = timezone.now()
+    config = get_config()
 
-    @staticmethod
-    def get_or_create_cart(user: object, conference: object) -> Cart:
-        """Return the user's open cart, creating one if none exists.
+    Cart.objects.filter(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+        expires_at__lt=now,
+    ).update(status=Cart.Status.EXPIRED)
 
-        Expires any stale open carts for this user and conference before
-        looking up or creating a fresh cart.
+    cart = Cart.objects.filter(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+    ).first()
 
-        Args:
-            user: The authenticated user (AUTH_USER_MODEL instance).
-            conference: The conference to create the cart for.
+    if cart is not None:
+        if cart.expires_at is None:
+            cart.expires_at = now + timedelta(minutes=config.cart_expiry_minutes)
+            cart.save(update_fields=["expires_at", "updated_at"])
+        return cart
 
-        Returns:
-            An open Cart instance with a valid expiry time.
-        """
-        now = timezone.now()
-        config = get_config()
+    return Cart.objects.create(
+        user=user,
+        conference=conference,
+        status=Cart.Status.OPEN,
+        expires_at=now + timedelta(minutes=config.cart_expiry_minutes),
+    )
 
-        Cart.objects.filter(
-            user=user,
-            conference=conference,
-            status=Cart.Status.OPEN,
-            expires_at__lt=now,
-        ).update(status=Cart.Status.EXPIRED)
 
-        cart = Cart.objects.filter(
-            user=user,
-            conference=conference,
-            status=Cart.Status.OPEN,
-        ).first()
+@transaction.atomic
+def add_ticket(cart: Cart, ticket_type: TicketType, qty: int = 1) -> CartItem:
+    """Add a ticket to the cart or increase its quantity.
 
-        if cart is not None:
-            if cart.expires_at is None:
-                cart.expires_at = now + timedelta(minutes=config.cart_expiry_minutes)
-                cart.save(update_fields=["expires_at", "updated_at"])
-            return cart
+    Validates availability, stock limits, per-user limits, and voucher
+    requirements before modifying the cart.
 
-        return Cart.objects.create(
-            user=user,
-            conference=conference,
-            status=Cart.Status.OPEN,
-            expires_at=now + timedelta(minutes=config.cart_expiry_minutes),
-        )
+    Args:
+        cart: The open cart to add the ticket to.
+        ticket_type: The ticket type to add.
+        qty: Number of tickets to add (must be >= 1).
 
-    @staticmethod
-    @transaction.atomic
-    def add_ticket(cart: Cart, ticket_type: TicketType, qty: int = 1) -> CartItem:
-        """Add a ticket to the cart or increase its quantity.
+    Returns:
+        The created or updated CartItem.
 
-        Validates availability, stock limits, per-user limits, and voucher
-        requirements before modifying the cart.
+    Raises:
+        ValidationError: If the ticket cannot be added due to business
+            rule violations (unavailable, out of stock, limit exceeded,
+            or voucher required).
+    """
+    _assert_cart_open(cart)
 
-        Args:
-            cart: The open cart to add the ticket to.
-            ticket_type: The ticket type to add.
-            qty: Number of tickets to add (must be >= 1).
+    if qty < 1:
+        raise ValidationError("Quantity must be at least 1.")
 
-        Returns:
-            The created or updated CartItem.
+    if ticket_type.conference_id != cart.conference_id:
+        raise ValidationError("Ticket type does not belong to this cart's conference.")
 
-        Raises:
-            ValidationError: If the ticket cannot be added due to business
-                rule violations (unavailable, out of stock, limit exceeded,
-                or voucher required).
-        """
-        _assert_cart_open(cart)
+    if not ticket_type.is_available:
+        raise ValidationError(f"Ticket type '{ticket_type.name}' is not available.")
 
-        if qty < 1:
-            raise ValidationError("Quantity must be at least 1.")
+    item = cart.items.select_for_update().filter(ticket_type=ticket_type).first()
+    existing_in_cart = item.quantity if item is not None else 0
+    existing_in_orders = _ticket_order_quantity(cart, ticket_type)
+    _validate_ticket_stock_and_limit(
+        ticket_type=ticket_type,
+        qty=qty,
+        existing_in_cart=existing_in_cart,
+        existing_in_orders=existing_in_orders,
+    )
 
-        if ticket_type.conference_id != cart.conference_id:
-            raise ValidationError("Ticket type does not belong to this cart's conference.")
-
-        if not ticket_type.is_available:
-            raise ValidationError(f"Ticket type '{ticket_type.name}' is not available.")
-
-        item = cart.items.select_for_update().filter(ticket_type=ticket_type).first()
-        existing_in_cart = item.quantity if item is not None else 0
-        existing_in_orders = _ticket_order_quantity(cart, ticket_type)
-        _validate_ticket_stock_and_limit(
-            ticket_type=ticket_type,
-            qty=qty,
-            existing_in_cart=existing_in_cart,
-            existing_in_orders=existing_in_orders,
-        )
-
-        if ticket_type.requires_voucher:
-            voucher = cart.voucher
-            if voucher is None or not voucher.unlocks_hidden_tickets:
-                raise ValidationError(
-                    f"Ticket type '{ticket_type.name}' requires a voucher that unlocks hidden tickets."
-                )
-            applicable_ids = set(voucher.applicable_ticket_types.values_list("pk", flat=True))
-            if applicable_ids and ticket_type.pk not in applicable_ids:
-                raise ValidationError(f"The applied voucher does not cover ticket type '{ticket_type.name}'.")
-
-        item = _upsert_ticket_item(
-            cart=cart,
-            ticket_type=ticket_type,
-            qty=qty,
-            item=item,
-            existing_in_orders=existing_in_orders,
-        )
-
-        _extend_cart_expiry(cart)
-        return item
-
-    @staticmethod
-    @transaction.atomic
-    def add_addon(cart: Cart, addon: AddOn, qty: int = 1) -> CartItem:
-        """Add an add-on to the cart or increase its quantity.
-
-        Validates availability, stock, and ticket-type prerequisites before
-        modifying the cart.
-
-        Args:
-            cart: The open cart to add the add-on to.
-            addon: The add-on to add.
-            qty: Number of add-ons to add (must be >= 1).
-
-        Returns:
-            The created or updated CartItem.
-
-        Raises:
-            ValidationError: If the add-on cannot be added due to business
-                rule violations (inactive, out of window, prerequisite
-                ticket missing, or out of stock).
-        """
-        _assert_cart_open(cart)
-
-        if qty < 1:
-            raise ValidationError("Quantity must be at least 1.")
-
-        if addon.conference_id != cart.conference_id:
-            raise ValidationError("Add-on does not belong to this cart's conference.")
-
-        _validate_addon_available(addon)
-
-        required_ticket_ids = set(addon.requires_ticket_types.values_list("pk", flat=True))
-        if required_ticket_ids:
-            ticket_ids_in_cart = set(
-                cart.items.filter(
-                    ticket_type__isnull=False,
-                ).values_list("ticket_type_id", flat=True)
-            )
-            if not required_ticket_ids & ticket_ids_in_cart:
-                raise ValidationError(
-                    f"Add-on '{addon.name}' requires one of the following ticket "
-                    f"types in your cart: "
-                    f"{', '.join(str(pk) for pk in sorted(required_ticket_ids))}."
-                )
-
-        item = cart.items.select_for_update().filter(addon=addon).first()
-        existing_in_cart = item.quantity if item is not None else 0
-        _validate_addon_stock(addon, existing_in_cart + qty)
-        item = _upsert_addon_item(cart=cart, addon=addon, qty=qty, item=item)
-
-        _extend_cart_expiry(cart)
-        return item
-
-    @staticmethod
-    @transaction.atomic
-    def remove_item(cart: Cart, item_id: int) -> None:
-        """Remove an item from the cart, cascading add-on removals if needed.
-
-        When removing a ticket type, any add-ons that require that ticket type
-        (and no other qualifying ticket type remains in the cart) are also
-        removed.
-
-        Args:
-            cart: The cart to remove the item from.
-            item_id: The primary key of the CartItem to remove.
-
-        Raises:
-            ValidationError: If the item does not exist or does not belong
-                to this cart.
-        """
-        _assert_cart_open(cart)
-
-        try:
-            item = cart.items.get(pk=item_id)
-        except CartItem.DoesNotExist:
-            raise ValidationError("Cart item not found.") from None
-
-        if item.ticket_type_id is not None:
-            _cascade_remove_orphaned_addons(cart, removing_ticket_type_id=item.ticket_type_id)
-
-        item.delete()
-
-    @staticmethod
-    @transaction.atomic
-    def update_quantity(cart: Cart, item_id: int, qty: int) -> CartItem | None:
-        """Update the quantity of a cart item.
-
-        If the new quantity is zero or negative the item is removed instead.
-        Re-validates stock and per-user limits for the new quantity.
-
-        Args:
-            cart: The cart containing the item.
-            item_id: The primary key of the CartItem to update.
-            qty: The new absolute quantity.
-
-        Returns:
-            The updated CartItem, or ``None`` if the item was removed.
-
-        Raises:
-            ValidationError: If the new quantity violates stock or per-user
-                limits, or if the item does not belong to this cart.
-        """
-        _assert_cart_open(cart)
-
-        if qty <= 0:
-            CartService.remove_item(cart, item_id)
-            return None
-
-        try:
-            item = cart.items.get(pk=item_id)
-        except CartItem.DoesNotExist:
-            raise ValidationError("Cart item not found.") from None
-
-        if item.ticket_type_id is not None:
-            _validate_ticket_quantity(cart, item.ticket_type, qty)
-        elif item.addon_id is not None:
-            _validate_addon_quantity(item.addon, qty)
-
-        item.quantity = qty
-        item.save(update_fields=["quantity"])
-        _extend_cart_expiry(cart)
-        return item
-
-    @staticmethod
-    def apply_voucher(cart: Cart, code: str) -> Voucher:
-        """Apply a voucher code to the cart.
-
-        Args:
-            cart: The cart to apply the voucher to.
-            code: The voucher code string.
-
-        Returns:
-            The validated Voucher instance now attached to the cart.
-
-        Raises:
-            ValidationError: If the voucher code is not found, not valid,
-                or does not belong to this cart's conference.
-        """
-        _assert_cart_open(cart)
-
-        try:
-            voucher = Voucher.objects.get(code=code, conference=cart.conference)
-        except Voucher.DoesNotExist:
-            raise ValidationError(f"Voucher code '{code}' not found.") from None
-
-        if not voucher.is_valid:
-            raise ValidationError(f"Voucher code '{code}' is no longer valid.")
-
-        cart.voucher = voucher
-        cart.save(update_fields=["voucher", "updated_at"])
-        return voucher
-
-    @staticmethod
-    def get_summary(cart: Cart) -> CartSummary:
-        """Compute a full pricing summary of the cart.
-
-        Iterates all cart items, applies any voucher discounts, and returns
-        a structured summary with per-item and aggregate totals.
-
-        Args:
-            cart: The cart to summarise.
-
-        Returns:
-            A CartSummary with line items, subtotal, discount, and total.
-        """
-        items = list(cart.items.select_related("ticket_type", "addon"))
-        return CartService.get_summary_from_items(cart, items)
-
-    @staticmethod
-    def get_summary_from_items(cart: Cart, items: list[CartItem]) -> CartSummary:
-        """Compute pricing summary using a pre-fetched cart-item snapshot."""
+    if ticket_type.requires_voucher:
         voucher = cart.voucher
+        if voucher is None or not voucher.unlocks_hidden_tickets:
+            raise ValidationError(f"Ticket type '{ticket_type.name}' requires a voucher that unlocks hidden tickets.")
+        applicable_ids = set(voucher.applicable_ticket_types.values_list("pk", flat=True))
+        if applicable_ids and ticket_type.pk not in applicable_ids:
+            raise ValidationError(f"The applied voucher does not cover ticket type '{ticket_type.name}'.")
 
-        applicable_ticket_ids, applicable_addon_ids = _resolve_voucher_scope(voucher)
+    item = _upsert_ticket_item(
+        cart=cart,
+        ticket_type=ticket_type,
+        qty=qty,
+        item=item,
+        existing_in_orders=existing_in_orders,
+    )
 
-        line_summaries, subtotal, applicable_line_totals = _build_line_summaries(
-            items,
-            voucher,
-            applicable_ticket_ids,
-            applicable_addon_ids,
+    _extend_cart_expiry(cart)
+    return item
+
+
+@transaction.atomic
+def add_addon(cart: Cart, addon: AddOn, qty: int = 1) -> CartItem:
+    """Add an add-on to the cart or increase its quantity.
+
+    Validates availability, stock, and ticket-type prerequisites before
+    modifying the cart.
+
+    Args:
+        cart: The open cart to add the add-on to.
+        addon: The add-on to add.
+        qty: Number of add-ons to add (must be >= 1).
+
+    Returns:
+        The created or updated CartItem.
+
+    Raises:
+        ValidationError: If the add-on cannot be added due to business
+            rule violations (inactive, out of window, prerequisite
+            ticket missing, or out of stock).
+    """
+    _assert_cart_open(cart)
+
+    if qty < 1:
+        raise ValidationError("Quantity must be at least 1.")
+
+    if addon.conference_id != cart.conference_id:
+        raise ValidationError("Add-on does not belong to this cart's conference.")
+
+    _validate_addon_available(addon)
+
+    required_ticket_ids = set(addon.requires_ticket_types.values_list("pk", flat=True))
+    if required_ticket_ids:
+        ticket_ids_in_cart = set(
+            cart.items.filter(
+                ticket_type__isnull=False,
+            ).values_list("ticket_type_id", flat=True)
         )
+        if not required_ticket_ids & ticket_ids_in_cart:
+            raise ValidationError(
+                f"Add-on '{addon.name}' requires one of the following ticket "
+                f"types in your cart: "
+                f"{', '.join(str(pk) for pk in sorted(required_ticket_ids))}."
+            )
 
-        total_discount = _apply_voucher_discounts(
-            voucher,
-            line_summaries,
-            applicable_line_totals,
-        )
+    item = cart.items.select_for_update().filter(addon=addon).first()
+    existing_in_cart = item.quantity if item is not None else 0
+    _validate_addon_stock(addon, existing_in_cart + qty)
+    item = _upsert_addon_item(cart=cart, addon=addon, qty=qty, item=item)
 
-        for summary in line_summaries:
-            summary.line_total = summary.line_total - summary.discount
+    _extend_cart_expiry(cart)
+    return item
 
-        return CartSummary(
-            items=line_summaries,
-            subtotal=subtotal,
-            discount=total_discount,
-            total=max(subtotal - total_discount, Decimal("0.00")),
-        )
+
+@transaction.atomic
+def remove_item(cart: Cart, item_id: int) -> None:
+    """Remove an item from the cart, cascading add-on removals if needed.
+
+    When removing a ticket type, any add-ons that require that ticket type
+    (and no other qualifying ticket type remains in the cart) are also
+    removed.
+
+    Args:
+        cart: The cart to remove the item from.
+        item_id: The primary key of the CartItem to remove.
+
+    Raises:
+        ValidationError: If the item does not exist or does not belong
+            to this cart.
+    """
+    _assert_cart_open(cart)
+
+    try:
+        item = cart.items.get(pk=item_id)
+    except CartItem.DoesNotExist:
+        raise ValidationError("Cart item not found.") from None
+
+    if item.ticket_type_id is not None:
+        _cascade_remove_orphaned_addons(cart, removing_ticket_type_id=item.ticket_type_id)
+
+    item.delete()
+
+
+@transaction.atomic
+def update_quantity(cart: Cart, item_id: int, qty: int) -> CartItem | None:
+    """Update the quantity of a cart item.
+
+    If the new quantity is zero or negative the item is removed instead.
+    Re-validates stock and per-user limits for the new quantity.
+
+    Args:
+        cart: The cart containing the item.
+        item_id: The primary key of the CartItem to update.
+        qty: The new absolute quantity.
+
+    Returns:
+        The updated CartItem, or ``None`` if the item was removed.
+
+    Raises:
+        ValidationError: If the new quantity violates stock or per-user
+            limits, or if the item does not belong to this cart.
+    """
+    _assert_cart_open(cart)
+
+    if qty <= 0:
+        remove_item(cart, item_id)
+        return None
+
+    try:
+        item = cart.items.get(pk=item_id)
+    except CartItem.DoesNotExist:
+        raise ValidationError("Cart item not found.") from None
+
+    if item.ticket_type_id is not None:
+        _validate_ticket_quantity(cart, item.ticket_type, qty)
+    elif item.addon_id is not None:
+        _validate_addon_quantity(item.addon, qty)
+
+    item.quantity = qty
+    item.save(update_fields=["quantity"])
+    _extend_cart_expiry(cart)
+    return item
+
+
+def apply_voucher(cart: Cart, code: str) -> Voucher:
+    """Apply a voucher code to the cart.
+
+    Args:
+        cart: The cart to apply the voucher to.
+        code: The voucher code string.
+
+    Returns:
+        The validated Voucher instance now attached to the cart.
+
+    Raises:
+        ValidationError: If the voucher code is not found, not valid,
+            or does not belong to this cart's conference.
+    """
+    _assert_cart_open(cart)
+
+    try:
+        voucher = Voucher.objects.get(code=code, conference=cart.conference)
+    except Voucher.DoesNotExist:
+        raise ValidationError(f"Voucher code '{code}' not found.") from None
+
+    if not voucher.is_valid:
+        raise ValidationError(f"Voucher code '{code}' is no longer valid.")
+
+    cart.voucher = voucher
+    cart.save(update_fields=["voucher", "updated_at"])
+    return voucher
+
+
+def get_summary(cart: Cart) -> CartSummary:
+    """Compute a full pricing summary of the cart.
+
+    Iterates all cart items, applies any voucher discounts, and returns
+    a structured summary with per-item and aggregate totals.
+
+    Args:
+        cart: The cart to summarise.
+
+    Returns:
+        A CartSummary with line items, subtotal, discount, and total.
+    """
+    items = list(cart.items.select_related("ticket_type", "addon"))
+    return get_summary_from_items(cart, items)
+
+
+def get_summary_from_items(cart: Cart, items: list[CartItem]) -> CartSummary:
+    """Compute pricing summary using a pre-fetched cart-item snapshot."""
+    voucher = cart.voucher
+
+    applicable_ticket_ids, applicable_addon_ids = _resolve_voucher_scope(voucher)
+
+    line_summaries, subtotal, applicable_line_totals = _build_line_summaries(
+        items,
+        voucher,
+        applicable_ticket_ids,
+        applicable_addon_ids,
+    )
+
+    total_discount = _apply_voucher_discounts(
+        voucher,
+        line_summaries,
+        applicable_line_totals,
+    )
+
+    for summary in line_summaries:
+        summary.line_total = summary.line_total - summary.discount
+
+    return CartSummary(
+        items=line_summaries,
+        subtotal=subtotal,
+        discount=total_discount,
+        total=max(subtotal - total_discount, Decimal("0.00")),
+    )
 
 
 def _assert_cart_open(cart: Cart) -> None:

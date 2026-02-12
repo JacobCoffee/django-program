@@ -23,7 +23,13 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
-from django_program.registration.services.cart import CartService, CartSummary, LineItemSummary
+from django_program.registration.services.cart import (
+    CartSummary,
+    LineItemSummary,
+    add_addon,
+    add_ticket,
+    apply_voucher,
+)
 from django_program.registration.services.checkout import (
     CheckoutService,
     _expire_stale_pending_orders,
@@ -118,7 +124,7 @@ def cart(conference, user):
 
 @pytest.fixture
 def cart_with_ticket(cart, ticket_type):
-    CartService.add_ticket(cart, ticket_type, qty=1)
+    add_ticket(cart, ticket_type, qty=1)
     return cart
 
 
@@ -157,7 +163,7 @@ class TestCheckout:
         assert len(order.reference) == 14  # PYCON- + 8 chars
 
     def test_creates_order_line_items(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=2)
+        add_ticket(cart, ticket_type, qty=2)
         addon = AddOn.objects.create(
             conference=conference,
             name="Workshop",
@@ -165,7 +171,7 @@ class TestCheckout:
             price=Decimal("50.00"),
             is_active=True,
         )
-        CartService.add_addon(cart, addon, qty=1)
+        add_addon(cart, addon, qty=1)
 
         order = CheckoutService.checkout(cart)
 
@@ -198,7 +204,7 @@ class TestCheckout:
             status=Cart.Status.OPEN,
             expires_at=timezone.now() + timedelta(minutes=30),
         )
-        CartService.add_ticket(cart1, limited, qty=2)
+        add_ticket(cart1, limited, qty=2)
         order = CheckoutService.checkout(cart1)
         assert order.status == Order.Status.PENDING
         assert order.hold_expires_at is not None
@@ -210,7 +216,7 @@ class TestCheckout:
             expires_at=timezone.now() + timedelta(minutes=30),
         )
         with pytest.raises(ValidationError, match=r"not available|remaining"):
-            CartService.add_ticket(cart2, limited, qty=1)
+            add_ticket(cart2, limited, qty=1)
 
     def test_expired_pending_order_releases_inventory(self, conference, user, other_user):
         limited = TicketType.objects.create(
@@ -228,7 +234,7 @@ class TestCheckout:
             status=Cart.Status.OPEN,
             expires_at=timezone.now() + timedelta(minutes=30),
         )
-        CartService.add_ticket(cart1, limited, qty=2)
+        add_ticket(cart1, limited, qty=2)
         order = CheckoutService.checkout(cart1)
         order.hold_expires_at = timezone.now() - timedelta(minutes=1)
         order.save(update_fields=["hold_expires_at", "updated_at"])
@@ -239,7 +245,7 @@ class TestCheckout:
             status=Cart.Status.OPEN,
             expires_at=timezone.now() + timedelta(minutes=30),
         )
-        item = CartService.add_ticket(cart2, limited, qty=1)
+        item = add_ticket(cart2, limited, qty=1)
         assert item.quantity == 1
 
     def test_marks_cart_as_checked_out(self, cart_with_ticket):
@@ -249,7 +255,7 @@ class TestCheckout:
         assert cart_with_ticket.status == Cart.Status.CHECKED_OUT
 
     def test_snapshots_voucher_on_order(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=1)
+        add_ticket(cart, ticket_type, qty=1)
         Voucher.objects.create(
             conference=conference,
             code="SAVE20",
@@ -258,7 +264,7 @@ class TestCheckout:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "SAVE20")
+        apply_voucher(cart, "SAVE20")
 
         order = CheckoutService.checkout(cart)
 
@@ -269,7 +275,7 @@ class TestCheckout:
         assert details["discount_value"] == "20.00"
 
     def test_increments_voucher_times_used(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=1)
+        add_ticket(cart, ticket_type, qty=1)
         voucher = Voucher.objects.create(
             conference=conference,
             code="ONCE",
@@ -278,7 +284,7 @@ class TestCheckout:
             times_used=2,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "ONCE")
+        apply_voucher(cart, "ONCE")
 
         CheckoutService.checkout(cart)
 
@@ -286,7 +292,7 @@ class TestCheckout:
         assert voucher.times_used == 3
 
     def test_applies_voucher_discount_to_order(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=1)  # $100
+        add_ticket(cart, ticket_type, qty=1)  # $100
         Voucher.objects.create(
             conference=conference,
             code="HALF",
@@ -295,7 +301,7 @@ class TestCheckout:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "HALF")
+        apply_voucher(cart, "HALF")
 
         order = CheckoutService.checkout(cart)
 
@@ -304,7 +310,7 @@ class TestCheckout:
         assert order.total == Decimal("50.00")
 
     def test_rejects_checkout_when_voucher_becomes_inactive(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=1)
+        add_ticket(cart, ticket_type, qty=1)
         voucher = Voucher.objects.create(
             conference=conference,
             code="SAVE10",
@@ -313,7 +319,7 @@ class TestCheckout:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "SAVE10")
+        apply_voucher(cart, "SAVE10")
         voucher.is_active = False
         voucher.save(update_fields=["is_active", "updated_at"])
 
@@ -321,7 +327,7 @@ class TestCheckout:
             CheckoutService.checkout(cart)
 
     def test_rejects_checkout_when_voucher_usage_limit_reached(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=1)
+        add_ticket(cart, ticket_type, qty=1)
         voucher = Voucher.objects.create(
             conference=conference,
             code="LIMIT1",
@@ -330,7 +336,7 @@ class TestCheckout:
             max_uses=1,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "LIMIT1")
+        apply_voucher(cart, "LIMIT1")
         Voucher.objects.filter(pk=voucher.pk).update(times_used=1)
 
         with pytest.raises(ValidationError, match="no longer valid"):
@@ -385,7 +391,7 @@ class TestCheckout:
             price=Decimal("10.00"),
             is_active=True,
         )
-        CartService.add_addon(cart, addon, qty=1)
+        add_addon(cart, addon, qty=1)
 
         addon.available_from = timezone.now() + timedelta(days=30)
         addon.save(update_fields=["available_from", "updated_at"])
@@ -401,7 +407,7 @@ class TestCheckout:
             price=Decimal("10.00"),
             is_active=True,
         )
-        CartService.add_addon(cart, addon, qty=1)
+        add_addon(cart, addon, qty=1)
 
         addon.available_until = timezone.now() - timedelta(days=1)
         addon.save(update_fields=["available_until", "updated_at"])
@@ -428,7 +434,7 @@ class TestCheckout:
             CheckoutService.checkout(cart)
 
     def test_revalidates_stock_at_checkout(self, cart, limited_ticket, user, conference):
-        CartService.add_ticket(cart, limited_ticket, qty=2)
+        add_ticket(cart, limited_ticket, qty=2)
 
         # Sell 4 of 5 via another order after cart was populated, leaving 1 remaining
         paid = _make_order(conference=conference, user=user, status=Order.Status.PAID)
@@ -445,7 +451,7 @@ class TestCheckout:
             CheckoutService.checkout(cart)
 
     def test_revalidates_ticket_availability_at_checkout(self, cart, ticket_type):
-        CartService.add_ticket(cart, ticket_type, qty=1)
+        add_ticket(cart, ticket_type, qty=1)
 
         # Deactivate ticket after adding to cart
         ticket_type.is_active = False
@@ -463,7 +469,7 @@ class TestCheckout:
             is_active=True,
             total_quantity=2,
         )
-        CartService.add_addon(cart, addon, qty=1)
+        add_addon(cart, addon, qty=1)
 
         # Sell all stock via another order
         paid = _make_order(conference=conference, user=user, status=Order.Status.PAID)
@@ -487,7 +493,7 @@ class TestCheckout:
             price=Decimal("15.00"),
             is_active=True,
         )
-        CartService.add_addon(cart, addon, qty=1)
+        add_addon(cart, addon, qty=1)
 
         addon.is_active = False
         addon.save(update_fields=["is_active", "updated_at"])
@@ -512,8 +518,8 @@ class TestCheckout:
             price=Decimal("50.00"),
             is_active=True,
         )
-        CartService.add_ticket(cart, ticket_type, qty=1)
-        CartService.add_addon(cart, addon, qty=1)
+        add_ticket(cart, ticket_type, qty=1)
+        add_addon(cart, addon, qty=1)
 
         # Admin adds a prerequisite after the cart was assembled
         addon.requires_ticket_types.add(other_ticket)
@@ -538,7 +544,7 @@ class TestCheckout:
             is_active=True,
         )
         # Add to cart while still available
-        CartService.add_ticket(cart, ticket, qty=1)
+        add_ticket(cart, ticket, qty=1)
 
         # Now sell it out
         paid = _make_order(
@@ -581,7 +587,7 @@ class TestCheckout:
             discount=Decimal("0.00"),
             total=Decimal("10.00"),
         )
-        with patch.object(CartService, "get_summary_from_items", return_value=fake_summary):
+        with patch("django_program.registration.services.checkout.get_summary_from_items", return_value=fake_summary):
             with pytest.raises(ValidationError, match="Cart changed during checkout"):
                 CheckoutService.checkout(cart_with_ticket)
 

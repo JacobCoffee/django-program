@@ -1,4 +1,4 @@
-"""Tests for the CartService in django_program.registration.services.cart."""
+"""Tests for cart functions in django_program.registration.services.cart."""
 
 from datetime import date, timedelta
 from decimal import Decimal
@@ -23,7 +23,6 @@ from django_program.registration.models import (
     Voucher,
 )
 from django_program.registration.services.cart import (
-    CartService,
     CartSummary,
     LineItemSummary,
     _apply_voucher_discounts,
@@ -31,6 +30,13 @@ from django_program.registration.services.cart import (
     _item_is_voucher_applicable,
     _upsert_addon_item,
     _upsert_ticket_item,
+    add_addon,
+    add_ticket,
+    apply_voucher,
+    get_or_create_cart,
+    get_summary,
+    remove_item,
+    update_quantity,
 )
 
 User = get_user_model()
@@ -144,7 +150,7 @@ class TestGetOrCreateCart:
             expires_at=timezone.now() + timedelta(minutes=30),
         )
 
-        result = CartService.get_or_create_cart(user, conference)
+        result = get_or_create_cart(user, conference)
 
         assert result.pk == existing.pk
         assert result.status == Cart.Status.OPEN
@@ -152,7 +158,7 @@ class TestGetOrCreateCart:
     def test_creates_new_cart_when_none_exists(self, conference, user):
         assert Cart.objects.filter(user=user, conference=conference).count() == 0
 
-        result = CartService.get_or_create_cart(user, conference)
+        result = get_or_create_cart(user, conference)
 
         assert result.pk is not None
         assert result.user == user
@@ -168,7 +174,7 @@ class TestGetOrCreateCart:
             expires_at=timezone.now() - timedelta(minutes=1),
         )
 
-        result = CartService.get_or_create_cart(user, conference)
+        result = get_or_create_cart(user, conference)
 
         stale.refresh_from_db()
         assert stale.status == Cart.Status.EXPIRED
@@ -185,7 +191,7 @@ class TestGetOrCreateCart:
         )
         before = timezone.now()
 
-        result = CartService.get_or_create_cart(user, conference)
+        result = get_or_create_cart(user, conference)
         after = timezone.now()
 
         assert result.pk == existing.pk
@@ -198,7 +204,7 @@ class TestGetOrCreateCart:
         settings.DJANGO_PROGRAM = {"cart_expiry_minutes": 45}
 
         before = timezone.now()
-        result = CartService.get_or_create_cart(user, conference)
+        result = get_or_create_cart(user, conference)
         after = timezone.now()
 
         expected_min = before + timedelta(minutes=45)
@@ -214,15 +220,15 @@ class TestGetOrCreateCart:
 @pytest.mark.django_db
 class TestAddTicket:
     def test_adds_ticket_to_cart(self, cart, ticket_type):
-        item = CartService.add_ticket(cart, ticket_type, qty=2)
+        item = add_ticket(cart, ticket_type, qty=2)
 
         assert item.ticket_type == ticket_type
         assert item.quantity == 2
         assert item.cart == cart
 
     def test_increases_quantity_when_already_in_cart(self, cart, ticket_type):
-        CartService.add_ticket(cart, ticket_type, qty=1)
-        item = CartService.add_ticket(cart, ticket_type, qty=3)
+        add_ticket(cart, ticket_type, qty=1)
+        item = add_ticket(cart, ticket_type, qty=3)
 
         assert item.quantity == 4
         assert cart.items.filter(ticket_type=ticket_type).count() == 1
@@ -237,7 +243,7 @@ class TestAddTicket:
         )
 
         with pytest.raises(ValidationError, match="not available"):
-            CartService.add_ticket(cart, inactive)
+            add_ticket(cart, inactive)
 
     def test_rejects_when_remaining_quantity_insufficient(self, cart, limited_ticket, user, conference):
         # Sell 4 of 5 via existing order
@@ -252,14 +258,14 @@ class TestAddTicket:
         )
         # remaining = 1, requesting 2
         with pytest.raises(ValidationError, match="remaining"):
-            CartService.add_ticket(cart, limited_ticket, qty=2)
+            add_ticket(cart, limited_ticket, qty=2)
 
     def test_rejects_when_limit_per_user_exceeded_by_cart(self, cart, limited_ticket):
         # limit_per_user=3, add 2 then try 2 more
-        CartService.add_ticket(cart, limited_ticket, qty=2)
+        add_ticket(cart, limited_ticket, qty=2)
 
         with pytest.raises(ValidationError, match="per-user limit"):
-            CartService.add_ticket(cart, limited_ticket, qty=2)
+            add_ticket(cart, limited_ticket, qty=2)
 
     def test_rejects_when_limit_per_user_exceeded_counting_orders(self, cart, limited_ticket, user, conference):
         # 2 already bought in a paid order, limit=3, try adding 2 more
@@ -274,7 +280,7 @@ class TestAddTicket:
         )
 
         with pytest.raises(ValidationError, match="per-user limit"):
-            CartService.add_ticket(cart, limited_ticket, qty=2)
+            add_ticket(cart, limited_ticket, qty=2)
 
     def test_rejects_requires_voucher_without_voucher(self, cart, conference):
         hidden = TicketType.objects.create(
@@ -287,7 +293,7 @@ class TestAddTicket:
         )
 
         with pytest.raises(ValidationError, match="requires a voucher"):
-            CartService.add_ticket(cart, hidden)
+            add_ticket(cart, hidden)
 
     def test_rejects_requires_voucher_when_voucher_does_not_unlock(self, cart, conference):
         hidden = TicketType.objects.create(
@@ -310,7 +316,7 @@ class TestAddTicket:
         cart.save(update_fields=["voucher"])
 
         with pytest.raises(ValidationError, match="requires a voucher that unlocks"):
-            CartService.add_ticket(cart, hidden)
+            add_ticket(cart, hidden)
 
     def test_accepts_requires_voucher_with_proper_voucher(self, cart, conference):
         hidden = TicketType.objects.create(
@@ -332,7 +338,7 @@ class TestAddTicket:
         cart.voucher = voucher
         cart.save(update_fields=["voucher"])
 
-        item = CartService.add_ticket(cart, hidden)
+        item = add_ticket(cart, hidden)
 
         assert item.ticket_type == hidden
         assert item.quantity == 1
@@ -367,35 +373,35 @@ class TestAddTicket:
         cart.save(update_fields=["voucher"])
 
         with pytest.raises(ValidationError, match="does not cover"):
-            CartService.add_ticket(cart, hidden)
+            add_ticket(cart, hidden)
 
     def test_extends_cart_expiry_on_add(self, cart, ticket_type):
         old_expiry = cart.expires_at
-        CartService.add_ticket(cart, ticket_type)
+        add_ticket(cart, ticket_type)
         cart.refresh_from_db()
 
         assert cart.expires_at >= old_expiry
 
     def test_rejects_qty_less_than_one(self, cart, ticket_type):
         with pytest.raises(ValidationError, match="at least 1"):
-            CartService.add_ticket(cart, ticket_type, qty=0)
+            add_ticket(cart, ticket_type, qty=0)
 
         with pytest.raises(ValidationError, match="at least 1"):
-            CartService.add_ticket(cart, ticket_type, qty=-1)
+            add_ticket(cart, ticket_type, qty=-1)
 
     def test_rejects_non_open_cart(self, cart, ticket_type):
         cart.status = Cart.Status.CHECKED_OUT
         cart.save(update_fields=["status", "updated_at"])
 
         with pytest.raises(ValidationError, match="Only open carts"):
-            CartService.add_ticket(cart, ticket_type)
+            add_ticket(cart, ticket_type)
 
     def test_rejects_expired_cart(self, cart, ticket_type):
         cart.expires_at = timezone.now() - timedelta(minutes=1)
         cart.save(update_fields=["expires_at", "updated_at"])
 
         with pytest.raises(ValidationError, match="expired"):
-            CartService.add_ticket(cart, ticket_type)
+            add_ticket(cart, ticket_type)
 
     def test_rejects_ticket_from_other_conference(self, cart, other_conference):
         foreign_ticket = TicketType.objects.create(
@@ -407,7 +413,7 @@ class TestAddTicket:
         )
 
         with pytest.raises(ValidationError, match="does not belong"):
-            CartService.add_ticket(cart, foreign_ticket)
+            add_ticket(cart, foreign_ticket)
 
     def test_rejects_increment_when_existing_cart_qty_would_exceed_remaining(self, cart, conference, user):
         stock_ticket = TicketType.objects.create(
@@ -429,9 +435,9 @@ class TestAddTicket:
             line_total=Decimal("90.00"),
         )
 
-        CartService.add_ticket(cart, stock_ticket, qty=1)
+        add_ticket(cart, stock_ticket, qty=1)
         with pytest.raises(ValidationError, match="remaining"):
-            CartService.add_ticket(cart, stock_ticket, qty=2)
+            add_ticket(cart, stock_ticket, qty=2)
 
 
 # =============================================================================
@@ -450,7 +456,7 @@ class TestAddAddon:
             is_active=True,
         )
 
-        item = CartService.add_addon(cart, addon, qty=1)
+        item = add_addon(cart, addon, qty=1)
 
         assert item.addon == addon
         assert item.quantity == 1
@@ -465,7 +471,7 @@ class TestAddAddon:
         )
 
         with pytest.raises(ValidationError, match="not active"):
-            CartService.add_addon(cart, addon)
+            add_addon(cart, addon)
 
     def test_rejects_addon_before_available_from(self, cart, conference):
         addon = AddOn.objects.create(
@@ -478,7 +484,7 @@ class TestAddAddon:
         )
 
         with pytest.raises(ValidationError, match="not yet available"):
-            CartService.add_addon(cart, addon)
+            add_addon(cart, addon)
 
     def test_rejects_addon_after_available_until(self, cart, conference):
         addon = AddOn.objects.create(
@@ -491,7 +497,7 @@ class TestAddAddon:
         )
 
         with pytest.raises(ValidationError, match="no longer available"):
-            CartService.add_addon(cart, addon)
+            add_addon(cart, addon)
 
     def test_rejects_addon_when_required_ticket_not_in_cart(self, cart, conference, ticket_type):
         addon = AddOn.objects.create(
@@ -504,10 +510,10 @@ class TestAddAddon:
         addon.requires_ticket_types.add(ticket_type)
 
         with pytest.raises(ValidationError, match="requires one of"):
-            CartService.add_addon(cart, addon)
+            add_addon(cart, addon)
 
     def test_accepts_addon_when_required_ticket_in_cart(self, cart, conference, ticket_type):
-        CartService.add_ticket(cart, ticket_type)
+        add_ticket(cart, ticket_type)
 
         addon = AddOn.objects.create(
             conference=conference,
@@ -518,7 +524,7 @@ class TestAddAddon:
         )
         addon.requires_ticket_types.add(ticket_type)
 
-        item = CartService.add_addon(cart, addon)
+        item = add_addon(cart, addon)
 
         assert item.addon == addon
         assert item.quantity == 1
@@ -533,7 +539,7 @@ class TestAddAddon:
         )
         # No requires_ticket_types set
 
-        item = CartService.add_addon(cart, addon)
+        item = add_addon(cart, addon)
 
         assert item.addon == addon
 
@@ -558,7 +564,7 @@ class TestAddAddon:
         )
 
         with pytest.raises(ValidationError, match="remaining"):
-            CartService.add_addon(cart, addon)
+            add_addon(cart, addon)
 
     def test_increases_quantity_when_already_in_cart(self, cart, conference):
         addon = AddOn.objects.create(
@@ -569,8 +575,8 @@ class TestAddAddon:
             is_active=True,
         )
 
-        CartService.add_addon(cart, addon, qty=1)
-        item = CartService.add_addon(cart, addon, qty=2)
+        add_addon(cart, addon, qty=1)
+        item = add_addon(cart, addon, qty=2)
 
         assert item.quantity == 3
         assert cart.items.filter(addon=addon).count() == 1
@@ -585,7 +591,7 @@ class TestAddAddon:
         )
 
         with pytest.raises(ValidationError, match="at least 1"):
-            CartService.add_addon(cart, addon, qty=0)
+            add_addon(cart, addon, qty=0)
 
     def test_rejects_addon_from_other_conference(self, cart, other_conference):
         foreign_addon = AddOn.objects.create(
@@ -597,7 +603,7 @@ class TestAddAddon:
         )
 
         with pytest.raises(ValidationError, match="does not belong"):
-            CartService.add_addon(cart, foreign_addon)
+            add_addon(cart, foreign_addon)
 
     def test_rejects_increment_when_existing_cart_qty_would_exceed_remaining(self, cart, conference, user):
         addon = AddOn.objects.create(
@@ -618,9 +624,9 @@ class TestAddAddon:
             line_total=Decimal("12.00"),
         )
 
-        CartService.add_addon(cart, addon, qty=1)
+        add_addon(cart, addon, qty=1)
         with pytest.raises(ValidationError, match="remaining"):
-            CartService.add_addon(cart, addon, qty=2)
+            add_addon(cart, addon, qty=2)
 
 
 # =============================================================================
@@ -631,28 +637,28 @@ class TestAddAddon:
 @pytest.mark.django_db
 class TestRemoveItem:
     def test_removes_item_from_cart(self, cart, ticket_type):
-        item = CartService.add_ticket(cart, ticket_type)
+        item = add_ticket(cart, ticket_type)
         item_id = item.pk
 
-        CartService.remove_item(cart, item_id)
+        remove_item(cart, item_id)
 
         assert not CartItem.objects.filter(pk=item_id).exists()
 
     def test_raises_for_nonexistent_item(self, cart):
         with pytest.raises(ValidationError, match="not found"):
-            CartService.remove_item(cart, item_id=999999)
+            remove_item(cart, item_id=999999)
 
     def test_rejects_non_open_cart(self, cart, ticket_type):
-        item = CartService.add_ticket(cart, ticket_type)
+        item = add_ticket(cart, ticket_type)
         cart.status = Cart.Status.CHECKED_OUT
         cart.save(update_fields=["status", "updated_at"])
 
         with pytest.raises(ValidationError, match="Only open carts"):
-            CartService.remove_item(cart, item.pk)
+            remove_item(cart, item.pk)
 
     def test_cascade_removes_orphaned_addons(self, cart, conference, ticket_type):
         """Removing a ticket also removes addons that required that ticket type."""
-        ticket_item = CartService.add_ticket(cart, ticket_type)
+        ticket_item = add_ticket(cart, ticket_type)
 
         addon = AddOn.objects.create(
             conference=conference,
@@ -662,9 +668,9 @@ class TestRemoveItem:
             is_active=True,
         )
         addon.requires_ticket_types.add(ticket_type)
-        addon_item = CartService.add_addon(cart, addon)
+        addon_item = add_addon(cart, addon)
 
-        CartService.remove_item(cart, ticket_item.pk)
+        remove_item(cart, ticket_item.pk)
 
         assert not CartItem.objects.filter(pk=ticket_item.pk).exists()
         assert not CartItem.objects.filter(pk=addon_item.pk).exists()
@@ -679,8 +685,8 @@ class TestRemoveItem:
             is_active=True,
         )
 
-        ticket_item = CartService.add_ticket(cart, ticket_type)
-        CartService.add_ticket(cart, other_ticket)
+        ticket_item = add_ticket(cart, ticket_type)
+        add_ticket(cart, other_ticket)
 
         addon = AddOn.objects.create(
             conference=conference,
@@ -690,16 +696,16 @@ class TestRemoveItem:
             is_active=True,
         )
         addon.requires_ticket_types.add(ticket_type, other_ticket)
-        addon_item = CartService.add_addon(cart, addon)
+        addon_item = add_addon(cart, addon)
 
         # Remove one qualifying ticket, the other still qualifies
-        CartService.remove_item(cart, ticket_item.pk)
+        remove_item(cart, ticket_item.pk)
 
         assert CartItem.objects.filter(pk=addon_item.pk).exists()
 
     def test_does_not_remove_addon_with_no_ticket_restriction(self, cart, conference, ticket_type):
         """Addon with no requires_ticket_types is never orphaned by ticket removal."""
-        ticket_item = CartService.add_ticket(cart, ticket_type)
+        ticket_item = add_ticket(cart, ticket_type)
 
         addon = AddOn.objects.create(
             conference=conference,
@@ -708,9 +714,9 @@ class TestRemoveItem:
             price=Decimal("25.00"),
             is_active=True,
         )
-        addon_item = CartService.add_addon(cart, addon)
+        addon_item = add_addon(cart, addon)
 
-        CartService.remove_item(cart, ticket_item.pk)
+        remove_item(cart, ticket_item.pk)
 
         assert CartItem.objects.filter(pk=addon_item.pk).exists()
 
@@ -723,31 +729,31 @@ class TestRemoveItem:
 @pytest.mark.django_db
 class TestUpdateQuantity:
     def test_updates_quantity_successfully(self, cart, ticket_type):
-        item = CartService.add_ticket(cart, ticket_type, qty=1)
+        item = add_ticket(cart, ticket_type, qty=1)
 
-        updated = CartService.update_quantity(cart, item.pk, qty=5)
+        updated = update_quantity(cart, item.pk, qty=5)
 
         assert updated is not None
         assert updated.quantity == 5
 
     def test_removes_item_when_qty_zero(self, cart, ticket_type):
-        item = CartService.add_ticket(cart, ticket_type, qty=2)
+        item = add_ticket(cart, ticket_type, qty=2)
 
-        result = CartService.update_quantity(cart, item.pk, qty=0)
+        result = update_quantity(cart, item.pk, qty=0)
 
         assert result is None
         assert not CartItem.objects.filter(pk=item.pk).exists()
 
     def test_removes_item_when_qty_negative(self, cart, ticket_type):
-        item = CartService.add_ticket(cart, ticket_type, qty=2)
+        item = add_ticket(cart, ticket_type, qty=2)
 
-        result = CartService.update_quantity(cart, item.pk, qty=-1)
+        result = update_quantity(cart, item.pk, qty=-1)
 
         assert result is None
         assert not CartItem.objects.filter(pk=item.pk).exists()
 
     def test_revalidates_stock_for_ticket(self, cart, limited_ticket, user, conference):
-        item = CartService.add_ticket(cart, limited_ticket, qty=1)
+        item = add_ticket(cart, limited_ticket, qty=1)
 
         # Sell 4 of 5 via orders, so only 1 remains
         paid = _make_order(conference=conference, user=user, status=Order.Status.PAID)
@@ -761,10 +767,10 @@ class TestUpdateQuantity:
         )
 
         with pytest.raises(ValidationError, match="remaining"):
-            CartService.update_quantity(cart, item.pk, qty=2)
+            update_quantity(cart, item.pk, qty=2)
 
     def test_revalidates_per_user_limit_for_ticket(self, cart, limited_ticket, user, conference):
-        item = CartService.add_ticket(cart, limited_ticket, qty=1)
+        item = add_ticket(cart, limited_ticket, qty=1)
 
         # Already bought 2 in paid orders, limit=3
         paid = _make_order(conference=conference, user=user, status=Order.Status.PAID)
@@ -778,7 +784,7 @@ class TestUpdateQuantity:
         )
 
         with pytest.raises(ValidationError, match="per-user limit"):
-            CartService.update_quantity(cart, item.pk, qty=2)
+            update_quantity(cart, item.pk, qty=2)
 
     def test_revalidates_stock_for_addon(self, cart, conference, user):
         addon = AddOn.objects.create(
@@ -789,7 +795,7 @@ class TestUpdateQuantity:
             is_active=True,
             total_quantity=3,
         )
-        item = CartService.add_addon(cart, addon, qty=1)
+        item = add_addon(cart, addon, qty=1)
 
         # Sell 2 of 3 via orders
         paid = _make_order(conference=conference, user=user, status=Order.Status.PAID)
@@ -803,19 +809,19 @@ class TestUpdateQuantity:
         )
 
         with pytest.raises(ValidationError, match="remaining"):
-            CartService.update_quantity(cart, item.pk, qty=2)
+            update_quantity(cart, item.pk, qty=2)
 
     def test_raises_for_nonexistent_item(self, cart):
         with pytest.raises(ValidationError, match="not found"):
-            CartService.update_quantity(cart, item_id=999999, qty=5)
+            update_quantity(cart, item_id=999999, qty=5)
 
     def test_rejects_non_open_cart(self, cart, ticket_type):
-        item = CartService.add_ticket(cart, ticket_type, qty=1)
+        item = add_ticket(cart, ticket_type, qty=1)
         cart.status = Cart.Status.CHECKED_OUT
         cart.save(update_fields=["status", "updated_at"])
 
         with pytest.raises(ValidationError, match="Only open carts"):
-            CartService.update_quantity(cart, item.pk, qty=2)
+            update_quantity(cart, item.pk, qty=2)
 
 
 # =============================================================================
@@ -835,7 +841,7 @@ class TestApplyVoucher:
             is_active=True,
         )
 
-        result = CartService.apply_voucher(cart, "SAVE20")
+        result = apply_voucher(cart, "SAVE20")
 
         assert result.pk == voucher.pk
         cart.refresh_from_db()
@@ -843,7 +849,7 @@ class TestApplyVoucher:
 
     def test_rejects_nonexistent_code(self, cart):
         with pytest.raises(ValidationError, match="not found"):
-            CartService.apply_voucher(cart, "DOESNOTEXIST")
+            apply_voucher(cart, "DOESNOTEXIST")
 
     def test_rejects_invalid_voucher(self, cart, conference):
         Voucher.objects.create(
@@ -857,7 +863,7 @@ class TestApplyVoucher:
         )
 
         with pytest.raises(ValidationError, match="no longer valid"):
-            CartService.apply_voucher(cart, "EXPIRED")
+            apply_voucher(cart, "EXPIRED")
 
     def test_rejects_inactive_voucher(self, cart, conference):
         Voucher.objects.create(
@@ -869,7 +875,7 @@ class TestApplyVoucher:
         )
 
         with pytest.raises(ValidationError, match="no longer valid"):
-            CartService.apply_voucher(cart, "DEAD")
+            apply_voucher(cart, "DEAD")
 
     def test_rejects_voucher_from_other_conference(self, cart, conference):
         other_conf = Conference.objects.create(
@@ -887,7 +893,7 @@ class TestApplyVoucher:
         )
 
         with pytest.raises(ValidationError, match="not found"):
-            CartService.apply_voucher(cart, "WRONGCON")
+            apply_voucher(cart, "WRONGCON")
 
     def test_rejects_non_open_cart(self, cart, conference):
         Voucher.objects.create(
@@ -902,7 +908,7 @@ class TestApplyVoucher:
         cart.save(update_fields=["status", "updated_at"])
 
         with pytest.raises(ValidationError, match="Only open carts"):
-            CartService.apply_voucher(cart, "SAVE10")
+            apply_voucher(cart, "SAVE10")
 
 
 # =============================================================================
@@ -913,7 +919,7 @@ class TestApplyVoucher:
 @pytest.mark.django_db
 class TestGetSummary:
     def test_empty_cart_returns_zero_totals(self, cart):
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         assert isinstance(summary, CartSummary)
         assert summary.items == []
@@ -922,7 +928,7 @@ class TestGetSummary:
         assert summary.total == Decimal("0.00")
 
     def test_subtotal_with_no_voucher(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=2)  # 2 x $100
+        add_ticket(cart, ticket_type, qty=2)  # 2 x $100
 
         addon = AddOn.objects.create(
             conference=conference,
@@ -931,9 +937,9 @@ class TestGetSummary:
             price=Decimal("25.00"),
             is_active=True,
         )
-        CartService.add_addon(cart, addon, qty=1)  # 1 x $25
+        add_addon(cart, addon, qty=1)  # 1 x $25
 
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         assert summary.subtotal == Decimal("225.00")
         assert summary.discount == Decimal("0.00")
@@ -941,7 +947,7 @@ class TestGetSummary:
         assert len(summary.items) == 2
 
     def test_comp_voucher_100_percent_off_applicable(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=2)  # 2 x $100
+        add_ticket(cart, ticket_type, qty=2)  # 2 x $100
 
         voucher = Voucher.objects.create(
             conference=conference,
@@ -950,16 +956,16 @@ class TestGetSummary:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "FREE")
+        apply_voucher(cart, "FREE")
 
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         assert summary.subtotal == Decimal("200.00")
         assert summary.discount == Decimal("200.00")
         assert summary.total == Decimal("0.00")
 
     def test_percentage_voucher(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=1)  # 1 x $100
+        add_ticket(cart, ticket_type, qty=1)  # 1 x $100
 
         Voucher.objects.create(
             conference=conference,
@@ -969,16 +975,16 @@ class TestGetSummary:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "HALF")
+        apply_voucher(cart, "HALF")
 
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         assert summary.subtotal == Decimal("100.00")
         assert summary.discount == Decimal("50.00")
         assert summary.total == Decimal("50.00")
 
     def test_fixed_amount_voucher(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=2)  # 2 x $100 = $200
+        add_ticket(cart, ticket_type, qty=2)  # 2 x $100 = $200
 
         Voucher.objects.create(
             conference=conference,
@@ -988,9 +994,9 @@ class TestGetSummary:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "FLAT30")
+        apply_voucher(cart, "FLAT30")
 
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         assert summary.subtotal == Decimal("200.00")
         assert summary.discount == Decimal("30.00")
@@ -1004,7 +1010,7 @@ class TestGetSummary:
             price=Decimal("10.00"),
             is_active=True,
         )
-        CartService.add_ticket(cart, cheap_ticket, qty=1)  # $10
+        add_ticket(cart, cheap_ticket, qty=1)  # $10
 
         Voucher.objects.create(
             conference=conference,
@@ -1014,16 +1020,16 @@ class TestGetSummary:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "BIG")
+        apply_voucher(cart, "BIG")
 
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         assert summary.total == Decimal("0.00")
         assert summary.discount == Decimal("10.00")
 
     def test_mixed_applicable_and_non_applicable_items(self, cart, conference, ticket_type):
         """Voucher only applies to specific ticket type, not to addon."""
-        CartService.add_ticket(cart, ticket_type, qty=1)  # $100
+        add_ticket(cart, ticket_type, qty=1)  # $100
 
         addon = AddOn.objects.create(
             conference=conference,
@@ -1032,7 +1038,7 @@ class TestGetSummary:
             price=Decimal("30.00"),
             is_active=True,
         )
-        CartService.add_addon(cart, addon, qty=1)  # $30
+        add_addon(cart, addon, qty=1)  # $30
 
         voucher = Voucher.objects.create(
             conference=conference,
@@ -1046,9 +1052,9 @@ class TestGetSummary:
         # but since applicable_ticket_types is set, _resolve_voucher_scope returns
         # (set of ticket IDs, None for addons).
 
-        CartService.apply_voucher(cart, "TICKET-ONLY")
+        apply_voucher(cart, "TICKET-ONLY")
 
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         # ticket $100 is comped, addon $30 is also comped (addon_ids=None => all addons)
         assert summary.subtotal == Decimal("130.00")
@@ -1064,8 +1070,8 @@ class TestGetSummary:
             price=Decimal("300.00"),
             is_active=True,
         )
-        CartService.add_ticket(cart, ticket_type, qty=1)  # $100 - applicable
-        CartService.add_ticket(cart, other_ticket, qty=1)  # $300 - NOT applicable
+        add_ticket(cart, ticket_type, qty=1)  # $100 - applicable
+        add_ticket(cart, other_ticket, qty=1)  # $300 - NOT applicable
 
         addon = AddOn.objects.create(
             conference=conference,
@@ -1081,8 +1087,8 @@ class TestGetSummary:
             price=Decimal("75.00"),
             is_active=True,
         )
-        CartService.add_addon(cart, addon, qty=1)  # $50 - applicable
-        CartService.add_addon(cart, other_addon, qty=1)  # $75 - NOT applicable
+        add_addon(cart, addon, qty=1)  # $50 - applicable
+        add_addon(cart, other_addon, qty=1)  # $75 - NOT applicable
 
         voucher = Voucher.objects.create(
             conference=conference,
@@ -1094,8 +1100,8 @@ class TestGetSummary:
         voucher.applicable_ticket_types.add(ticket_type)
         voucher.applicable_addons.add(addon)
 
-        CartService.apply_voucher(cart, "TARGETED")
-        summary = CartService.get_summary(cart)
+        apply_voucher(cart, "TARGETED")
+        summary = get_summary(cart)
 
         # subtotal = 100 + 300 + 50 + 75 = 525
         assert summary.subtotal == Decimal("525.00")
@@ -1119,8 +1125,8 @@ class TestGetSummary:
             price=Decimal("300.00"),
             is_active=True,
         )
-        CartService.add_ticket(cart, t1, qty=1)  # $100
-        CartService.add_ticket(cart, t2, qty=1)  # $300
+        add_ticket(cart, t1, qty=1)  # $100
+        add_ticket(cart, t2, qty=1)  # $300
 
         Voucher.objects.create(
             conference=conference,
@@ -1130,8 +1136,8 @@ class TestGetSummary:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "FIXED80")
-        summary = CartService.get_summary(cart)
+        apply_voucher(cart, "FIXED80")
+        summary = get_summary(cart)
 
         assert summary.subtotal == Decimal("400.00")
         assert summary.discount == Decimal("80.00")
@@ -1149,7 +1155,7 @@ class TestGetSummary:
             price=Decimal("5.00"),
             is_active=True,
         )
-        CartService.add_ticket(cart, cheap, qty=1)
+        add_ticket(cart, cheap, qty=1)
 
         Voucher.objects.create(
             conference=conference,
@@ -1159,9 +1165,9 @@ class TestGetSummary:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "OVERKILL")
+        apply_voucher(cart, "OVERKILL")
 
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         assert summary.total >= Decimal("0.00")
 
@@ -1180,8 +1186,8 @@ class TestGetSummary:
             price=Decimal("50.00"),
             is_active=True,
         )
-        CartService.add_ticket(cart, t1, qty=1)
-        CartService.add_ticket(cart, t2, qty=2)  # 2 x $50 = $100
+        add_ticket(cart, t1, qty=1)
+        add_ticket(cart, t2, qty=2)  # 2 x $50 = $100
 
         Voucher.objects.create(
             conference=conference,
@@ -1191,9 +1197,9 @@ class TestGetSummary:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "TEN")
+        apply_voucher(cart, "TEN")
 
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         # subtotal = 200, 10% = 20
         assert summary.subtotal == Decimal("200.00")
@@ -1201,7 +1207,7 @@ class TestGetSummary:
         assert summary.total == Decimal("180.00")
 
     def test_line_totals_reflect_discount(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=1)  # $100
+        add_ticket(cart, ticket_type, qty=1)  # $100
 
         Voucher.objects.create(
             conference=conference,
@@ -1211,9 +1217,9 @@ class TestGetSummary:
             max_uses=10,
             is_active=True,
         )
-        CartService.apply_voucher(cart, "HALF")
+        apply_voucher(cart, "HALF")
 
-        summary = CartService.get_summary(cart)
+        summary = get_summary(cart)
 
         assert len(summary.items) == 1
         line = summary.items[0]
@@ -1268,7 +1274,7 @@ class TestEdgeCaseHelpers:
 
     @pytest.mark.django_db
     def test_apply_voucher_discounts_unknown_type(self, cart, ticket_type, conference):
-        CartService.add_ticket(cart, ticket_type, qty=1)
+        add_ticket(cart, ticket_type, qty=1)
         voucher = Voucher.objects.create(
             conference=conference,
             code="WEIRD",
