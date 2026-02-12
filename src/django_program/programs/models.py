@@ -478,6 +478,11 @@ class TravelGrantMessage(models.Model):
         return f"Grant message for {self.grant.user} by {self.user}"
 
 
+def receipt_upload_path(instance: Receipt, filename: str) -> str:
+    """Build per-user upload path: ``travel_grant_receipts/<username>/<filename>``."""
+    return f"travel_grant_receipts/{instance.grant.user.username}/{filename}"
+
+
 class Receipt(models.Model):
     """An expense receipt uploaded by a travel grant recipient."""
 
@@ -491,7 +496,7 @@ class Receipt(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField()
     receipt_file = models.FileField(
-        upload_to="travel_grant_receipts/",
+        upload_to=receipt_upload_path,
         validators=[FileExtensionValidator(allowed_extensions=["pdf", "jpg", "jpeg", "png"])],
     )
     approved = models.BooleanField(default=False)
