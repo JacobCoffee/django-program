@@ -43,10 +43,12 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "urls"
 
+import django_program  # noqa: E402
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [Path(django_program.__file__).resolve().parent / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

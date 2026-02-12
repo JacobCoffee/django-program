@@ -31,9 +31,11 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 from django_program.conference.models import Conference, Section
 from django_program.manage.forms import (
     ActivityForm,
+    AddOnForm,
     ConferenceForm,
     DisbursementForm,
     ImportFromPretalxForm,
+    ManualPaymentForm,
     ReceiptFlagForm,
     ReviewerMessageForm,
     RoomForm,
@@ -42,11 +44,14 @@ from django_program.manage.forms import (
     SponsorForm,
     SponsorLevelForm,
     TalkForm,
+    TicketTypeForm,
     TravelGrantForm,
+    VoucherForm,
 )
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.pretalx.sync import PretalxSyncService
 from django_program.programs.models import Activity, Receipt, TravelGrant, TravelGrantMessage
+from django_program.registration.models import AddOn, Order, Payment, TicketType, Voucher
 from django_program.settings import get_config
 from django_program.sponsors.models import Sponsor, SponsorLevel
 from django_program.sponsors.profiles.resolver import resolve_sponsor_profile
@@ -669,6 +674,11 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             "sponsor_levels": SponsorLevel.objects.filter(conference=conference).count(),
             "activities": Activity.objects.filter(conference=conference).count(),
             "travel_grants": TravelGrant.objects.filter(conference=conference).count(),
+            "ticket_types": TicketType.objects.filter(conference=conference).count(),
+            "addons": AddOn.objects.filter(conference=conference).count(),
+            "vouchers": Voucher.objects.filter(conference=conference).count(),
+            "orders": Order.objects.filter(conference=conference).count(),
+            "paid_orders": Order.objects.filter(conference=conference, status=Order.Status.PAID).count(),
         }
 
         sponsor_profile = resolve_sponsor_profile(
@@ -1790,11 +1800,12 @@ class SyncPretalxView(ManagePermissionMixin, View):
         sync_speakers = request.POST.get("sync_speakers") == "on"
         sync_talks = request.POST.get("sync_talks") == "on"
         sync_schedule = request.POST.get("sync_schedule") == "on"
+        allow_large_schedule_drop = request.POST.get("allow_large_schedule_drop") == "on"
         no_specific = not (sync_rooms or sync_speakers or sync_talks or sync_schedule)
 
         try:
             if no_specific:
-                results = service.sync_all()
+                results = service.sync_all(allow_large_deletions=allow_large_schedule_drop)
                 messages.success(
                     request,
                     f"Synced {results['rooms']} rooms, "
@@ -1814,7 +1825,7 @@ class SyncPretalxView(ManagePermissionMixin, View):
                     count = service.sync_talks()
                     parts.append(f"{count} talks")
                 if sync_schedule:
-                    count, skipped = service.sync_schedule()
+                    count, skipped = service.sync_schedule(allow_large_deletions=allow_large_schedule_drop)
                     msg = f"{count} schedule slots"
                     if skipped:
                         msg += f" ({skipped} unscheduled)"
@@ -1944,6 +1955,8 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
                                     "step": step_idx,
                                     "total": total,
                                     "label": (f"Syncing {entity_name}... ({progress['current']}/{progress['total']})"),
+                                    "current": int(progress["current"]),
+                                    "current_total": int(progress["total"]),
                                     "status": "in_progress",
                                 }
                             ),
@@ -2009,6 +2022,7 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
         want_speakers = request.POST.get("sync_speakers") == "on"
         want_talks = request.POST.get("sync_talks") == "on"
         want_schedule = request.POST.get("sync_schedule") == "on"
+        allow_large_schedule_drop = request.POST.get("allow_large_schedule_drop") == "on"
         sync_all = not (want_rooms or want_speakers or want_talks or want_schedule)
 
         steps: list[tuple[str, object, object]] = []
@@ -2019,7 +2033,13 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
         if sync_all or want_talks:
             steps.append(("talks", service.sync_talks, service.sync_talks_iter))
         if sync_all or want_schedule:
-            steps.append(("schedule slots", service.sync_schedule, None))
+            steps.append(
+                (
+                    "schedule slots",
+                    lambda: service.sync_schedule(allow_large_deletions=allow_large_schedule_drop),
+                    None,
+                )
+            )
         return steps
 
     def _sync_stream(self, request: HttpRequest) -> Iterator[str]:
@@ -2171,3 +2191,437 @@ class PretalxEventSearchView(LoginRequiredMixin, View):
         data = PretalxClient.fetch_events(base_url=base_url, api_token=api_token)
         _events_cache[api_token] = (now, data)
         return data
+
+
+# ---------------------------------------------------------------------------
+# Registration / Ticketing Management Views
+# ---------------------------------------------------------------------------
+
+
+def _unique_ticket_type_slug(name: str, conference: object, exclude_pk: int | None = None) -> str:
+    """Generate a unique slug for a TicketType within a conference.
+
+    Args:
+        name: The ticket type name to slugify.
+        conference: The conference instance to scope uniqueness to.
+        exclude_pk: Optional PK to exclude (for updates).
+
+    Returns:
+        A unique slug string.
+    """
+    base = slugify(name) or "ticket"
+    candidate = base
+    counter = 1
+    while True:
+        qs = TicketType.objects.filter(conference=conference, slug=candidate)
+        if exclude_pk is not None:
+            qs = qs.exclude(pk=exclude_pk)
+        if not qs.exists():
+            return candidate
+        counter += 1
+        candidate = f"{base}-{counter}"
+
+
+def _unique_addon_slug(name: str, conference: object, exclude_pk: int | None = None) -> str:
+    """Generate a unique slug for an AddOn within a conference.
+
+    Args:
+        name: The add-on name to slugify.
+        conference: The conference instance to scope uniqueness to.
+        exclude_pk: Optional PK to exclude (for updates).
+
+    Returns:
+        A unique slug string.
+    """
+    base = slugify(name) or "addon"
+    candidate = base
+    counter = 1
+    while True:
+        qs = AddOn.objects.filter(conference=conference, slug=candidate)
+        if exclude_pk is not None:
+            qs = qs.exclude(pk=exclude_pk)
+        if not qs.exists():
+            return candidate
+        counter += 1
+        candidate = f"{base}-{counter}"
+
+
+class TicketTypeListView(ManagePermissionMixin, ListView):
+    """List ticket types for the current conference."""
+
+    template_name = "django_program/manage/ticket_type_list.html"
+    context_object_name = "ticket_types"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "ticket-types"
+        return context
+
+    def get_queryset(self) -> QuerySet[TicketType]:
+        """Return ticket types for the current conference.
+
+        Annotates each ticket type with ``sold_count`` to display how many
+        tickets have been sold (orders in paid or partially refunded status).
+
+        Returns:
+            A queryset of TicketType instances ordered by display order.
+        """
+        return (
+            TicketType.objects.filter(conference=self.conference)
+            .annotate(
+                sold_count=Count(
+                    "order_line_items",
+                    filter=Q(
+                        order_line_items__order__status__in=[
+                            Order.Status.PAID,
+                            Order.Status.PARTIALLY_REFUNDED,
+                        ]
+                    ),
+                )
+            )
+            .order_by("order", "name")
+        )
+
+
+class TicketTypeCreateView(ManagePermissionMixin, CreateView):
+    """Create a new ticket type for the current conference."""
+
+    template_name = "django_program/manage/ticket_type_edit.html"
+    form_class = TicketTypeForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and ``is_create`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "ticket-types"
+        context["is_create"] = True
+        return context
+
+    def form_valid(self, form: TicketTypeForm) -> HttpResponse:
+        """Assign the conference and auto-generate slug before saving."""
+        form.instance.conference = self.conference
+        if not form.cleaned_data.get("slug"):
+            form.instance.slug = _unique_ticket_type_slug(form.instance.name, self.conference)
+        messages.success(self.request, "Ticket type created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the ticket type list."""
+        return reverse("manage:ticket-type-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class TicketTypeEditView(ManagePermissionMixin, UpdateView):
+    """Edit a ticket type belonging to the current conference."""
+
+    template_name = "django_program/manage/ticket_type_edit.html"
+    form_class = TicketTypeForm
+    context_object_name = "ticket_type"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "ticket-types"
+        return context
+
+    def get_queryset(self) -> QuerySet[TicketType]:
+        """Scope to the current conference."""
+        return TicketType.objects.filter(conference=self.conference)
+
+    def get_success_url(self) -> str:
+        """Redirect to the ticket type list."""
+        return reverse("manage:ticket-type-list", kwargs={"conference_slug": self.conference.slug})
+
+    def form_valid(self, form: TicketTypeForm) -> HttpResponse:
+        """Save and flash success."""
+        messages.success(self.request, "Ticket type updated successfully.")
+        return super().form_valid(form)
+
+
+class AddOnListView(ManagePermissionMixin, ListView):
+    """List add-ons for the current conference."""
+
+    template_name = "django_program/manage/addon_list.html"
+    context_object_name = "addons"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "addons"
+        return context
+
+    def get_queryset(self) -> QuerySet[AddOn]:
+        """Return add-ons for the current conference.
+
+        Annotates each add-on with ``sold_count``.
+
+        Returns:
+            A queryset of AddOn instances ordered by display order.
+        """
+        return (
+            AddOn.objects.filter(conference=self.conference)
+            .annotate(
+                sold_count=Count(
+                    "order_line_items",
+                    filter=Q(
+                        order_line_items__order__status__in=[
+                            Order.Status.PAID,
+                            Order.Status.PARTIALLY_REFUNDED,
+                        ]
+                    ),
+                )
+            )
+            .order_by("order", "name")
+        )
+
+
+class AddOnCreateView(ManagePermissionMixin, CreateView):
+    """Create a new add-on for the current conference."""
+
+    template_name = "django_program/manage/addon_edit.html"
+    form_class = AddOnForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and ``is_create`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "addons"
+        context["is_create"] = True
+        return context
+
+    def form_valid(self, form: AddOnForm) -> HttpResponse:
+        """Assign the conference and auto-generate slug before saving."""
+        form.instance.conference = self.conference
+        if not form.cleaned_data.get("slug"):
+            form.instance.slug = _unique_addon_slug(form.instance.name, self.conference)
+        messages.success(self.request, "Add-on created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the add-on list."""
+        return reverse("manage:addon-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class AddOnEditView(ManagePermissionMixin, UpdateView):
+    """Edit an add-on belonging to the current conference."""
+
+    template_name = "django_program/manage/addon_edit.html"
+    form_class = AddOnForm
+    context_object_name = "addon"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "addons"
+        return context
+
+    def get_queryset(self) -> QuerySet[AddOn]:
+        """Scope to the current conference."""
+        return AddOn.objects.filter(conference=self.conference)
+
+    def get_success_url(self) -> str:
+        """Redirect to the add-on list."""
+        return reverse("manage:addon-list", kwargs={"conference_slug": self.conference.slug})
+
+    def form_valid(self, form: AddOnForm) -> HttpResponse:
+        """Save and flash success."""
+        messages.success(self.request, "Add-on updated successfully.")
+        return super().form_valid(form)
+
+
+class VoucherListView(ManagePermissionMixin, ListView):
+    """List vouchers for the current conference.
+
+    Voucher codes are partially masked in the template for security.
+    """
+
+    template_name = "django_program/manage/voucher_list.html"
+    context_object_name = "vouchers"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "vouchers"
+        return context
+
+    def get_queryset(self) -> QuerySet[Voucher]:
+        """Return vouchers for the current conference.
+
+        Returns:
+            A queryset of Voucher instances ordered by creation date.
+        """
+        return Voucher.objects.filter(conference=self.conference).order_by("-created_at")
+
+
+class VoucherCreateView(ManagePermissionMixin, CreateView):
+    """Create a new voucher for the current conference."""
+
+    template_name = "django_program/manage/voucher_edit.html"
+    form_class = VoucherForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and ``is_create`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "vouchers"
+        context["is_create"] = True
+        return context
+
+    def get_form(self, form_class: type[VoucherForm] | None = None) -> VoucherForm:
+        """Scope the ticket type and add-on querysets to the current conference."""
+        form = super().get_form(form_class)
+        form.fields["applicable_ticket_types"].queryset = TicketType.objects.filter(conference=self.conference)
+        form.fields["applicable_addons"].queryset = AddOn.objects.filter(conference=self.conference)
+        return form
+
+    def form_valid(self, form: VoucherForm) -> HttpResponse:
+        """Assign the conference before saving."""
+        form.instance.conference = self.conference
+        messages.success(self.request, "Voucher created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the voucher list."""
+        return reverse("manage:voucher-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class VoucherEditView(ManagePermissionMixin, UpdateView):
+    """Edit a voucher belonging to the current conference."""
+
+    template_name = "django_program/manage/voucher_edit.html"
+    form_class = VoucherForm
+    context_object_name = "voucher"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "vouchers"
+        return context
+
+    def get_queryset(self) -> QuerySet[Voucher]:
+        """Scope to the current conference."""
+        return Voucher.objects.filter(conference=self.conference)
+
+    def get_form(self, form_class: type[VoucherForm] | None = None) -> VoucherForm:
+        """Scope the ticket type and add-on querysets to the current conference."""
+        form = super().get_form(form_class)
+        form.fields["applicable_ticket_types"].queryset = TicketType.objects.filter(conference=self.conference)
+        form.fields["applicable_addons"].queryset = AddOn.objects.filter(conference=self.conference)
+        return form
+
+    def get_success_url(self) -> str:
+        """Redirect to the voucher list."""
+        return reverse("manage:voucher-list", kwargs={"conference_slug": self.conference.slug})
+
+    def form_valid(self, form: VoucherForm) -> HttpResponse:
+        """Save and flash success."""
+        messages.success(self.request, "Voucher updated successfully.")
+        return super().form_valid(form)
+
+
+class OrderListView(ManagePermissionMixin, ListView):
+    """List orders for the current conference.
+
+    Supports filtering by order status via the ``status`` GET parameter.
+    Paginated at 50 orders per page.
+    """
+
+    template_name = "django_program/manage/order_list.html"
+    context_object_name = "orders"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and status filter to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "orders"
+        context["current_status"] = self.request.GET.get("status", "")
+        context["order_statuses"] = Order.Status.choices
+        return context
+
+    def get_queryset(self) -> QuerySet[Order]:
+        """Return orders for the current conference with optional status filter.
+
+        Returns:
+            A queryset of Order instances ordered by creation date descending.
+        """
+        qs = Order.objects.filter(conference=self.conference).select_related("user").order_by("-created_at")
+        status_filter = self.request.GET.get("status", "").strip()
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return qs
+
+
+class OrderDetailView(ManagePermissionMixin, DetailView):
+    """Display full order details with line items and payments.
+
+    Includes a manual payment form for staff to record comp/manual payments.
+    """
+
+    template_name = "django_program/manage/order_detail.html"
+    context_object_name = "order"
+
+    def get_queryset(self) -> QuerySet[Order]:
+        """Scope order lookup to the current conference."""
+        return Order.objects.filter(conference=self.conference).select_related("user")
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add line items, payments, and manual payment form to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "orders"
+        context["line_items"] = self.object.line_items.select_related("ticket_type", "addon").order_by("id")
+        context["payments"] = self.object.payments.select_related("created_by").order_by("-created_at")
+        context["payment_form"] = ManualPaymentForm()
+        total_paid = (
+            self.object.payments.filter(status=Payment.Status.SUCCEEDED).aggregate(
+                total=Sum("amount"),
+            )["total"]
+            or 0
+        )
+        context["total_paid"] = total_paid
+        context["balance_remaining"] = self.object.total - total_paid
+        return context
+
+
+class ManualPaymentView(ManagePermissionMixin, View):
+    """POST-only view to record a manual payment against an order.
+
+    When total successful payments meet or exceed the order total,
+    the order status is automatically transitioned to ``paid``.
+    """
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
+        """Record a manual payment and optionally mark the order as paid.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments (expects ``pk``).
+
+        Returns:
+            A redirect to the order detail page.
+        """
+        order = get_object_or_404(Order, pk=kwargs["pk"], conference=self.conference)
+        form = ManualPaymentForm(request.POST)
+        if form.is_valid():
+            Payment.objects.create(
+                order=order,
+                method=form.cleaned_data["method"],
+                status=Payment.Status.SUCCEEDED,
+                amount=form.cleaned_data["amount"],
+                note=form.cleaned_data.get("note", ""),
+                created_by=request.user,
+            )
+            total_paid = (
+                order.payments.filter(status=Payment.Status.SUCCEEDED).aggregate(
+                    total=Sum("amount"),
+                )["total"]
+                or 0
+            )
+            if total_paid >= order.total and order.status == Order.Status.PENDING:
+                order.status = Order.Status.PAID
+                order.save(update_fields=["status", "updated_at"])
+                messages.success(request, f"Payment recorded. Order {order.reference} marked as paid.")
+            else:
+                messages.success(request, "Payment recorded successfully.")
+        else:
+            messages.error(request, "Invalid payment data. Please check the form.")
+        return redirect("manage:order-detail", conference_slug=self.conference.slug, pk=order.pk)

@@ -1,5 +1,9 @@
 """Minimal Django settings for running django-program tests."""
 
+from pathlib import Path
+
+import django_program
+
 DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -22,7 +26,7 @@ MIDDLEWARE = [
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [Path(django_program.__file__).resolve().parent / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

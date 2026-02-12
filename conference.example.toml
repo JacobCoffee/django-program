@@ -27,14 +27,14 @@ name = "Individual"
 price = 100.00
 quantity = 2500
 per_user = 1
-available = { opens = 2027-01-15, closes = 2027-05-13 }
+available = { opens = 2025-01-15, closes = 2027-05-13 }
 
 [[conference.tickets]]
 name = "Corporate"
 price = 350.00
 quantity = 1000
 per_user = 1
-available = { opens = 2027-01-15, closes = 2027-05-13 }
+available = { opens = 2025-01-15, closes = 2027-05-13 }
 
 [[conference.tickets]]
 name = "Student"
@@ -42,7 +42,7 @@ price = 25.00
 quantity = 500
 per_user = 1
 voucher_required = true
-available = { opens = 2027-01-15, closes = 2027-05-13 }
+available = { opens = 2025-01-15, closes = 2027-05-13 }
 
 [[conference.tickets]]
 name = "Speaker"
@@ -50,7 +50,7 @@ price = 0.00
 quantity = 200
 per_user = 1
 voucher_required = true
-available = { opens = 2027-01-01, closes = 2027-05-18 }
+available = { opens = 2025-01-01, closes = 2027-05-18 }
 
 [[conference.addons]]
 name = "Tutorial: Intro to Django"

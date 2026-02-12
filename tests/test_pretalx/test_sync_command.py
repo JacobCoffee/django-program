@@ -72,7 +72,7 @@ def test_command_default_runs_sync_all(mock_service_cls, settings):
     out = StringIO()
     call_command("sync_pretalx", conference="cmd-all", stdout=out)
 
-    mock_service.sync_all.assert_called_once()
+    mock_service.sync_all.assert_called_once_with(allow_large_deletions=False)
     output = out.getvalue()
     assert "3 rooms" in output
     assert "10 speakers" in output
@@ -103,7 +103,7 @@ def test_command_all_flag_runs_sync_all(mock_service_cls, settings):
     out = StringIO()
     call_command("sync_pretalx", conference="cmd-allflag", sync_all=True, stdout=out)
 
-    mock_service.sync_all.assert_called_once()
+    mock_service.sync_all.assert_called_once_with(allow_large_deletions=False)
 
 
 # ---------------------------------------------------------------------------
@@ -185,11 +185,33 @@ def test_command_schedule_only(mock_service_cls, settings):
     out = StringIO()
     call_command("sync_pretalx", conference="cmd-schedule", schedule=True, stdout=out)
 
-    mock_service.sync_schedule.assert_called_once()
+    mock_service.sync_schedule.assert_called_once_with(allow_large_deletions=False)
     mock_service.sync_rooms.assert_not_called()
     mock_service.sync_speakers.assert_not_called()
     mock_service.sync_talks.assert_not_called()
     assert "schedule slots" in out.getvalue()
+
+
+@pytest.mark.django_db
+@patch("django_program.pretalx.management.commands.sync_pretalx.PretalxSyncService")
+def test_command_allow_large_schedule_drop_flag(mock_service_cls, settings):
+    settings.DJANGO_PROGRAM = _PRETALX_SETTINGS
+    _make_conference(slug="cmd-schedule-override")
+
+    mock_service = MagicMock()
+    mock_service.sync_schedule.return_value = (0, 0)
+    mock_service_cls.return_value = mock_service
+
+    out = StringIO()
+    call_command(
+        "sync_pretalx",
+        conference="cmd-schedule-override",
+        schedule=True,
+        allow_large_schedule_drop=True,
+        stdout=out,
+    )
+
+    mock_service.sync_schedule.assert_called_once_with(allow_large_deletions=True)
 
 
 # ---------------------------------------------------------------------------

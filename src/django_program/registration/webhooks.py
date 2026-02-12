@@ -12,7 +12,7 @@ Usage in URL configuration::
     from django_program.registration.webhooks import stripe_webhook
 
     urlpatterns = [
-        path("webhooks/stripe/<slug:conference_slug>/", stripe_webhook),
+        path("webhooks/stripe/", stripe_webhook),
     ]
 """
 

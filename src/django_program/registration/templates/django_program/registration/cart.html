@@ -1,0 +1,155 @@
+{% extends "django_program/base.html" %}
+
+{% block title %}Your Cart{% endblock %}
+
+{% block content %}
+<a href="{% url 'registration:ticket-select' conference.slug %}" class="back-link">Back to tickets</a>
+
+<div class="page-header">
+  <h1>Your Cart</h1>
+</div>
+
+{% if cart and cart.items.all|length %}
+<div class="order-layout">
+  <div>
+    {# ---- Cart Items ---- #}
+    <table class="data-table" style="margin-bottom: 1.5rem;">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="text-center">Qty</th>
+          <th class="text-right">Unit Price</th>
+          <th class="text-right">Total</th>
+          <th class="text-center">Remove</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in cart.items.all %}
+        <tr>
+          <td>
+            {% if item.ticket_type %}{{ item.ticket_type.name }}{% elif item.addon %}{{ item.addon.name }}{% endif %}
+          </td>
+          <td class="text-center">{{ item.quantity }}</td>
+          <td class="text-right">${{ item.unit_price }}</td>
+          <td class="text-right">${{ item.line_total }}</td>
+          <td class="text-center">
+            <form method="post" action="{% url 'registration:cart' conference.slug %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="remove_item">
+              <input type="hidden" name="item_id" value="{{ item.pk }}">
+              <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {# ---- Add Ticket ---- #}
+    <h2 class="section-heading">Add a Ticket</h2>
+    <form method="post" action="{% url 'registration:cart' conference.slug %}" class="form-inline" style="margin-bottom: 2rem;">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_ticket">
+      <div class="form-group" style="flex: 1; min-width: 200px;">
+        <label for="ticket_type">Ticket Type</label>
+        <select id="ticket_type" name="ticket_type">
+          {% for ticket in available_tickets %}
+          <option value="{{ ticket.slug }}">{{ ticket.name }} &mdash; ${{ ticket.price }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="width: 100px;">
+        <label for="ticket_qty">Qty</label>
+        <input type="number" id="ticket_qty" name="quantity" value="1" min="1" max="10">
+      </div>
+      <button type="submit" class="btn btn-secondary">Add to Cart</button>
+    </form>
+
+    {# ---- Add-ons ---- #}
+    {% if available_addons %}
+    <h2 class="section-heading">Add-ons</h2>
+    <div class="ticket-grid" style="margin-bottom: 2rem;">
+      {% for addon in available_addons %}
+      <div class="card card--static">
+        <div class="card-body" style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+          <div>
+            <div style="font-weight: 600; font-size: 0.95rem;">{{ addon.name }}</div>
+            {% if addon.description %}
+            <div style="font-size: 0.82rem; color: var(--color-text-muted); margin-top: 0.15rem;">{{ addon.description|truncatewords:15 }}</div>
+            {% endif %}
+            <div style="font-size: 0.9rem; font-weight: 700; margin-top: 0.35rem;">${{ addon.price }}</div>
+          </div>
+          <form method="post" action="{% url 'registration:cart' conference.slug %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_addon">
+            <input type="hidden" name="addon_slug" value="{{ addon.slug }}">
+            <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ---- Voucher ---- #}
+    <h2 class="section-heading">Voucher Code</h2>
+    {% if cart.voucher %}
+    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: var(--color-success-bg); border: 1px solid #a7f3d0; border-radius: var(--radius-sm); margin-bottom: 1rem;">
+      <span style="font-size: 0.9rem; color: var(--color-success); font-weight: 600;">
+        Voucher applied: <span class="mono">{{ cart.voucher.code }}</span>
+      </span>
+      <form method="post" action="{% url 'registration:cart' conference.slug %}" style="margin-left: auto;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="remove_voucher">
+        <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
+      </form>
+    </div>
+    {% else %}
+    <form method="post" action="{% url 'registration:cart' conference.slug %}" class="form-inline" style="margin-bottom: 1rem;">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="apply_voucher">
+      <div class="form-group" style="flex: 1; min-width: 200px;">
+        <label for="voucher_code">Enter voucher code</label>
+        <input type="text" id="voucher_code" name="voucher_code" placeholder="e.g. SPEAKER2025">
+      </div>
+      <button type="submit" class="btn btn-secondary">Apply</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {# ---- Order Summary Sidebar ---- #}
+  <aside class="order-sidebar">
+    <div class="card card--static">
+      <div class="card-body">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border-light);">Order Summary</h3>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.5rem;">
+          <span class="text-secondary">Subtotal</span>
+          <span>${{ subtotal }}</span>
+        </div>
+        {% if discount %}
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--color-success);">
+          <span>Discount</span>
+          <span>-${{ discount }}</span>
+        </div>
+        {% endif %}
+        <div style="display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: 700; padding-top: 0.75rem; border-top: 1px solid var(--color-border-light); margin-top: 0.5rem;">
+          <span>Total</span>
+          <span>${{ total }}</span>
+        </div>
+        <a href="{% url 'registration:checkout' conference.slug %}" class="btn btn-primary btn-lg" style="width: 100%; justify-content: center; margin-top: 1.25rem;">
+          Proceed to Checkout
+        </a>
+      </div>
+    </div>
+  </aside>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <p>Your cart is empty.</p>
+  <p style="font-size: 0.9rem;">
+    <a href="{% url 'registration:ticket-select' conference.slug %}">Browse available tickets</a> to get started.
+  </p>
+</div>
+{% endif %}
+{% endblock %}

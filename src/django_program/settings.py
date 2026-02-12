@@ -38,6 +38,9 @@ class PretalxConfig:
 
     base_url: str = "https://pretalx.com"
     token: str | None = None
+    schedule_delete_guard_enabled: bool = True
+    schedule_delete_guard_min_existing_slots: int = 5
+    schedule_delete_guard_max_fraction_removed: float = 0.4
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +120,19 @@ def _validate_program_config(config: ProgramConfig) -> None:
         raise ValueError(msg)
     if not isinstance(config.currency_symbol, str) or not config.currency_symbol.strip():
         msg = "DJANGO_PROGRAM['currency_symbol'] must be a non-empty string"
+        raise ValueError(msg)
+    if not isinstance(config.pretalx.schedule_delete_guard_enabled, bool):
+        msg = "DJANGO_PROGRAM['pretalx']['schedule_delete_guard_enabled'] must be a boolean"
+        raise TypeError(msg)
+    if (
+        not isinstance(config.pretalx.schedule_delete_guard_min_existing_slots, int)
+        or config.pretalx.schedule_delete_guard_min_existing_slots < 0
+    ):
+        msg = "DJANGO_PROGRAM['pretalx']['schedule_delete_guard_min_existing_slots'] must be a non-negative integer"
+        raise ValueError(msg)
+    threshold = config.pretalx.schedule_delete_guard_max_fraction_removed
+    if not isinstance(threshold, (int, float)) or not 0 <= float(threshold) <= 1:
+        msg = "DJANGO_PROGRAM['pretalx']['schedule_delete_guard_max_fraction_removed'] must be between 0 and 1"
         raise ValueError(msg)
 
 

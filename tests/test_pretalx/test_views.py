@@ -9,6 +9,7 @@ import json
 from datetime import date, datetime, timedelta
 
 import pytest
+from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
@@ -210,6 +211,22 @@ class TestScheduleView:
         assert response.status_code == 200
         assert response.context["days"] == []
         assert b"No schedule data available yet." in response.content
+
+    def test_nav_hides_manage_link_for_anonymous(self, client, conference):
+        url = reverse("pretalx:schedule", kwargs={"conference_slug": conference.slug})
+        response = client.get(url)
+        assert response.status_code == 200
+        assert b"Manage" not in response.content
+
+    def test_nav_shows_manage_link_for_staff(self, client, conference):
+        staff_user = User.objects.create_user(username="staff-user", password="password", is_staff=True)
+        client.force_login(staff_user)
+
+        url = reverse("pretalx:schedule", kwargs={"conference_slug": conference.slug})
+        response = client.get(url)
+        assert response.status_code == 200
+        assert b"Manage" in response.content
+        assert f"/manage/{conference.slug}/".encode() in response.content
 
     def test_schedule_grouped_by_day(self, client, conference, slot_with_talk, slot_break, slot_no_room):
         url = reverse("pretalx:schedule", kwargs={"conference_slug": conference.slug})

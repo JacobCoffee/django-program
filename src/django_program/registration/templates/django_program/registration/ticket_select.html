@@ -1,0 +1,72 @@
+{% extends "django_program/base.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Register for {{ conference.name }}</h1>
+  <p>Choose a ticket type to get started.</p>
+</div>
+
+{% if ticket_types %}
+<div class="ticket-grid">
+  {% for ticket in ticket_types %}
+  <div class="card card--static">
+    <div class="card-body">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem;">
+        <h3 style="font-size: 1.15rem; font-weight: 700;">{{ ticket.name }}</h3>
+        {% if not ticket.is_available %}
+          {% if ticket.available_from and ticket.available_from > now %}
+          <span class="badge badge--pending">Coming Soon</span>
+          {% elif ticket.remaining_quantity is not None and ticket.remaining_quantity <= 0 %}
+          <span class="badge badge--sold-out">Sold Out</span>
+          {% else %}
+          <span class="badge badge--muted">Unavailable</span>
+          {% endif %}
+        {% endif %}
+      </div>
+
+      {% if ticket.description %}
+      <p style="font-size: 0.9rem; color: var(--color-text-secondary); line-height: 1.5; margin-bottom: 1rem;">
+        {{ ticket.description }}
+      </p>
+      {% endif %}
+
+      <div style="display: flex; align-items: baseline; gap: 0.35rem; margin-bottom: 0.75rem;">
+        <span style="font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; color: var(--color-text);">
+          ${{ ticket.price }}
+        </span>
+      </div>
+
+      {% if ticket.total_quantity and ticket.is_available %}
+      <p style="font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: 1rem;">
+        {{ ticket.remaining_quantity }} remaining
+      </p>
+      {% endif %}
+
+      {% if ticket.available_until %}
+      <p style="font-size: 0.78rem; color: var(--color-text-muted); margin-bottom: 1rem;">
+        Available until {{ ticket.available_until|date:"M j, Y" }}
+      </p>
+      {% endif %}
+
+      {% if ticket.is_available %}
+      <a href="{% url 'registration:cart' conference.slug %}?add_ticket={{ ticket.slug }}" class="btn btn-primary" style="width: 100%; justify-content: center;">
+        Select
+      </a>
+      {% else %}
+      <button class="btn btn-secondary" style="width: 100%; justify-content: center;" disabled>
+        Unavailable
+      </button>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>No tickets are currently available.</p>
+  <p style="font-size: 0.9rem;">Check back later for registration details.</p>
+</div>
+{% endif %}
+{% endblock %}

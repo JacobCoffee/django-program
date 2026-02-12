@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 
 from django_program.conference.models import Conference
@@ -787,3 +788,223 @@ def test_payment_info_wrong_status(client: Client, conference: Conference, user:
     client.force_login(user)
     response = client.get(f"/{conference.slug}/programs/travel-grants/payment-info/")
     assert response.status_code == 302
+
+
+# ---- TravelGrantEditView POST coverage ----
+
+
+@pytest.mark.django_db
+def test_edit_post_wrong_status_redirects(
+    client: Client, conference: Conference, user: User, offered_grant: TravelGrant
+):
+    """Lines 354-355: POST to edit when grant is not editable redirects with error."""
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/edit/",
+        {
+            "request_type": "ticket_and_grant",
+            "application_type": "general",
+            "requested_amount": "600.00",
+            "travel_from": "Denver",
+            "reason": "Updated reason",
+            "experience_level": "intermediate",
+            "occupation": "Developer",
+            "involvement": "Community work",
+            "first_time": "True",
+        },
+    )
+    assert response.status_code == 302
+    offered_grant.refresh_from_db()
+    assert offered_grant.status == TravelGrant.GrantStatus.OFFERED
+
+
+@pytest.mark.django_db
+def test_edit_post_invalid_form_rerenders(
+    client: Client, conference: Conference, user: User, submitted_grant: TravelGrant
+):
+    """Line 358: POST to edit with invalid form data re-renders form with errors."""
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/edit/",
+        {
+            "request_type": "ticket_and_grant",
+            "application_type": "general",
+            "requested_amount": "",
+            "travel_from": "",
+            "reason": "",
+        },
+    )
+    assert response.status_code == 200
+    assert "form" in response.context
+    assert response.context.get("is_edit") is True
+
+
+# ---- TravelGrantProvideInfoView POST coverage ----
+
+
+@pytest.mark.django_db
+def test_provide_info_post_wrong_status_redirects(
+    client: Client, conference: Conference, user: User, submitted_grant: TravelGrant
+):
+    """Lines 382-383: POST to provide-info when not info_needed redirects."""
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/provide-info/",
+        {"message": "Some info"},
+    )
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_provide_info_post_invalid_form_rerenders(client: Client, conference: Conference, user: User):
+    """Line 386: POST to provide-info with empty message re-renders form."""
+    TravelGrant.objects.create(
+        conference=conference,
+        user=user,
+        status=TravelGrant.GrantStatus.INFO_NEEDED,
+        requested_amount=Decimal("500.00"),
+        travel_from="Chicago",
+        reason="Need help",
+    )
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/provide-info/",
+        {"message": ""},
+    )
+    assert response.status_code == 200
+    assert "form" in response.context
+
+
+# ---- ReceiptUploadView POST coverage ----
+
+
+@pytest.mark.django_db
+def test_receipt_upload_post_valid(client: Client, conference: Conference, user: User, accepted_grant: TravelGrant):
+    """Lines 443-453: POST valid receipt uploads successfully."""
+    receipt_file = SimpleUploadedFile("receipt.pdf", b"%PDF-1.4 content", content_type="application/pdf")
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/receipts/",
+        {
+            "receipt_type": "airfare",
+            "date": "2027-06-15",
+            "amount": "250.00",
+            "description": "Flight receipt",
+            "receipt_file": receipt_file,
+        },
+    )
+    assert response.status_code == 302
+    assert Receipt.objects.filter(grant=accepted_grant).exists()
+
+
+@pytest.mark.django_db
+def test_receipt_upload_post_invalid_rerenders(
+    client: Client, conference: Conference, user: User, accepted_grant: TravelGrant
+):
+    """Lines 454-455: POST invalid receipt re-renders form with existing receipts."""
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/receipts/",
+        {
+            "receipt_type": "airfare",
+            "date": "",
+            "amount": "",
+        },
+    )
+    assert response.status_code == 200
+    assert "form" in response.context
+    assert "receipts" in response.context
+
+
+@pytest.mark.django_db
+def test_receipt_upload_post_wrong_status_redirects(
+    client: Client, conference: Conference, user: User, submitted_grant: TravelGrant
+):
+    """Lines 443-446: POST receipt when grant is not accepted redirects."""
+    receipt_file = SimpleUploadedFile("receipt.pdf", b"%PDF-1.4 content", content_type="application/pdf")
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/receipts/",
+        {
+            "receipt_type": "airfare",
+            "date": "2027-06-15",
+            "amount": "250.00",
+            "description": "Flight",
+            "receipt_file": receipt_file,
+        },
+    )
+    assert response.status_code == 302
+
+
+# ---- PaymentInfoView GET with existing payment info (line 496) ----
+
+
+@pytest.mark.django_db
+def test_payment_info_get_with_existing_info(
+    client: Client, conference: Conference, user: User, accepted_grant: TravelGrant
+):
+    """Line 496: GET payment-info loads form pre-filled with existing PaymentInfo."""
+    PaymentInfo.objects.create(
+        grant=accepted_grant,
+        payment_method=PaymentInfo.PaymentMethod.PAYPAL,
+        legal_name="Jane Doe",
+        address_street="123 Main St",
+        address_city="Chicago",
+        address_zip="60601",
+        address_country="US",
+        paypal_email="jane@example.com",
+    )
+    client.force_login(user)
+    response = client.get(f"/{conference.slug}/programs/travel-grants/payment-info/")
+    assert response.status_code == 200
+    assert "form" in response.context
+    assert response.context["form"].instance.pk is not None
+
+
+# ---- PaymentInfoView POST wrong status (lines 513-514) ----
+
+
+@pytest.mark.django_db
+def test_payment_info_post_wrong_status_redirects(
+    client: Client, conference: Conference, user: User, submitted_grant: TravelGrant
+):
+    """Lines 513-514: POST payment-info when grant is not accepted redirects."""
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/payment-info/",
+        {
+            "payment_method": "paypal",
+            "legal_name": "Jane Doe",
+            "address_street": "123 Main St",
+            "address_city": "Chicago",
+            "address_state": "IL",
+            "address_zip": "60601",
+            "address_country": "US",
+            "paypal_email": "jane@example.com",
+        },
+    )
+    assert response.status_code == 302
+
+
+# ---- PaymentInfoView POST invalid form (line 526) ----
+
+
+@pytest.mark.django_db
+def test_payment_info_post_invalid_rerenders(
+    client: Client, conference: Conference, user: User, accepted_grant: TravelGrant
+):
+    """Line 526: POST payment-info with invalid data re-renders form."""
+    client.force_login(user)
+    response = client.post(
+        f"/{conference.slug}/programs/travel-grants/payment-info/",
+        {
+            "payment_method": "paypal",
+            "legal_name": "",
+            "address_street": "",
+            "address_city": "",
+            "address_zip": "",
+            "address_country": "",
+        },
+    )
+    assert response.status_code == 200
+    assert "form" in response.context

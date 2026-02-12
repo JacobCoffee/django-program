@@ -1,40 +1,157 @@
 {% extends "django_program/manage/base.html" %}
 
-{% block title %}Edit Conference{% endblock %}
+{% block title %}Conference Settings{% endblock %}
 
 {% block breadcrumb %}
 <nav class="breadcrumb" aria-label="Breadcrumb">
   <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
   <span class="breadcrumb-separator"></span>
-  <span>Edit Conference</span>
+  <span>Conference Settings</span>
 </nav>
 {% endblock %}
 
 {% block page_title %}
-<h1>Edit Conference</h1>
-<p>Update conference settings and details</p>
+<h1>Conference Settings</h1>
+<p>{{ conference.name }}</p>
 {% endblock %}
 
 {% block content %}
-<div class="form-container">
+<style>
+  .conf-form { max-width: 960px; }
+  .conf-form .form-row {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .conf-form .form-row--3 {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .conf-form .form-row--tail {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
+  .fieldset {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+  .fieldset:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  .fieldset-legend {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+  }
+  .toggle-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    height: min-content;
+    align-self: end;
+    margin-bottom: 1rem;
+  }
+  .toggle-group label {
+    margin-bottom: 0;
+    cursor: pointer;
+  }
+  @media (max-width: 720px) {
+    .conf-form .form-row,
+    .conf-form .form-row--3,
+    .conf-form .form-row--tail { grid-template-columns: 1fr; }
+  }
+</style>
+<div class="conf-form">
   <form method="post">
     {% csrf_token %}
-    {% for field in form %}
-    <div class="form-group">
-      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-      {{ field }}
-      {% if field.help_text %}
-      <span class="helptext">{{ field.help_text }}</span>
-      {% endif %}
-      {% if field.errors %}
-      <ul class="errorlist">
-        {% for error in field.errors %}
-        <li>{{ error }}</li>
-        {% endfor %}
-      </ul>
-      {% endif %}
+
+    <div class="fieldset">
+      <div class="fieldset-legend">General</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+          {{ form.name }}
+          {% if form.name.help_text %}<span class="helptext">{{ form.name.help_text }}</span>{% endif %}
+          {% for error in form.name.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.website_url.id_for_label }}">{{ form.website_url.label }}</label>
+          {{ form.website_url }}
+          {% if form.website_url.help_text %}<span class="helptext">{{ form.website_url.help_text }}</span>{% endif %}
+          {% for error in form.website_url.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+      </div>
     </div>
-    {% endfor %}
+
+    <div class="fieldset">
+      <div class="fieldset-legend">Dates &amp; Location</div>
+      <div class="form-row--3">
+        <div class="form-group">
+          <label for="{{ form.start_date.id_for_label }}">{{ form.start_date.label }}</label>
+          {{ form.start_date }}
+          {% if form.start_date.help_text %}<span class="helptext">{{ form.start_date.help_text }}</span>{% endif %}
+          {% for error in form.start_date.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.end_date.id_for_label }}">{{ form.end_date.label }}</label>
+          {{ form.end_date }}
+          {% if form.end_date.help_text %}<span class="helptext">{{ form.end_date.help_text }}</span>{% endif %}
+          {% for error in form.end_date.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.timezone.id_for_label }}">{{ form.timezone.label }}</label>
+          {{ form.timezone }}
+          {% if form.timezone.help_text %}<span class="helptext">{{ form.timezone.help_text }}</span>{% endif %}
+          {% for error in form.timezone.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="{{ form.venue.id_for_label }}">{{ form.venue.label }}</label>
+          {{ form.venue }}
+          {% if form.venue.help_text %}<span class="helptext">{{ form.venue.help_text }}</span>{% endif %}
+          {% for error in form.venue.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.address.id_for_label }}">{{ form.address.label }}</label>
+          {{ form.address }}
+          {% if form.address.help_text %}<span class="helptext">{{ form.address.help_text }}</span>{% endif %}
+          {% for error in form.address.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="fieldset">
+      <div class="fieldset-legend">Integrations &amp; Status</div>
+      <div class="form-row--tail">
+        <div class="form-group">
+          <label for="{{ form.pretalx_event_slug.id_for_label }}">{{ form.pretalx_event_slug.label }}</label>
+          {{ form.pretalx_event_slug }}
+          {% if form.pretalx_event_slug.help_text %}<span class="helptext">{{ form.pretalx_event_slug.help_text }}</span>{% endif %}
+          {% for error in form.pretalx_event_slug.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+        <div class="toggle-group">
+          {{ form.is_active }}
+          <label for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+        </div>
+      </div>
+    </div>
+
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">Save Changes</button>
       <a href="{% url 'manage:dashboard' conference.slug %}" class="btn btn-secondary">Cancel</a>

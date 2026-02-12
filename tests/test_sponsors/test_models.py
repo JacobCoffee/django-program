@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from django.core.exceptions import ValidationError
 
 from django_program.conference.models import Conference
 from django_program.sponsors.models import Sponsor, SponsorBenefit, SponsorLevel
@@ -89,3 +90,22 @@ def test_sponsor_logo_url_field(conference: Conference, level: SponsorLevel):
 @pytest.mark.django_db
 def test_sponsor_logo_url_default(sponsor: Sponsor):
     assert sponsor.logo_url == ""
+
+
+@pytest.mark.django_db
+def test_sponsor_clean_cross_conference_level_raises(conference: Conference, level: SponsorLevel):
+    """Lines 108-109: clean() rejects a sponsor whose level belongs to a different conference."""
+    other_conference = Conference.objects.create(
+        name="OtherCon",
+        slug="othercon",
+        start_date=date(2027, 9, 1),
+        end_date=date(2027, 9, 3),
+        timezone="UTC",
+    )
+    sponsor = Sponsor(
+        conference=other_conference,
+        level=level,
+        name="Cross Conference Corp",
+    )
+    with pytest.raises(ValidationError, match="same conference"):
+        sponsor.clean()
