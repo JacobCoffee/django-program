@@ -16,8 +16,13 @@
     <option value="accepted" {% if current_state == 'accepted' %}selected{% endif %}>Accepted</option>
     <option value="submitted" {% if current_state == 'submitted' %}selected{% endif %}>Submitted</option>
   </select>
+  <select name="scheduled" onchange="this.form.submit()">
+    <option value="">All talks</option>
+    <option value="yes" {% if current_scheduled == 'yes' %}selected{% endif %}>Scheduled</option>
+    <option value="no" {% if current_scheduled == 'no' %}selected{% endif %}>Unscheduled</option>
+  </select>
   <button type="submit" class="btn btn-sm btn-primary">Filter</button>
-  {% if search_query or current_state %}
+  {% if search_query or current_state or current_scheduled %}
   <a href="{% if current_type_slug %}{% url 'manage:talk-list-by-type' conference.slug current_type_slug %}{% else %}{% url 'manage:talk-list' conference.slug %}{% endif %}" class="btn btn-sm btn-secondary">Clear</a>
   {% endif %}
   {% if current_type %}
@@ -67,7 +72,7 @@
         {% if talk.slot_start %}
         <span class="mono">{{ talk.slot_start|date:"N j, H:i" }}</span>
         {% else %}
-        &mdash;
+        <span class="badge badge--warning">Unscheduled</span>
         {% endif %}
       </td>
       <td>
@@ -82,7 +87,7 @@
 
 {% else %}
 <div class="empty-state">
-  <p>{% if search_query or current_state %}No talks match your filters.{% else %}No talks synced for this conference.{% endif %}</p>
+  <p>{% if search_query or current_state or current_scheduled %}No talks match your filters.{% else %}No talks synced for this conference.{% endif %}</p>
 </div>
 {% endif %}
 {% endblock %}

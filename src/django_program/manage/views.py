@@ -533,13 +533,21 @@ class ImportPretalxStreamView(LoginRequiredMixin, View):
                                 }
                             )
                 else:
-                    count = sync_fn()
+                    result = sync_fn()
+                    if isinstance(result, tuple):
+                        count, skipped = result
+                    else:
+                        count = result
+                        skipped = 0
                 counts[entity_name] = count
+                label = f"Synced {count} {entity_name}"
+                if skipped:
+                    label += f" ({skipped} unscheduled)"
                 yield self._sse(
                     {
                         "step": step_num,
                         "total": total,
-                        "label": f"Synced {count} {entity_name}",
+                        "label": label,
                         "status": "done",
                     }
                 )
@@ -593,6 +601,7 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             "talks": Talk.objects.filter(conference=conference).count(),
             "schedule_slots": ScheduleSlot.objects.filter(conference=conference).count(),
             "sections": Section.objects.filter(conference=conference).count(),
+            "unscheduled_talks": Talk.objects.filter(conference=conference, slot_start__isnull=True).count(),
         }
 
         return context
@@ -959,6 +968,11 @@ class TalkListView(ManagePermissionMixin, ListView):
         state = self.request.GET.get("state", "").strip()
         if state:
             qs = qs.filter(state=state)
+        scheduled = self.request.GET.get("scheduled", "").strip()
+        if scheduled == "no":
+            qs = qs.filter(slot_start__isnull=True)
+        elif scheduled == "yes":
+            qs = qs.filter(slot_start__isnull=False)
         return qs
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -974,6 +988,7 @@ class TalkListView(ManagePermissionMixin, ListView):
         context["current_type_slug"] = self.kwargs.get("type_slug", "")
         context["search_query"] = self.request.GET.get("q", "")
         context["current_state"] = self.request.GET.get("state", "")
+        context["current_scheduled"] = self.request.GET.get("scheduled", "")
         context["available_states"] = (
             Talk.objects.filter(conference=self.conference).values_list("state", flat=True).distinct().order_by("state")
         )
@@ -1215,8 +1230,11 @@ class SyncPretalxView(ManagePermissionMixin, View):
                     count = service.sync_talks()
                     parts.append(f"{count} talks")
                 if sync_schedule:
-                    count = service.sync_schedule()
-                    parts.append(f"{count} schedule slots")
+                    count, skipped = service.sync_schedule()
+                    msg = f"{count} schedule slots"
+                    if skipped:
+                        msg += f" ({skipped} unscheduled)"
+                    parts.append(msg)
                 messages.success(request, f"Synced {', '.join(parts)}.")
         except RuntimeError as exc:
             messages.error(request, f"Sync failed: {exc}")
@@ -1316,13 +1334,21 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
                             False,
                         )
             else:
-                count = sync_fn()
+                result = sync_fn()
+                if isinstance(result, tuple):
+                    count, skipped = result
+                else:
+                    count = result
+                    skipped = 0
+            label = f"Synced {count} {entity_name}"
+            if skipped:
+                label += f" ({skipped} unscheduled)"
             yield (
                 self._sse(
                     {
                         "step": step_idx,
                         "total": total,
-                        "label": f"Synced {count} {entity_name}",
+                        "label": label,
                         "status": "done",
                     }
                 ),

@@ -338,27 +338,30 @@ class TestFetchTalks:
 
     @pytest.mark.unit
     def test_mappings_passed_through(self):
-        """Verify that submission_types, tracks, and rooms mappings reach from_api."""
+        """Verify that submission_types, tracks, tags, and rooms mappings reach from_api."""
         raw_data = [
             {
                 "code": "T1",
                 "title": "Mapped",
                 "submission_type": 7,
                 "track": 3,
+                "tags": [2],
                 "slot": {"room": 12, "start": "", "end": ""},
                 "speakers": [],
             }
         ]
         sub_types = {7: "Tutorial"}
         tracks = {3: "Data"}
+        tags = {2: "AI"}
         rooms = {12: "Hall A"}
 
         client = PretalxClient("evt")
         with patch.object(client, "_get_paginated_or_none", return_value=raw_data):
-            talks = client.fetch_talks(submission_types=sub_types, tracks=tracks, rooms=rooms)
+            talks = client.fetch_talks(submission_types=sub_types, tracks=tracks, tags=tags, rooms=rooms)
 
         assert talks[0].submission_type == "Tutorial"
         assert talks[0].track == "Data"
+        assert talks[0].tags == ["AI"]
         assert talks[0].room == "Hall A"
 
     @pytest.mark.unit
@@ -370,21 +373,24 @@ class TestFetchTalks:
                 "title": "Confirmed",
                 "submission_type": 7,
                 "track": 3,
+                "tags": [2],
                 "slot": {"room": 12, "start": "", "end": ""},
                 "speakers": [],
             }
         ]
         sub_types = {7: "Tutorial"}
         tracks = {3: "Data"}
+        tags = {2: "AI"}
         rooms = {12: "Hall A"}
 
         client = PretalxClient("evt")
         with patch.object(client, "_get_paginated_or_none", return_value=None):
             with patch.object(client, "_get_paginated", side_effect=[confirmed, []]):
-                talks = client.fetch_talks(submission_types=sub_types, tracks=tracks, rooms=rooms)
+                talks = client.fetch_talks(submission_types=sub_types, tracks=tracks, tags=tags, rooms=rooms)
 
         assert talks[0].submission_type == "Tutorial"
         assert talks[0].track == "Data"
+        assert talks[0].tags == ["AI"]
         assert talks[0].room == "Hall A"
 
 
@@ -495,6 +501,18 @@ class TestFetchMappings:
 
     @pytest.mark.unit
     @patch("pretalx_client.generated.http_client.httpx.Client")
+    def test_fetch_tags(self, mock_client_cls):
+        raw = [{"id": 2, "name": {"en": "AI"}}]
+        page = _make_response({"results": raw, "next": None})
+        mock_cm, _ = _make_mock_client_cm([page])
+        mock_client_cls.return_value = mock_cm
+
+        client = PretalxClient("evt")
+        result = client.fetch_tags()
+        assert result == {2: "AI"}
+
+    @pytest.mark.unit
+    @patch("pretalx_client.generated.http_client.httpx.Client")
     def test_fetch_mapping_skips_items_without_id(self, mock_client_cls):
         raw = [
             {"id": 1, "name": {"en": "Valid"}},
@@ -568,12 +586,14 @@ class TestFetchSubmissions:
                 "title": "Sub",
                 "submission_type": 7,
                 "track": 3,
+                "tags": [2],
                 "slot": {"room": 12, "start": "", "end": ""},
                 "speakers": [],
             }
         ]
         sub_types = {7: "Tutorial"}
         tracks = {3: "Data"}
+        tags = {2: "AI"}
         rooms = {12: "Hall A"}
 
         page = _make_response({"results": raw, "next": None})
@@ -581,8 +601,9 @@ class TestFetchSubmissions:
         mock_client_cls.return_value = mock_cm
 
         client = PretalxClient("evt")
-        results = client.fetch_submissions(submission_types=sub_types, tracks=tracks, rooms=rooms)
+        results = client.fetch_submissions(submission_types=sub_types, tracks=tracks, tags=tags, rooms=rooms)
 
         assert results[0].submission_type == "Tutorial"
         assert results[0].track == "Data"
+        assert results[0].tags == ["AI"]
         assert results[0].room == "Hall A"

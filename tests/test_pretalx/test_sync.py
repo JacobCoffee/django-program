@@ -64,10 +64,12 @@ def test_sync_talks_clears_speakers_when_api_returns_empty_list(settings):
     service._room_names = {}
     service._submission_types = {}
     service._tracks = {}
+    service._tags = {}
     service.client.fetch_talks = lambda **kwargs: [
         PretalxTalk(
             code="TALK1",
             title="Updated Title",
+            tags=["AI"],
             speaker_codes=[],
             state="confirmed",
         )
@@ -78,6 +80,7 @@ def test_sync_talks_clears_speakers_when_api_returns_empty_list(settings):
     talk.refresh_from_db()
     assert count == 1
     assert talk.title == "Updated Title"
+    assert talk.tags == ["AI"]
     assert talk.speakers.count() == 0
 
 
@@ -134,6 +137,7 @@ def test_sync_talks_links_room_fk(settings):
     service._room_names = {1: "Hall A"}
     service._submission_types = {}
     service._tracks = {}
+    service._tags = {}
     service.client.fetch_talks = lambda **kwargs: [
         PretalxTalk(
             code="TALK1",

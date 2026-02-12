@@ -64,3 +64,18 @@ def resolve_id_or_localized(
             return mapping[value]
         return str(value)
     return localized(value)
+
+
+def resolve_many_ids_or_localized(
+    values: list[int | str | dict[str, Any]] | None,
+    mapping: dict[int, str] | None = None,
+) -> list[str]:
+    """Resolve a list of Pretalx ID/localized values into display strings."""
+    if not values:
+        return []
+    resolved: list[str] = []
+    for value in values:
+        text = resolve_id_or_localized(value, mapping)
+        if text:
+            resolved.append(text)
+    return resolved

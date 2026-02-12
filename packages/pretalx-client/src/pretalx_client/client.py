@@ -199,6 +199,14 @@ class PretalxClient:
         """
         return self._fetch_id_name_mapping("tracks/")
 
+    def fetch_tags(self) -> dict[int, str]:
+        """Fetch tag ID-to-name mappings for the event.
+
+        Returns:
+            A dict mapping tag IDs to display names.
+        """
+        return self._fetch_id_name_mapping("tags/")
+
     def fetch_speakers(self) -> list[PretalxSpeaker]:
         """Fetch all speakers for the event.
 
@@ -213,6 +221,7 @@ class PretalxClient:
         *,
         submission_types: dict[int, str] | None = None,
         tracks: dict[int, str] | None = None,
+        tags: dict[int, str] | None = None,
         rooms: dict[int, str] | None = None,
     ) -> list[PretalxTalk]:
         """Fetch all confirmed/accepted talks for the event.
@@ -225,6 +234,7 @@ class PretalxClient:
         Args:
             submission_types: Optional ID-to-name mapping for submission types.
             tracks: Optional ID-to-name mapping for tracks.
+            tags: Optional ID-to-name mapping for tags.
             rooms: Optional ID-to-name mapping for rooms.
 
         Returns:
@@ -236,6 +246,7 @@ class PretalxClient:
                 item,
                 submission_types=submission_types,
                 tracks=tracks,
+                tags=tags,
                 rooms=rooms,
             )
             for item in raw
@@ -247,6 +258,7 @@ class PretalxClient:
         state: str = "",
         submission_types: dict[int, str] | None = None,
         tracks: dict[int, str] | None = None,
+        tags: dict[int, str] | None = None,
         rooms: dict[int, str] | None = None,
     ) -> list[PretalxTalk]:
         """Fetch submissions for the event, optionally filtered by state.
@@ -256,6 +268,7 @@ class PretalxClient:
                 ``"confirmed"``). When empty, all submissions are returned.
             submission_types: Optional ID-to-name mapping for submission types.
             tracks: Optional ID-to-name mapping for tracks.
+            tags: Optional ID-to-name mapping for tags.
             rooms: Optional ID-to-name mapping for rooms.
 
         Returns:
@@ -269,6 +282,7 @@ class PretalxClient:
                 item,
                 submission_types=submission_types,
                 tracks=tracks,
+                tags=tags,
                 rooms=rooms,
             )
             for item in self._get_paginated(url)

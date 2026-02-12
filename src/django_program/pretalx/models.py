@@ -89,6 +89,7 @@ class Talk(models.Model):
     description = models.TextField(blank=True, default="")
     submission_type = models.CharField(max_length=200, blank=True, default="")
     track = models.CharField(max_length=200, blank=True, default="")
+    tags = models.JSONField(blank=True, default=list)
     duration = models.PositiveIntegerField(null=True, blank=True)
     state = models.CharField(max_length=50, blank=True, default="")
     speakers = models.ManyToManyField(

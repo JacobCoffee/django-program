@@ -372,17 +372,20 @@ class TestPretalxTalkFromApi:
             "title": "Mapped IDs",
             "submission_type": 7,
             "track": 3,
+            "tags": [11, 12],
             "slot": {"room": 12, "start": "2026-07-15T10:00:00", "end": "2026-07-15T10:30:00"},
             "speakers": [],
         }
         sub_types = {7: "Tutorial", 8: "Talk"}
         tracks = {3: "Data Science", 5: "Web"}
+        tags = {11: "AI", 12: "Security"}
         rooms = {12: "Room 200", 14: "Room 300"}
 
-        talk = PretalxTalk.from_api(data, submission_types=sub_types, tracks=tracks, rooms=rooms)
+        talk = PretalxTalk.from_api(data, submission_types=sub_types, tracks=tracks, tags=tags, rooms=rooms)
 
         assert talk.submission_type == "Tutorial"
         assert talk.track == "Data Science"
+        assert talk.tags == ["AI", "Security"]
         assert talk.room == "Room 200"
 
     @pytest.mark.unit
@@ -401,6 +404,7 @@ class TestPretalxTalkFromApi:
         assert talk.submission_type == "99"
         assert talk.track == "42"
         assert talk.room == "77"
+        assert talk.tags == []
 
     @pytest.mark.unit
     def test_speakers_as_dicts(self):

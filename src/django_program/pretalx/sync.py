@@ -15,6 +15,7 @@ from django.db.models.functions import Lower
 from django.utils import timezone
 
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
+from django_program.pretalx.profiles import resolve_pretalx_profile
 from django_program.settings import get_config
 from pretalx_client.adapters.normalization import localized as _localized
 from pretalx_client.client import PretalxClient
@@ -72,6 +73,11 @@ class PretalxSyncService:
         self._room_names: dict[int, str] | None = None
         self._submission_types: dict[int, str] | None = None
         self._tracks: dict[int, str] | None = None
+        self._tags: dict[int, str] | None = None
+        self.profile = resolve_pretalx_profile(
+            event_slug=conference.pretalx_event_slug,
+            conference_slug=conference.slug,
+        )
 
     def _ensure_mappings(self) -> None:
         """Pre-fetch room, submission type, and track ID-to-name mappings.
@@ -91,6 +97,16 @@ class PretalxSyncService:
         if self._tracks is None:
             logger.debug("Fetching track mappings for %s", self.conference.slug)
             self._tracks = self.client.fetch_tracks()
+        if self._tags is None:
+            logger.debug("Fetching tag mappings for %s", self.conference.slug)
+            try:
+                self._tags = self.client.fetch_tags()
+            except RuntimeError:
+                logger.warning(
+                    "Could not fetch tag mappings for %s; continuing without tags",
+                    self.conference.slug,
+                )
+                self._tags = {}
 
     def sync_rooms(self) -> int:
         """Fetch rooms from Pretalx and upsert into the database.
@@ -268,6 +284,7 @@ class PretalxSyncService:
         api_talks = self.client.fetch_talks(
             submission_types=self._submission_types,
             tracks=self._tracks,
+            tags=self._tags,
             rooms=self._room_names,
         )
         total = len(api_talks)
@@ -292,7 +309,8 @@ class PretalxSyncService:
                 "abstract": api_talk.abstract,
                 "description": api_talk.description,
                 "submission_type": api_talk.submission_type,
-                "track": api_talk.track,
+                "track": self.profile.sync_track(api_talk),
+                "tags": self.profile.sync_tags(api_talk),
                 "duration": api_talk.duration,
                 "state": api_talk.state,
                 "room": room,
@@ -331,6 +349,7 @@ class PretalxSyncService:
                     "description",
                     "submission_type",
                     "track",
+                    "tags",
                     "duration",
                     "state",
                     "room",
@@ -353,14 +372,16 @@ class PretalxSyncService:
         )
         yield {"count": count}
 
-    def sync_schedule(self) -> int:
+    def sync_schedule(self) -> tuple[int, int]:
         """Fetch schedule slots from Pretalx and upsert into the database.
 
         Slots that no longer appear in the Pretalx schedule are deleted
         after the sync completes.
 
         Returns:
-            The number of schedule slots synced.
+            A tuple of ``(synced_count, unscheduled_count)`` where
+            *unscheduled_count* is the number of talks that still have
+            no scheduled slot after the sync.
         """
         self._ensure_mappings()
         api_slots = self.client.fetch_schedule(rooms=self._room_names)
@@ -421,7 +442,14 @@ class PretalxSyncService:
 
         self._backfill_talks_from_schedule()
 
-        return count
+        unscheduled = Talk.objects.filter(
+            conference=self.conference,
+            slot_start__isnull=True,
+        ).count()
+        if unscheduled:
+            logger.info("%d talks remain unscheduled for %s", unscheduled, self.conference.slug)
+
+        return count, unscheduled
 
     def _backfill_talks_from_schedule(self) -> None:
         """Populate talk room/slot fields from linked schedule slots.
@@ -473,14 +501,20 @@ class PretalxSyncService:
         """Run all sync operations in dependency order.
 
         Returns:
-            A mapping of entity type to the number synced.
+            A mapping of entity type to the number synced.  The
+            ``schedule_slots`` key contains only the synced count;
+            ``unscheduled_talks`` is added when any talks lack a slot.
         """
-        return {
+        schedule_count, unscheduled = self.sync_schedule()
+        result: dict[str, int] = {
             "rooms": self.sync_rooms(),
             "speakers": self.sync_speakers(),
             "talks": self.sync_talks(),
-            "schedule_slots": self.sync_schedule(),
+            "schedule_slots": schedule_count,
         }
+        if unscheduled:
+            result["unscheduled_talks"] = unscheduled
+        return result
 
 
 def _build_speaker(

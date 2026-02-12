@@ -20,6 +20,7 @@ from typing import Any
 from pretalx_client.adapters.normalization import (
     localized,
     resolve_id_or_localized,
+    resolve_many_ids_or_localized,
 )
 from pretalx_client.adapters.schedule import normalize_slot, parse_datetime
 from pretalx_client.generated import (
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 # names from ``pretalx_client.models``.  Keep them available here.
 _localized = localized
 _resolve_id_or_localized = resolve_id_or_localized
+_resolve_many_ids_or_localized = resolve_many_ids_or_localized
 _parse_datetime = parse_datetime
 
 
@@ -163,7 +165,8 @@ class PretalxTalk:
         abstract: Short summary.
         description: Full description.
         submission_type: Resolved display name of the submission type.
-        track: Resolved display name of the track.
+    track: Resolved display name of the track.
+        tags: Resolved display names of tags.
         duration: Duration in minutes.
         state: Submission lifecycle state.
         speaker_codes: List of speaker codes linked to this talk.
@@ -178,6 +181,7 @@ class PretalxTalk:
     description: str = ""
     submission_type: str = ""
     track: str = ""
+    tags: list[str] = field(default_factory=list)
     duration: int | None = None
     state: str = ""
     speaker_codes: list[str] = field(default_factory=list)
@@ -192,6 +196,7 @@ class PretalxTalk:
         *,
         submission_types: dict[int, str] | None = None,
         tracks: dict[int, str] | None = None,
+        tags: dict[int, str] | None = None,
         rooms: dict[int, str] | None = None,
     ) -> PretalxTalk:
         """Construct a ``PretalxTalk`` from a raw Pretalx API dict.
@@ -207,6 +212,8 @@ class PretalxTalk:
                 integer submission type IDs.
             tracks: Optional ``{id: name}`` mapping for resolving integer
                 track IDs.
+            tags: Optional ``{id: name}`` mapping for resolving integer
+                tag IDs.
             rooms: Optional ``{id: name}`` mapping for resolving integer
                 room IDs.
 
@@ -234,6 +241,7 @@ class PretalxTalk:
                 description=raw.description or "",
                 submission_type=resolve_id_or_localized(raw.submission_type, submission_types),
                 track=resolve_id_or_localized(raw.track, tracks),
+                tags=resolve_many_ids_or_localized(getattr(raw, "tags", None), tags),
                 duration=raw.duration,
                 state=raw.state.value if raw.state and not isinstance(raw.state, str) else (raw.state or ""),
                 speaker_codes=list(raw.speakers),
@@ -252,6 +260,8 @@ class PretalxTalk:
 
         track_raw = data.get("track")
         track = resolve_id_or_localized(track_raw, tracks)
+        tags_raw = data.get("tags")
+        tags_resolved = resolve_many_ids_or_localized(tags_raw, tags)
 
         return cls(
             code=data.get("code", ""),
@@ -260,6 +270,7 @@ class PretalxTalk:
             description=data.get("description") or "",
             submission_type=submission_type,
             track=track,
+            tags=tags_resolved,
             duration=data.get("duration"),
             state=data.get("state") or "",
             speaker_codes=speaker_codes,

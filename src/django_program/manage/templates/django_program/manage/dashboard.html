@@ -97,6 +97,14 @@
       <div class="stat-card-label">Sections</div>
     </a>
   </div>
+  {% if stats.unscheduled_talks %}
+  <div class="stat-card" style="border-color: var(--color-warning-border, #fde68a); background: var(--color-warning-bg, #fffbeb);">
+    <a href="{% url 'manage:talk-list' conference.slug %}?scheduled=no">
+      <div class="stat-card-value" style="color: var(--color-warning-text, #92400e);">{{ stats.unscheduled_talks }}</div>
+      <div class="stat-card-label" style="color: var(--color-warning-text, #92400e);">Unscheduled Talks</div>
+    </a>
+  </div>
+  {% endif %}
 </div>
 
 <h2 class="section-heading">Conference Details</h2>
