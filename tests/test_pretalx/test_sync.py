@@ -1420,3 +1420,91 @@ def test_sync_enrichment_no_room_when_different_rooms(settings):
     activity = Activity.objects.get(conference=conference, pretalx_submission_type="Tutorial")
     assert activity.room is None
     assert "across 2 rooms" in activity.description
+
+
+# ===========================================================================
+# _build_activity_enrichment (lines 469+)
+# ===========================================================================
+
+
+@pytest.mark.django_db
+def test_sync_enrichment_empty_talks(settings):
+    """Line 469: zero talks returns empty dict."""
+    conference = _make_conference(slug="enrich-empty")
+    service = _make_service(conference, settings)
+    result = service._build_activity_enrichment(Talk.objects.none())
+    assert result == {}
+
+
+@pytest.mark.django_db
+def test_sync_enrichment_no_rooms_assigned(settings):
+    """Line 469: talks with no room assignment get generic description."""
+    conference = _make_conference(slug="enrich-noroom")
+    service = _make_service(conference, settings)
+    service.client.fetch_talks = MagicMock(
+        return_value=[
+            PretalxTalk(code="T1", title="Talk A", state="confirmed", submission_type="Tutorial"),
+            PretalxTalk(code="T2", title="Talk B", state="confirmed", submission_type="Tutorial"),
+        ]
+    )
+
+    service.sync_talks()
+
+    activity = Activity.objects.get(conference=conference, pretalx_submission_type="Tutorial")
+    assert activity.description == "2 talks"
+    assert activity.room is None
+
+
+# ===========================================================================
+# _check_schedule_deletion_safety edge cases (lines 524, 528)
+# ===========================================================================
+
+
+@pytest.mark.django_db
+def test_schedule_deletion_safety_skips_when_existing_zero(settings):
+    """Line 524: existing_count=0 skips the guard."""
+    conference = _make_conference(slug="guard-zero-existing")
+    service = _make_service(conference, settings)
+    service._schedule_delete_guard_enabled = True
+    service._schedule_delete_guard_min_existing_slots = 0
+    service._schedule_delete_guard_max_fraction_removed = 0.4
+
+    # Should not raise even though stale_count > 0
+    service._check_schedule_deletion_safety(
+        existing_count=0,
+        stale_count=5,
+        allow_large_deletions=False,
+    )
+
+
+@pytest.mark.django_db
+def test_schedule_deletion_safety_skips_when_stale_zero(settings):
+    """Line 524: stale_count=0 skips the guard."""
+    conference = _make_conference(slug="guard-zero-stale")
+    service = _make_service(conference, settings)
+    service._schedule_delete_guard_enabled = True
+    service._schedule_delete_guard_min_existing_slots = 1
+    service._schedule_delete_guard_max_fraction_removed = 0.4
+
+    service._check_schedule_deletion_safety(
+        existing_count=10,
+        stale_count=0,
+        allow_large_deletions=False,
+    )
+
+
+@pytest.mark.django_db
+def test_schedule_deletion_safety_allows_small_fraction(settings):
+    """Line 528: fraction below threshold is allowed."""
+    conference = _make_conference(slug="guard-small-frac")
+    service = _make_service(conference, settings)
+    service._schedule_delete_guard_enabled = True
+    service._schedule_delete_guard_min_existing_slots = 1
+    service._schedule_delete_guard_max_fraction_removed = 0.5
+
+    # 2 out of 10 = 20% which is below 50% threshold
+    service._check_schedule_deletion_safety(
+        existing_count=10,
+        stale_count=2,
+        allow_large_deletions=False,
+    )

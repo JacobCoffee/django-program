@@ -10,7 +10,14 @@ from django.db import IntegrityError
 
 from django_program.conference.models import Conference
 from django_program.pretalx.models import Room, Talk
-from django_program.programs.models import Activity, ActivitySignup, PaymentInfo, Receipt, TravelGrant
+from django_program.programs.models import (
+    Activity,
+    ActivitySignup,
+    PaymentInfo,
+    Receipt,
+    TravelGrant,
+    TravelGrantMessage,
+)
 
 
 @pytest.fixture
@@ -417,3 +424,119 @@ def test_is_ready_for_disbursement_all_conditions_met(accepted_grant: TravelGran
         approved=True,
     )
     assert accepted_grant.is_ready_for_disbursement is True
+
+
+# ---- travel_plans_total property (line 402) ----
+
+
+@pytest.mark.django_db
+def test_travel_plans_total(conference: Conference, user: User):
+    """Line 402: travel_plans_total sums airfare and lodging amounts."""
+    grant = TravelGrant.objects.create(
+        conference=conference,
+        user=user,
+        requested_amount=Decimal("1000.00"),
+        travel_from="Chicago",
+        reason="Need help",
+        travel_plans_airfare_amount=Decimal("400.00"),
+        travel_plans_lodging_amount=Decimal("300.00"),
+    )
+    assert grant.travel_plans_total == Decimal("700.00")
+
+
+# ---- is_editable property (line 407) ----
+
+
+@pytest.mark.django_db
+def test_is_editable_submitted(conference: Conference, user: User):
+    """Line 407: submitted grants are editable."""
+    grant = TravelGrant.objects.create(
+        conference=conference,
+        user=user,
+        status=TravelGrant.GrantStatus.SUBMITTED,
+        requested_amount=Decimal("500.00"),
+        travel_from="Chicago",
+        reason="Need help",
+    )
+    assert grant.is_editable is True
+
+
+@pytest.mark.django_db
+def test_is_editable_info_needed(conference: Conference, user: User):
+    """Line 407: info_needed grants are editable."""
+    grant = TravelGrant.objects.create(
+        conference=conference,
+        user=user,
+        status=TravelGrant.GrantStatus.INFO_NEEDED,
+        requested_amount=Decimal("500.00"),
+        travel_from="Chicago",
+        reason="Need help",
+    )
+    assert grant.is_editable is True
+
+
+@pytest.mark.django_db
+def test_is_editable_rejected(conference: Conference, user: User):
+    """Line 407: rejected grants are not editable."""
+    grant = TravelGrant.objects.create(
+        conference=conference,
+        user=user,
+        status=TravelGrant.GrantStatus.REJECTED,
+        requested_amount=Decimal("500.00"),
+        travel_from="Chicago",
+        reason="Need help",
+    )
+    assert grant.is_editable is False
+
+
+# ---- is_actionable property (line 412) ----
+
+
+@pytest.mark.django_db
+def test_is_actionable_offered(conference: Conference, user: User):
+    """Line 412: only offered grants are actionable."""
+    grant = TravelGrant.objects.create(
+        conference=conference,
+        user=user,
+        status=TravelGrant.GrantStatus.OFFERED,
+        requested_amount=Decimal("500.00"),
+        travel_from="Chicago",
+        reason="Need help",
+    )
+    assert grant.is_actionable is True
+
+
+@pytest.mark.django_db
+def test_is_actionable_submitted(conference: Conference, user: User):
+    """Line 412: submitted grants are not actionable."""
+    grant = TravelGrant.objects.create(
+        conference=conference,
+        user=user,
+        status=TravelGrant.GrantStatus.SUBMITTED,
+        requested_amount=Decimal("500.00"),
+        travel_from="Chicago",
+        reason="Need help",
+    )
+    assert grant.is_actionable is False
+
+
+# ---- TravelGrantMessage.__str__ (line 478) ----
+
+
+@pytest.mark.django_db
+def test_travel_grant_message_str(conference: Conference, user: User):
+    """Line 478: TravelGrantMessage str representation."""
+    grant = TravelGrant.objects.create(
+        conference=conference,
+        user=user,
+        requested_amount=Decimal("500.00"),
+        travel_from="Chicago",
+        reason="Need help",
+    )
+    msg = TravelGrantMessage.objects.create(
+        grant=grant,
+        user=user,
+        message="Test message",
+        visible=True,
+    )
+    assert str(msg) == f"Grant message for {user} by {user}"

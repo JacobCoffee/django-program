@@ -3,11 +3,13 @@
 import json
 import time
 from datetime import date, timedelta
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth.models import Permission, User
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.db.utils import IntegrityError
 from django.test import Client, RequestFactory, override_settings
 from django.urls import reverse
@@ -16,15 +18,22 @@ from django.utils import timezone
 from django_program.conference.models import Conference, Section
 from django_program.manage import views as views_module
 from django_program.manage.apps import DjangoProgramManageConfig
-from django_program.manage.forms import RoomForm
+from django_program.manage.forms import AddOnForm, RoomForm, TicketTypeForm
 from django_program.manage.views import (
+    AddOnCreateView,
     ImportPretalxStreamView,
     RoomCreateView,
     ScheduleSlotEditView,
     SyncPretalxStreamView,
     TalkEditView,
+    TicketTypeCreateView,
+    _unique_addon_slug,
+    _unique_section_slug,
+    _unique_ticket_type_slug,
 )
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
+from django_program.programs.models import TravelGrant, TravelGrantMessage
+from django_program.registration.models import AddOn, Order, Payment, TicketType, Voucher
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1862,3 +1871,700 @@ class TestPermissionBasedAccess:
         url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
         resp = c.get(url)
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# _unique_section_slug collision path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestUniqueSectionSlug:
+    """Cover the slug-collision branch in _unique_section_slug (lines 85-86)."""
+
+    def test_slug_collision_appends_suffix(self, conference):
+        """When a section with the same slug already exists, a numeric suffix is appended."""
+        Section.objects.create(
+            conference=conference,
+            name="Talks",
+            slug="talks",
+            start_date=conference.start_date,
+            end_date=conference.end_date,
+            order=1,
+        )
+        result = _unique_section_slug("Talks", conference)
+        assert result == "talks-2"
+
+    def test_slug_collision_multiple(self, conference):
+        """Multiple collisions increment the suffix."""
+        for slug in ("talks", "talks-2"):
+            Section.objects.create(
+                conference=conference,
+                name="Talks",
+                slug=slug,
+                start_date=conference.start_date,
+                end_date=conference.end_date,
+                order=1,
+            )
+        result = _unique_section_slug("Talks", conference)
+        assert result == "talks-3"
+
+
+# ---------------------------------------------------------------------------
+# TravelGrantSendMessageView
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestTravelGrantSendMessageView:
+    """Cover TravelGrantSendMessageView.post (lines 1645-1653)."""
+
+    @pytest.fixture
+    def travel_grant(self, conference, regular_user):
+        return TravelGrant.objects.create(
+            conference=conference,
+            user=regular_user,
+            status=TravelGrant.GrantStatus.SUBMITTED,
+            travel_from="Portland",
+            requested_amount=1000,
+            reason="Attending talks",
+        )
+
+    def test_send_message(self, client_logged_in_super, conference, travel_grant):
+        url = reverse(
+            "manage:travel-grant-send-message",
+            kwargs={"conference_slug": conference.slug, "pk": travel_grant.pk},
+        )
+        resp = client_logged_in_super.post(url, {"message": "Looks good!", "visible": True})
+        assert resp.status_code == 302
+        assert TravelGrantMessage.objects.filter(grant=travel_grant).count() == 1
+        msg = TravelGrantMessage.objects.get(grant=travel_grant)
+        assert msg.message == "Looks good!"
+        assert msg.visible is True
+
+
+# ---------------------------------------------------------------------------
+# TicketType CRUD Views
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestTicketTypeViews:
+    """Cover TicketTypeListView, TicketTypeCreateView, and TicketTypeEditView."""
+
+    @pytest.fixture
+    def ticket_type(self, conference):
+        return TicketType.objects.create(
+            conference=conference,
+            name="Early Bird",
+            slug="early-bird",
+            price="99.00",
+            order=1,
+        )
+
+    def test_ticket_type_list(self, client_logged_in_super, conference, ticket_type):
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "ticket-types"
+        assert ticket_type in resp.context["ticket_types"]
+
+    def test_ticket_type_list_queryset_annotation(self, client_logged_in_super, conference, ticket_type):
+        """The queryset annotates sold_count on each ticket type."""
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        tt = next(iter(resp.context["ticket_types"]))
+        assert hasattr(tt, "sold_count")
+        assert tt.sold_count == 0
+
+    def test_ticket_type_create_get(self, client_logged_in_super, conference):
+        url = reverse("manage:ticket-type-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "ticket-types"
+        assert resp.context["is_create"] is True
+
+    def test_ticket_type_create_post(self, client_logged_in_super, conference):
+        url = reverse("manage:ticket-type-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "Student",
+                "slug": "student",
+                "description": "Student ticket",
+                "price": "49.00",
+                "total_quantity": 100,
+                "limit_per_user": 1,
+                "order": 2,
+            },
+        )
+        assert resp.status_code == 302
+        created = TicketType.objects.get(conference=conference, slug="student")
+        assert created.name == "Student"
+        assert created.price == Decimal("49.00")
+
+    def test_ticket_type_create_success_url(self, client_logged_in_super, conference):
+        url = reverse("manage:ticket-type-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "VIP",
+                "slug": "vip",
+                "description": "",
+                "price": "199.00",
+                "total_quantity": 0,
+                "limit_per_user": 10,
+                "order": 3,
+            },
+        )
+        expected = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        assert resp.url == expected
+
+    def test_ticket_type_edit_get(self, client_logged_in_super, conference, ticket_type):
+        url = reverse(
+            "manage:ticket-type-edit",
+            kwargs={"conference_slug": conference.slug, "pk": ticket_type.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "ticket-types"
+
+    def test_ticket_type_edit_post(self, client_logged_in_super, conference, ticket_type):
+        url = reverse(
+            "manage:ticket-type-edit",
+            kwargs={"conference_slug": conference.slug, "pk": ticket_type.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "Early Bird Updated",
+                "slug": "early-bird",
+                "description": "Updated desc",
+                "price": "89.00",
+                "total_quantity": 0,
+                "limit_per_user": 10,
+                "order": 1,
+            },
+        )
+        assert resp.status_code == 302
+        ticket_type.refresh_from_db()
+        assert ticket_type.name == "Early Bird Updated"
+
+    def test_ticket_type_edit_success_url(self, client_logged_in_super, conference, ticket_type):
+        url = reverse(
+            "manage:ticket-type-edit",
+            kwargs={"conference_slug": conference.slug, "pk": ticket_type.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "Early Bird",
+                "slug": "early-bird",
+                "description": "",
+                "price": "99.00",
+                "total_quantity": 0,
+                "limit_per_user": 10,
+                "order": 1,
+            },
+        )
+        expected = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        assert resp.url == expected
+
+
+# ---------------------------------------------------------------------------
+# _unique_ticket_type_slug
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestUniqueTicketTypeSlug:
+    """Cover the _unique_ticket_type_slug helper (lines 2212-2222)."""
+
+    def test_no_collision(self, conference):
+        result = _unique_ticket_type_slug("Early Bird", conference)
+        assert result == "early-bird"
+
+    def test_collision(self, conference):
+        TicketType.objects.create(conference=conference, name="Early Bird", slug="early-bird", price="99.00")
+        result = _unique_ticket_type_slug("Early Bird", conference)
+        assert result == "early-bird-2"
+
+    def test_exclude_pk(self, conference):
+        tt = TicketType.objects.create(conference=conference, name="Early Bird", slug="early-bird", price="99.00")
+        result = _unique_ticket_type_slug("Early Bird", conference, exclude_pk=tt.pk)
+        assert result == "early-bird"
+
+
+# ---------------------------------------------------------------------------
+# _unique_addon_slug
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestUniqueAddonSlug:
+    """Cover the _unique_addon_slug helper (lines 2236-2246)."""
+
+    def test_no_collision(self, conference):
+        result = _unique_addon_slug("T-Shirt", conference)
+        assert result == "t-shirt"
+
+    def test_collision(self, conference):
+        AddOn.objects.create(conference=conference, name="T-Shirt", slug="t-shirt", price="25.00")
+        result = _unique_addon_slug("T-Shirt", conference)
+        assert result == "t-shirt-2"
+
+    def test_exclude_pk(self, conference):
+        ao = AddOn.objects.create(conference=conference, name="T-Shirt", slug="t-shirt", price="25.00")
+        result = _unique_addon_slug("T-Shirt", conference, exclude_pk=ao.pk)
+        assert result == "t-shirt"
+
+
+# ---------------------------------------------------------------------------
+# Auto-slug in CreateView.form_valid (direct invocation)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestCreateViewAutoSlug:
+    """Cover the auto-slug branches in TicketTypeCreateView and AddOnCreateView.
+
+    The form requires slug to be non-empty, so the auto-slug branch in
+    form_valid is only reachable by patching the form's slug field to
+    not required and submitting an empty slug.
+    """
+
+    def test_ticket_type_auto_slug(self, client_logged_in_super, conference):
+        """TicketTypeCreateView auto-generates slug when slug field is empty."""
+        factory = RequestFactory()
+        request = factory.post("/fake/")
+        request.user = User.objects.get(username="admin")
+        setattr(request, "session", "session")
+        setattr(request, "_messages", FallbackStorage(request))
+
+        view = TicketTypeCreateView()
+        view.kwargs = {"conference_slug": conference.slug}
+        view.conference = conference
+        view.request = request
+        view.object = None
+
+        form = TicketTypeForm(
+            data={
+                "name": "Auto Slug Test",
+                "slug": "auto-slug-test",
+                "description": "",
+                "price": "10.00",
+                "total_quantity": 0,
+                "limit_per_user": 10,
+                "order": 0,
+            }
+        )
+        assert form.is_valid()
+        # Simulate an empty slug in cleaned_data to hit the auto-slug branch
+        form.cleaned_data["slug"] = ""
+        form.instance.conference = conference
+        view.form_valid(form)
+
+        created = TicketType.objects.get(conference=conference, name="Auto Slug Test")
+        assert created.slug == "auto-slug-test"
+
+    def test_addon_auto_slug(self, client_logged_in_super, conference):
+        """AddOnCreateView auto-generates slug when slug field is empty."""
+        factory = RequestFactory()
+        request = factory.post("/fake/")
+        request.user = User.objects.get(username="admin")
+        setattr(request, "session", "session")
+        setattr(request, "_messages", FallbackStorage(request))
+
+        view = AddOnCreateView()
+        view.kwargs = {"conference_slug": conference.slug}
+        view.conference = conference
+        view.request = request
+        view.object = None
+
+        form = AddOnForm(
+            data={
+                "name": "Auto Addon",
+                "slug": "auto-addon",
+                "description": "",
+                "price": "15.00",
+                "total_quantity": 0,
+                "order": 0,
+            }
+        )
+        assert form.is_valid()
+        form.cleaned_data["slug"] = ""
+        form.instance.conference = conference
+        view.form_valid(form)
+
+        created = AddOn.objects.get(conference=conference, name="Auto Addon")
+        assert created.slug == "auto-addon"
+
+
+# ---------------------------------------------------------------------------
+# AddOn CRUD Views
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestAddOnViews:
+    """Cover AddOnListView, AddOnCreateView, and AddOnEditView."""
+
+    @pytest.fixture
+    def addon(self, conference):
+        return AddOn.objects.create(
+            conference=conference,
+            name="T-Shirt",
+            slug="t-shirt",
+            price="25.00",
+            order=1,
+        )
+
+    def test_addon_list(self, client_logged_in_super, conference, addon):
+        url = reverse("manage:addon-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "addons"
+        assert addon in resp.context["addons"]
+
+    def test_addon_list_queryset_annotation(self, client_logged_in_super, conference, addon):
+        """The queryset annotates sold_count on each add-on."""
+        url = reverse("manage:addon-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        ao = next(iter(resp.context["addons"]))
+        assert hasattr(ao, "sold_count")
+        assert ao.sold_count == 0
+
+    def test_addon_create_get(self, client_logged_in_super, conference):
+        url = reverse("manage:addon-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "addons"
+        assert resp.context["is_create"] is True
+
+    def test_addon_create_post(self, client_logged_in_super, conference):
+        url = reverse("manage:addon-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "Workshop Pass",
+                "slug": "workshop-pass",
+                "description": "Access to workshops",
+                "price": "50.00",
+                "total_quantity": 50,
+                "order": 1,
+            },
+        )
+        assert resp.status_code == 302
+        created = AddOn.objects.get(conference=conference, slug="workshop-pass")
+        assert created.name == "Workshop Pass"
+
+    def test_addon_create_success_url(self, client_logged_in_super, conference):
+        url = reverse("manage:addon-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "Sticker Pack",
+                "slug": "sticker-pack",
+                "description": "",
+                "price": "5.00",
+                "total_quantity": 0,
+                "order": 2,
+            },
+        )
+        expected = reverse("manage:addon-list", kwargs={"conference_slug": conference.slug})
+        assert resp.url == expected
+
+    def test_addon_edit_get(self, client_logged_in_super, conference, addon):
+        url = reverse(
+            "manage:addon-edit",
+            kwargs={"conference_slug": conference.slug, "pk": addon.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "addons"
+
+    def test_addon_edit_post(self, client_logged_in_super, conference, addon):
+        url = reverse(
+            "manage:addon-edit",
+            kwargs={"conference_slug": conference.slug, "pk": addon.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "T-Shirt Updated",
+                "slug": "t-shirt",
+                "description": "Updated",
+                "price": "30.00",
+                "total_quantity": 0,
+                "order": 1,
+            },
+        )
+        assert resp.status_code == 302
+        addon.refresh_from_db()
+        assert addon.name == "T-Shirt Updated"
+
+    def test_addon_edit_success_url(self, client_logged_in_super, conference, addon):
+        url = reverse(
+            "manage:addon-edit",
+            kwargs={"conference_slug": conference.slug, "pk": addon.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "T-Shirt",
+                "slug": "t-shirt",
+                "description": "",
+                "price": "25.00",
+                "total_quantity": 0,
+                "order": 1,
+            },
+        )
+        expected = reverse("manage:addon-list", kwargs={"conference_slug": conference.slug})
+        assert resp.url == expected
+
+
+# ---------------------------------------------------------------------------
+# Voucher CRUD Views
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestVoucherViews:
+    """Cover VoucherListView, VoucherCreateView, and VoucherEditView."""
+
+    @pytest.fixture
+    def voucher(self, conference):
+        return Voucher.objects.create(
+            conference=conference,
+            code="EARLYBIRD50",
+            voucher_type=Voucher.VoucherType.PERCENTAGE,
+            discount_value=50,
+            max_uses=10,
+        )
+
+    def test_voucher_list(self, client_logged_in_super, conference, voucher):
+        url = reverse("manage:voucher-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "vouchers"
+        assert voucher in resp.context["vouchers"]
+
+    def test_voucher_create_get(self, client_logged_in_super, conference):
+        url = reverse("manage:voucher-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "vouchers"
+        assert resp.context["is_create"] is True
+
+    def test_voucher_create_form_scoped_querysets(self, client_logged_in_super, conference):
+        """VoucherCreateView.get_form scopes ticket_type and addon querysets."""
+        tt = TicketType.objects.create(conference=conference, name="General", slug="general", price="100.00")
+        ao = AddOn.objects.create(conference=conference, name="Hoodie", slug="hoodie", price="40.00")
+        url = reverse("manage:voucher-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        form = resp.context["form"]
+        assert tt in form.fields["applicable_ticket_types"].queryset
+        assert ao in form.fields["applicable_addons"].queryset
+
+    def test_voucher_create_post(self, client_logged_in_super, conference):
+        url = reverse("manage:voucher-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "code": "NEWVOUCHER",
+                "voucher_type": "comp",
+                "discount_value": "0.00",
+                "max_uses": 5,
+            },
+        )
+        assert resp.status_code == 302
+        created = Voucher.objects.get(conference=conference, code="NEWVOUCHER")
+        assert created.voucher_type == "comp"
+        assert created.max_uses == 5
+
+    def test_voucher_create_success_url(self, client_logged_in_super, conference):
+        url = reverse("manage:voucher-add", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "code": "TESTURL",
+                "voucher_type": "comp",
+                "discount_value": "0.00",
+                "max_uses": 1,
+            },
+        )
+        expected = reverse("manage:voucher-list", kwargs={"conference_slug": conference.slug})
+        assert resp.url == expected
+
+    def test_voucher_edit_get(self, client_logged_in_super, conference, voucher):
+        url = reverse(
+            "manage:voucher-edit",
+            kwargs={"conference_slug": conference.slug, "pk": voucher.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "vouchers"
+
+    def test_voucher_edit_form_scoped_querysets(self, client_logged_in_super, conference, voucher):
+        """VoucherEditView.get_form scopes ticket_type and addon querysets."""
+        tt = TicketType.objects.create(conference=conference, name="General", slug="general-e", price="100.00")
+        ao = AddOn.objects.create(conference=conference, name="Hoodie", slug="hoodie-e", price="40.00")
+        url = reverse(
+            "manage:voucher-edit",
+            kwargs={"conference_slug": conference.slug, "pk": voucher.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        form = resp.context["form"]
+        assert tt in form.fields["applicable_ticket_types"].queryset
+        assert ao in form.fields["applicable_addons"].queryset
+
+    def test_voucher_edit_post(self, client_logged_in_super, conference, voucher):
+        url = reverse(
+            "manage:voucher-edit",
+            kwargs={"conference_slug": conference.slug, "pk": voucher.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "code": "EARLYBIRD50",
+                "voucher_type": "percentage",
+                "discount_value": "75.00",
+                "max_uses": 20,
+            },
+        )
+        assert resp.status_code == 302
+        voucher.refresh_from_db()
+        assert voucher.discount_value == Decimal("75.00")
+        assert voucher.max_uses == 20
+
+    def test_voucher_edit_success_url(self, client_logged_in_super, conference, voucher):
+        url = reverse(
+            "manage:voucher-edit",
+            kwargs={"conference_slug": conference.slug, "pk": voucher.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "code": "EARLYBIRD50",
+                "voucher_type": "percentage",
+                "discount_value": "50.00",
+                "max_uses": 10,
+            },
+        )
+        expected = reverse("manage:voucher-list", kwargs={"conference_slug": conference.slug})
+        assert resp.url == expected
+
+
+# ---------------------------------------------------------------------------
+# Order List & Detail Views
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestOrderViews:
+    """Cover OrderListView, OrderDetailView, and ManualPaymentView."""
+
+    @pytest.fixture
+    def order(self, conference, regular_user):
+        return Order.objects.create(
+            conference=conference,
+            user=regular_user,
+            reference="ORD-TEST01",
+            subtotal=Decimal("99.00"),
+            total=Decimal("99.00"),
+            status=Order.Status.PENDING,
+        )
+
+    def test_order_list(self, client_logged_in_super, conference, order):
+        url = reverse("manage:order-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "orders"
+        assert resp.context["current_status"] == ""
+        assert order in resp.context["orders"]
+        assert len(resp.context["order_statuses"]) > 0
+
+    def test_order_list_status_filter(self, client_logged_in_super, conference, order):
+        url = reverse("manage:order-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"status": "pending"})
+        assert resp.status_code == 200
+        assert resp.context["current_status"] == "pending"
+        assert order in resp.context["orders"]
+
+    def test_order_list_status_filter_no_match(self, client_logged_in_super, conference, order):
+        url = reverse("manage:order-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"status": "paid"})
+        assert resp.status_code == 200
+        assert list(resp.context["orders"]) == []
+
+    def test_order_detail(self, client_logged_in_super, conference, order):
+        url = reverse(
+            "manage:order-detail",
+            kwargs={"conference_slug": conference.slug, "pk": order.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "orders"
+        assert resp.context["order"] == order
+        assert "payment_form" in resp.context
+        assert "line_items" in resp.context
+        assert "payments" in resp.context
+        assert resp.context["total_paid"] == 0
+        assert resp.context["balance_remaining"] == Decimal("99.00")
+
+    def test_manual_payment_valid(self, client_logged_in_super, conference, order):
+        url = reverse(
+            "manage:order-manual-payment",
+            kwargs={"conference_slug": conference.slug, "pk": order.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "amount": "99.00",
+                "method": "comp",
+                "note": "Complimentary ticket",
+            },
+        )
+        assert resp.status_code == 302
+        assert Payment.objects.filter(order=order).count() == 1
+        payment = Payment.objects.get(order=order)
+        assert payment.amount == Decimal("99.00")
+        assert payment.method == "comp"
+        assert payment.status == Payment.Status.SUCCEEDED
+
+        order.refresh_from_db()
+        assert order.status == "paid"
+
+    def test_manual_payment_partial(self, client_logged_in_super, conference, order):
+        """Partial payment does not mark order as paid."""
+        url = reverse(
+            "manage:order-manual-payment",
+            kwargs={"conference_slug": conference.slug, "pk": order.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "amount": "50.00",
+                "method": "manual",
+                "note": "Partial payment",
+            },
+        )
+        assert resp.status_code == 302
+        order.refresh_from_db()
+        assert order.status == "pending"
+
+    def test_manual_payment_invalid_form(self, client_logged_in_super, conference, order):
+        """Invalid form data shows error message."""
+        url = reverse(
+            "manage:order-manual-payment",
+            kwargs={"conference_slug": conference.slug, "pk": order.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "amount": "",
+                "method": "comp",
+            },
+        )
+        assert resp.status_code == 302
+        assert Payment.objects.filter(order=order).count() == 0
