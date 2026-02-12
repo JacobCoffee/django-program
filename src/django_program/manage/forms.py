@@ -11,6 +11,7 @@ from django.core.validators import RegexValidator
 
 from django_program.conference.models import Conference, Section
 from django_program.pretalx.models import Room, ScheduleSlot, Talk
+from django_program.sponsors.models import Sponsor, SponsorLevel
 
 
 class ImportFromPretalxForm(forms.Form):
@@ -181,6 +182,54 @@ class ScheduleSlotForm(forms.ModelForm):
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         """Initialise the form and disable synced fields when locked by Pretalx."""
+        self.is_synced: bool = kwargs.pop("is_synced", False)  # type: ignore[arg-type]
+        super().__init__(*args, **kwargs)
+        if self.is_synced:
+            for field_name in self.SYNCED_FIELDS:
+                if field_name in self.fields:
+                    self.fields[field_name].disabled = True
+
+
+class SponsorLevelForm(forms.ModelForm):
+    """Form for editing a sponsor level."""
+
+    class Meta:
+        model = SponsorLevel
+        fields = ["name", "cost", "description", "benefits_summary", "comp_ticket_count", "order"]
+
+
+class SponsorForm(forms.ModelForm):
+    """Form for editing a sponsor.
+
+    When the sponsor has an ``external_id`` (synced from the PSF API),
+    fields that come from the upstream API are disabled to prevent
+    overwriting synced data.
+    """
+
+    SYNCED_FIELDS: list[str] = [
+        "name",
+        "level",
+        "website_url",
+        "logo_url",
+        "description",
+    ]
+
+    class Meta:
+        model = Sponsor
+        fields = [
+            "name",
+            "level",
+            "website_url",
+            "logo",
+            "logo_url",
+            "description",
+            "contact_name",
+            "contact_email",
+            "is_active",
+        ]
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        """Initialise the form and disable synced fields when locked by PSF sync."""
         self.is_synced: bool = kwargs.pop("is_synced", False)  # type: ignore[arg-type]
         super().__init__(*args, **kwargs)
         if self.is_synced:

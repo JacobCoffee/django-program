@@ -1,0 +1,33 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}{{ sponsor.name }}{% endblock %}
+
+{% block content %}
+<a href="{% url 'sponsors:sponsor-list' conference.slug %}" class="back-link">Back to sponsors</a>
+
+<article>
+  <h2>{{ sponsor.name }}</h2>
+  <p>{{ sponsor.level.name }} Sponsor</p>
+
+  {% if sponsor.logo %}<img src="{{ sponsor.logo.url }}" alt="{{ sponsor.name }}">
+  {% elif sponsor.logo_url %}<img src="{{ sponsor.logo_url }}" alt="{{ sponsor.name }}">
+  {% endif %}
+
+  {% if sponsor.description %}
+  <div>{{ sponsor.description|linebreaks }}</div>
+  {% endif %}
+
+  {% if sponsor.website_url %}
+  <p><a href="{{ sponsor.website_url }}" target="_blank" rel="noopener">{{ sponsor.website_url }}</a></p>
+  {% endif %}
+
+  {% if benefits %}
+  <h3 class="section-heading">Benefits</h3>
+  <ul>
+    {% for benefit in benefits %}
+    <li>{{ benefit.name }}{% if benefit.is_complete %} (completed){% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</article>
+{% endblock %}

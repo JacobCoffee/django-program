@@ -1,0 +1,30 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Sponsors{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Sponsors</h2>
+</div>
+
+{% if sponsors %}
+{% regroup sponsors by level as grouped_sponsors %}
+{% for group in grouped_sponsors %}
+<section>
+  <h3 class="section-heading">{{ group.grouper.name }}</h3>
+  <div class="sponsor-grid">
+    {% for sponsor in group.list %}
+      <a href="{% url 'sponsors:sponsor-detail' conference.slug sponsor.slug %}">
+        {% if sponsor.logo %}<img src="{{ sponsor.logo.url }}" alt="{{ sponsor.name }}">
+        {% elif sponsor.logo_url %}<img src="{{ sponsor.logo_url }}" alt="{{ sponsor.name }}">
+        {% endif %}
+        <span>{{ sponsor.name }}</span>
+      </a>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% else %}
+<p>No sponsors yet.</p>
+{% endif %}
+{% endblock %}

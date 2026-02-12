@@ -79,4 +79,7 @@ DJANGO_PROGRAM = {
         "base_url": os.environ.get("PRETALX_BASE_URL", "https://pretalx.com"),
         "token": os.environ.get("PRETALX_TOKEN", ""),
     },
+    "psf_sponsors": {
+        "token": os.environ.get("PSF_SPONSOR_API_TOKEN", ""),
+    },
 }

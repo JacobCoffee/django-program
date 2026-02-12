@@ -97,6 +97,12 @@
       <div class="stat-card-label">Sections</div>
     </a>
   </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:sponsor-manage-list' conference.slug %}">
+      <div class="stat-card-value">{{ stats.sponsors }}</div>
+      <div class="stat-card-label">Sponsors</div>
+    </a>
+  </div>
   {% if stats.unscheduled_talks %}
   <div class="stat-card" style="border-color: var(--color-warning-border, #fde68a); background: var(--color-warning-bg, #fffbeb);">
     <a href="{% url 'manage:talk-list' conference.slug %}?scheduled=no">
@@ -183,6 +189,19 @@
 <div style="background: var(--color-warning-bg); border: 1px solid var(--color-warning-border); border-radius: var(--radius-md); padding: 1rem 1.25rem; font-size: 0.9rem; color: var(--color-warning);">
   No Pretalx event slug configured.
   <a href="{% url 'manage:conference-edit' conference.slug %}">Set it in Conference Settings</a> to enable syncing.
+</div>
+{% endif %}
+
+{% if has_psf_sponsor_sync %}
+<h2 class="section-heading">PSF Sponsor Sync</h2>
+<div class="sync-panel" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-sm);">
+  <p style="margin-bottom: 1rem; color: var(--color-text-secondary); font-size: 0.9rem;">
+    Pull sponsor data from the Python Software Foundation sponsorship API.
+  </p>
+  <form method="post" action="{% url 'manage:sync-sponsors' conference.slug %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary">Sync Sponsors from PSF</button>
+  </form>
 </div>
 {% endif %}
 
