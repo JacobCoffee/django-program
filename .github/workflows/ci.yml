@@ -143,13 +143,55 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Run tests with coverage
+      - name: Run tests
         run: |
-          uv run pytest tests/ -v --cov=src/django_program --cov-report=term-missing --cov-report=xml
+          uv run pytest tests/ -v --cov=src/django_program --cov-report= --cov-fail-under=0
           uv run pytest packages/pretalx-client/tests/ -v
 
+      - name: Upload coverage data artifact
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: coverage-data
+          path: .coverage*
+
+  coverage:
+    name: Coverage (3.14/macos-latest)
+    needs: [test-full]
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Download coverage data artifact
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: coverage-data
+          path: .
+
+      - name: Generate coverage report
+        run: |
+          uv run coverage combine
+          uv run coverage report --show-missing --fail-under=100
+          uv run coverage xml -o coverage.xml
+
       - name: Upload coverage to Codecov
-        if: matrix.os == 'macos-latest'
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           file: ./coverage.xml
@@ -159,7 +201,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [security, validate, test-smoke, test-full]
+    needs: [security, validate, test-smoke, test-full, coverage]
     if: always()
     permissions:
       contents: read
@@ -170,8 +212,9 @@ jobs:
           VALIDATE_RESULT: ${{ needs.validate.result }}
           SMOKE_RESULT: ${{ needs.test-smoke.result }}
           FULL_RESULT: ${{ needs.test-full.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
         run: |
-          for result in "${SECURITY_RESULT}" "${VALIDATE_RESULT}" "${SMOKE_RESULT}" "${FULL_RESULT}"; do
+          for result in "${SECURITY_RESULT}" "${VALIDATE_RESULT}" "${SMOKE_RESULT}" "${FULL_RESULT}" "${COVERAGE_RESULT}"; do
             if [[ "${result}" != "success" ]]; then
               echo "CI failed! Result: ${result}"
               exit 1
