@@ -143,10 +143,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Run tests with coverage
+      - name: Run tests
+        run: |
+          uv run pytest tests/ -v
+          uv run pytest packages/pretalx-client/tests/ -v
+
+      - name: Generate coverage report
         run: |
           uv run pytest tests/ -v --cov=src/django_program --cov-report=term-missing --cov-report=xml
-          uv run pytest packages/pretalx-client/tests/ -v
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'macos-latest'
