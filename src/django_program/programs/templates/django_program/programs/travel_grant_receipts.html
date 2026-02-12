@@ -1,0 +1,809 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Upload Receipts{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ---- Layout ---- */
+  .receipts-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  /* ---- Form Section (reuses grant-form pattern) ---- */
+  .form-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .form-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .form-section-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+
+  .form-section-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
+  }
+
+  .form-section-body {
+    padding: 1.5rem;
+  }
+
+  /* ---- Field Groups ---- */
+  .field-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .field-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.4rem;
+    line-height: 1.4;
+  }
+
+  .field-help {
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    line-height: 1.45;
+  }
+
+  .field-errors {
+    list-style: none;
+    padding: 0;
+    margin: 0.3rem 0 0;
+  }
+
+  .field-errors li {
+    font-size: 0.82rem;
+    color: #dc2626;
+    font-weight: 500;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  /* ---- Form Inputs ---- */
+  .receipt-form input[type="text"],
+  .receipt-form input[type="number"],
+  .receipt-form input[type="date"],
+  .receipt-form select {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    color: var(--color-text);
+    background: var(--color-surface);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    line-height: 1.5;
+  }
+
+  .receipt-form input:focus,
+  .receipt-form select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.12);
+  }
+
+  .receipt-form select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23555770' viewBox='0 0 16 16'%3E%3Cpath d='M8 11.5l-5-5h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2.25rem;
+    cursor: pointer;
+  }
+
+  /* ---- Currency Input ---- */
+  .currency-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .currency-prefix {
+    position: absolute;
+    left: 0.75rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .currency-wrapper input[type="number"] {
+    padding-left: 1.6rem;
+    font-family: var(--font-mono);
+  }
+
+  /* ---- File Input ---- */
+  .file-input-wrapper {
+    position: relative;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 1.25rem;
+    text-align: center;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    cursor: pointer;
+  }
+
+  .file-input-wrapper:hover {
+    border-color: var(--color-primary);
+    background: #fafaff;
+  }
+
+  .file-input-wrapper input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .file-input-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    pointer-events: none;
+  }
+
+  .file-input-icon {
+    font-size: 1.5rem;
+    opacity: 0.5;
+  }
+
+  .file-input-text {
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+  }
+
+  .file-input-hint {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  /* ---- Form Actions ---- */
+  .form-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 1.25rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+    line-height: 1.4;
+  }
+
+  .btn:hover { text-decoration: none; box-shadow: var(--shadow-md); }
+  .btn:active { transform: translateY(1px); }
+
+  .btn--primary { background: var(--color-primary); color: #fff; }
+  .btn--primary:hover { background: var(--color-primary-hover); color: #fff; }
+
+  .btn--secondary {
+    background: var(--color-surface);
+    color: var(--color-primary);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn--secondary:hover {
+    background: var(--color-primary-light);
+    color: var(--color-primary-hover);
+  }
+
+  /* ---- Sidebar Summary ---- */
+  .sidebar-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    position: sticky;
+    top: 80px;
+  }
+
+  .sidebar-header {
+    padding: 0.85rem 1.25rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+  }
+
+  .sidebar-body {
+    padding: 1.25rem;
+  }
+
+  .sidebar-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .sidebar-stat:last-child {
+    border-bottom: none;
+  }
+
+  .sidebar-stat-label {
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+
+  .sidebar-stat-value {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--color-text);
+  }
+
+  .sidebar-stat-value--primary {
+    color: var(--color-primary);
+  }
+
+  .sidebar-stat-value--accent {
+    color: var(--color-accent);
+  }
+
+  .sidebar-progress {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border-light);
+  }
+
+  .progress-bar-track {
+    height: 6px;
+    background: var(--color-border-light);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--color-accent);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  /* ---- Receipt Table ---- */
+  .receipts-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .receipts-table thead {
+    background: var(--color-bg);
+  }
+
+  .receipts-table th {
+    padding: 0.7rem 1rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .receipts-table td {
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--color-border-light);
+    vertical-align: middle;
+  }
+
+  .receipts-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .receipts-table tbody tr:hover {
+    background: #fafaff;
+  }
+
+  .receipts-table .col-type {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .receipts-table .col-date {
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+
+  .receipts-table .col-desc {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .receipts-table .col-amount {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .receipts-table .col-status {
+    text-align: center;
+  }
+
+  .receipts-table .col-actions {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* ---- Flagged Row ---- */
+  .row--flagged {
+    background: #fef2f2;
+  }
+
+  .row--flagged:hover {
+    background: #fef2f2 !important;
+  }
+
+  .row--approved {
+    background: #f0fdf4;
+  }
+
+  .row--approved:hover {
+    background: #f0fdf4 !important;
+  }
+
+  /* ---- Flag Reason ---- */
+  .flag-reason-row td {
+    padding: 0 1rem 0.75rem;
+    border-bottom: 1px solid var(--color-border-light);
+    background: #fef2f2;
+  }
+
+  .flag-reason-text {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: #991b1b;
+    padding: 0.4rem 0.65rem;
+    background: #fee2e2;
+    border-radius: var(--radius-sm);
+    width: fit-content;
+  }
+
+  /* ---- Total Row ---- */
+  .receipts-table .total-row td {
+    border-top: 2px solid var(--color-border);
+    background: var(--color-bg);
+    font-weight: 700;
+    border-bottom: none;
+  }
+
+  /* ---- Receipt Badge ---- */
+  .receipt-badge {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .receipt-badge--pending { background: #e0e7ff; color: #3730a3; }
+  .receipt-badge--approved { background: #d1fae5; color: #065f46; }
+  .receipt-badge--flagged { background: #fee2e2; color: #991b1b; }
+
+  /* ---- Delete Button ---- */
+  .btn--delete {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+
+  .btn--delete:hover {
+    border-color: #fca5a5;
+    color: #dc2626;
+    background: #fef2f2;
+  }
+
+  /* ---- File Link ---- */
+  .file-link {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--color-primary);
+  }
+
+  .file-link:hover {
+    color: var(--color-primary-hover);
+  }
+
+  /* ---- Info Callout ---- */
+  .info-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.25rem;
+  }
+
+  .info-callout-icon {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+    margin-top: 0.1rem;
+  }
+
+  .info-callout p {
+    font-size: 0.85rem;
+    color: #1e40af;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* ---- Empty State ---- */
+  .empty-state {
+    text-align: center;
+    padding: 2.5rem 1.5rem;
+    color: var(--color-text-muted);
+  }
+
+  .empty-state-icon {
+    font-size: 2rem;
+    opacity: 0.4;
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-state-text {
+    font-size: 0.92rem;
+  }
+
+  /* ---- Section Heading ---- */
+  .section-heading {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+    margin-top: 2rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 900px) {
+    .receipts-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar-card {
+      position: static;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .form-section-body {
+      padding: 1.25rem 1rem;
+    }
+
+    .form-section-header {
+      padding: 0.85rem 1rem;
+    }
+
+    .field-row {
+      grid-template-columns: 1fr;
+    }
+
+    .receipts-table .col-desc {
+      display: none;
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      font-size: 0.82rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .receipts-table .col-date {
+      display: none;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'programs:travel-grant-status' conference.slug %}" class="back-link">Back to grant status</a>
+
+<div class="page-header">
+  <h2>Upload Receipts</h2>
+  <p>Submit expense receipts for your travel grant reimbursement.</p>
+</div>
+
+<div class="receipts-layout">
+  <div class="receipts-main">
+    <!-- Upload Form -->
+    <div class="form-section" style="margin-bottom: 1.5rem;">
+      <div class="form-section-header">
+        <span class="form-section-icon" aria-hidden="true">&#8593;</span>
+        <span class="form-section-title">New Receipt</span>
+      </div>
+      <div class="form-section-body">
+        <form method="post" enctype="multipart/form-data" class="receipt-form">
+          {% csrf_token %}
+          <div class="field-row">
+            <div class="field-group">
+              <label class="field-label" for="{{ form.receipt_type.id_for_label }}">{{ form.receipt_type.label }}</label>
+              {{ form.receipt_type }}
+              {% if form.receipt_type.help_text %}<p class="field-help">{{ form.receipt_type.help_text }}</p>{% endif %}
+              {% if form.receipt_type.errors %}<ul class="field-errors">{% for error in form.receipt_type.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>
+              {{ form.date }}
+              {% if form.date.help_text %}<p class="field-help">{{ form.date.help_text }}</p>{% endif %}
+              {% if form.date.errors %}<ul class="field-errors">{% for error in form.date.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-group">
+              <label class="field-label" for="{{ form.amount.id_for_label }}">{{ form.amount.label }}</label>
+              <div class="currency-wrapper">
+                <span class="currency-prefix" aria-hidden="true">$</span>
+                {{ form.amount }}
+              </div>
+              {% if form.amount.help_text %}<p class="field-help">{{ form.amount.help_text }}</p>{% endif %}
+              {% if form.amount.errors %}<ul class="field-errors">{% for error in form.amount.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
+              {{ form.description }}
+              {% if form.description.help_text %}<p class="field-help">{{ form.description.help_text }}</p>{% endif %}
+              {% if form.description.errors %}<ul class="field-errors">{% for error in form.description.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">{{ form.receipt_file.label }}</label>
+            <div class="file-input-wrapper">
+              {{ form.receipt_file }}
+              <div class="file-input-label">
+                <span class="file-input-icon" aria-hidden="true">&#128206;</span>
+                <span class="file-input-text">Choose a file or drag it here</span>
+                <span class="file-input-hint">PDF, JPG, or PNG (max 10 MB)</span>
+              </div>
+            </div>
+            {% if form.receipt_file.help_text %}<p class="field-help">{{ form.receipt_file.help_text }}</p>{% endif %}
+            {% if form.receipt_file.errors %}<ul class="field-errors">{% for error in form.receipt_file.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn--primary">Upload Receipt</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Receipts Table -->
+    {% if receipts %}
+    <h3 class="section-heading">Uploaded Receipts ({{ receipts|length }})</h3>
+    <table class="receipts-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Date</th>
+          <th>Description</th>
+          <th style="text-align: right;">Amount</th>
+          <th style="text-align: center;">Status</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for receipt in receipts %}
+        <tr class="{% if receipt.flagged %}row--flagged{% elif receipt.approved %}row--approved{% endif %}">
+          <td class="col-type">{{ receipt.get_receipt_type_display }}</td>
+          <td class="col-date">{{ receipt.date|date:"M j, Y" }}</td>
+          <td class="col-desc" title="{{ receipt.description }}">{{ receipt.description|default:"--" }}</td>
+          <td class="col-amount">${{ receipt.amount }}</td>
+          <td class="col-status">
+            <span class="receipt-badge receipt-badge--{{ receipt.status }}">{{ receipt.status }}</span>
+          </td>
+          <td class="col-actions">
+            {% if receipt.receipt_file %}
+            <a href="{{ receipt.receipt_file.url }}" target="_blank" class="file-link" title="View receipt">View</a>
+            {% endif %}
+            {% if receipt.can_delete %}
+            <form method="post" action="{% url 'programs:travel-grant-receipt-delete' conference.slug receipt.pk %}" style="display: inline; margin-left: 0.5rem;">
+              {% csrf_token %}
+              <button type="submit" class="btn--delete" onclick="return confirm('Delete this receipt?');">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% if receipt.flagged and receipt.flagged_reason %}
+        <tr class="flag-reason-row">
+          <td colspan="6">
+            <span class="flag-reason-text">Flagged: {{ receipt.flagged_reason }}</span>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        <tr class="total-row">
+          <td colspan="3" style="font-weight: 700;">Total</td>
+          <td class="col-amount" style="font-size: 0.95rem; color: var(--color-primary);">${{ receipt_total }}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tbody>
+    </table>
+    {% else %}
+    <div class="form-section" style="margin-top: 1.5rem;">
+      <div class="empty-state">
+        <div class="empty-state-icon" aria-hidden="true">&#128451;</div>
+        <p class="empty-state-text">No receipts uploaded yet. Use the form above to submit your first receipt.</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar-card">
+    <div class="sidebar-header">Reimbursement Summary</div>
+    <div class="sidebar-body">
+      <div class="sidebar-stat">
+        <span class="sidebar-stat-label">Approved Amount</span>
+        <span class="sidebar-stat-value sidebar-stat-value--primary">${{ grant.approved_amount|default:"0" }}</span>
+      </div>
+      <div class="sidebar-stat">
+        <span class="sidebar-stat-label">Receipts Submitted</span>
+        <span class="sidebar-stat-value">${{ receipt_total|default:"0" }}</span>
+      </div>
+      <div class="sidebar-stat">
+        <span class="sidebar-stat-label">Receipts Count</span>
+        <span class="sidebar-stat-value">{{ receipts|length }}</span>
+      </div>
+      {% if grant.approved_amount %}
+      <div class="sidebar-progress">
+        <div class="progress-label">
+          <span>Coverage</span>
+          <span id="progress-pct"></span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progress-fill" style="width: 0%;"></div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    <div style="padding: 0 1.25rem 1.25rem;">
+      <a href="{% url 'programs:travel-grant-payment-info' conference.slug %}" class="btn btn--secondary" style="width: 100%; justify-content: center;">Payment Information</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var approved = {{ grant.approved_amount|default:"0" }};
+  var submitted = {{ receipt_total|default:"0" }};
+  if (approved > 0) {
+    var pct = Math.min(Math.round((submitted / approved) * 100), 100);
+    var pctEl = document.getElementById('progress-pct');
+    var fillEl = document.getElementById('progress-fill');
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (fillEl) fillEl.style.width = pct + '%';
+  }
+
+  var wrapper = document.querySelector('.file-input-wrapper');
+  var fileInput = wrapper ? wrapper.querySelector('input[type="file"]') : null;
+  var textEl = wrapper ? wrapper.querySelector('.file-input-text') : null;
+  if (fileInput && textEl) {
+    fileInput.addEventListener('change', function() {
+      if (fileInput.files.length > 0) {
+        textEl.textContent = fileInput.files[0].name;
+        wrapper.style.borderColor = 'var(--color-primary)';
+        wrapper.style.background = '#fafaff';
+      }
+    });
+    wrapper.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      wrapper.style.borderColor = 'var(--color-primary)';
+      wrapper.style.background = 'var(--color-primary-light)';
+    });
+    wrapper.addEventListener('dragleave', function() {
+      wrapper.style.borderColor = '';
+      wrapper.style.background = '';
+    });
+    wrapper.addEventListener('drop', function() {
+      wrapper.style.borderColor = '';
+      wrapper.style.background = '';
+    });
+  }
+})();
+</script>
+{% endblock %}

@@ -70,6 +70,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 
 STATIC_URL = "static/"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+FIELD_ENCRYPTION_KEY = os.environ.get("FIELD_ENCRYPTION_KEY", "YBkocJMq0EEDhDBHQk2eMdBPhQrUzV8adaSz4mbHcFQ=")
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/manage/"

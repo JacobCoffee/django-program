@@ -13,6 +13,7 @@ from django.db import transaction
 
 from django_program.conference.models import Conference, Section
 from django_program.config_loader import load_conference_config
+from django_program.programs.models import Activity, TravelGrant
 from django_program.registration.models import (
     AddOn,
     Cart,
@@ -531,6 +532,11 @@ class Command(BaseCommand):
         if demo_users:
             self._seed_credits(conference, demo_users)
 
+        # -- Activities & Travel Grants --
+        self._seed_activities(conference)
+        if demo_users:
+            self._seed_travel_grants(conference, demo_users)
+
         self.stdout.write(self.style.SUCCESS("\nDemo data seeded."))
 
         # Print voucher codes so the dev can use them
@@ -617,6 +623,8 @@ class Command(BaseCommand):
             {"username": "attendee_alice", "email": "alice@example.com", "first_name": "Alice", "last_name": "Smith"},
             {"username": "attendee_bob", "email": "bob@example.com", "first_name": "Bob", "last_name": "Jones"},
             {"username": "speaker_carol", "email": "carol@example.com", "first_name": "Carol", "last_name": "Chen"},
+            {"username": "attendee_dave", "email": "dave@example.com", "first_name": "Dave", "last_name": "Park"},
+            {"username": "attendee_eve", "email": "eve@example.com", "first_name": "Eve", "last_name": "Garcia"},
         ]
         users = []
         for spec in demo_specs:
@@ -795,3 +803,187 @@ class Command(BaseCommand):
             note="Refund from cancelled tutorial add-on",
         )
         self.stdout.write(self.style.SUCCESS(f"  Created $25 credit for {alice.username}"))
+
+    def _seed_activities(self, conference: Conference) -> None:
+        """Create sample activities for the conference.
+
+        Args:
+            conference: The conference to create activities for.
+        """
+        if Activity.objects.filter(conference=conference).exists():
+            self.stdout.write(self.style.WARNING("  Activities already exist, skipping."))
+            return
+
+        specs = [
+            {
+                "name": "Django Sprint",
+                "slug": "django-sprint",
+                "activity_type": Activity.ActivityType.SPRINT,
+                "description": "Contribute to Django core and ecosystem packages.",
+                "max_participants": 50,
+                "is_active": True,
+            },
+            {
+                "name": "Newcomer Orientation",
+                "slug": "newcomer-orientation",
+                "activity_type": Activity.ActivityType.SOCIAL,
+                "description": "Welcome session for first-time attendees.",
+                "is_active": True,
+            },
+            {
+                "name": "Open Source Workshop",
+                "slug": "open-source-workshop",
+                "activity_type": Activity.ActivityType.WORKSHOP,
+                "description": "Hands-on workshop for your first open source contribution.",
+                "max_participants": 30,
+                "is_active": True,
+            },
+            {
+                "name": "Lightning Talks",
+                "slug": "lightning-talks",
+                "activity_type": Activity.ActivityType.LIGHTNING_TALK,
+                "description": "5-minute lightning talks on any topic.",
+                "is_active": True,
+            },
+        ]
+
+        for spec in specs:
+            Activity.objects.create(conference=conference, **spec)
+            self.stdout.write(self.style.SUCCESS(f"  Created activity: {spec['name']}"))
+
+    def _seed_travel_grants(self, conference: Conference, users: list[Any]) -> None:
+        """Create travel grants with various statuses for demo purposes.
+
+        Args:
+            conference: The conference to create grants for.
+            users: Demo users (alice, bob, carol).
+        """
+        if TravelGrant.objects.filter(conference=conference).exists():
+            self.stdout.write(self.style.WARNING("  Travel grants already exist, skipping."))
+            return
+
+        User = get_user_model()
+        admin = User.objects.filter(is_superuser=True).first()
+        alice, bob, carol = users[0], users[1], users[2]
+
+        # Alice: submitted application awaiting review
+        TravelGrant.objects.create(
+            conference=conference,
+            user=alice,
+            status=TravelGrant.GrantStatus.SUBMITTED,
+            request_type=TravelGrant.RequestType.TICKET_AND_GRANT,
+            application_type=TravelGrant.ApplicationType.GENERAL,
+            travel_from="Chicago, IL",
+            international=False,
+            first_time=True,
+            travel_plans_airfare_description="Round-trip flight ORD to PIT",
+            travel_plans_airfare_amount=Decimal("350.00"),
+            travel_plans_lodging_description="4 nights at conference hotel",
+            travel_plans_lodging_amount=Decimal("600.00"),
+            requested_amount=Decimal("950.00"),
+            experience_level=TravelGrant.ExperienceLevel.INTERMEDIATE,
+            occupation="Software engineer",
+            involvement="Django contributor, local meetup organizer",
+            reason="Cannot afford travel costs on current salary.",
+        )
+        self.stdout.write(self.style.SUCCESS("  Created travel grant: Alice (submitted)"))
+
+        # Bob: accepted grant with approved amount
+        TravelGrant.objects.create(
+            conference=conference,
+            user=bob,
+            status=TravelGrant.GrantStatus.ACCEPTED,
+            request_type=TravelGrant.RequestType.TICKET_AND_GRANT,
+            application_type=TravelGrant.ApplicationType.SPEAKER,
+            travel_from="New York, NY",
+            international=False,
+            first_time=False,
+            travel_plans_airfare_description="Round-trip flight JFK to PIT",
+            travel_plans_airfare_amount=Decimal("250.00"),
+            travel_plans_lodging_description="3 nights at conference hotel",
+            travel_plans_lodging_amount=Decimal("450.00"),
+            requested_amount=Decimal("700.00"),
+            approved_amount=Decimal("500.00"),
+            experience_level=TravelGrant.ExperienceLevel.EXPERT,
+            occupation="Senior developer at startup",
+            involvement="Core contributor to Django REST Framework",
+            reason="Speaking at conference, need help with travel costs.",
+            reviewed_by=admin,
+            reviewer_notes="Approved for reduced amount — lodging only.",
+        )
+        self.stdout.write(self.style.SUCCESS("  Created travel grant: Bob (accepted, $500)"))
+
+        # Carol: offered grant awaiting acceptance
+        TravelGrant.objects.create(
+            conference=conference,
+            user=carol,
+            status=TravelGrant.GrantStatus.OFFERED,
+            request_type=TravelGrant.RequestType.TICKET_AND_GRANT,
+            application_type=TravelGrant.ApplicationType.COMMUNITY,
+            travel_from="São Paulo, Brazil",
+            international=True,
+            first_time=True,
+            travel_plans_airfare_description="Round-trip flight GRU to PIT",
+            travel_plans_airfare_amount=Decimal("800.00"),
+            travel_plans_lodging_description="5 nights at conference hotel",
+            travel_plans_lodging_amount=Decimal("750.00"),
+            travel_plans_visa_description="US visa application",
+            travel_plans_visa_amount=Decimal("160.00"),
+            requested_amount=Decimal("1710.00"),
+            approved_amount=Decimal("1200.00"),
+            experience_level=TravelGrant.ExperienceLevel.INTERMEDIATE,
+            occupation="University student",
+            involvement="PyLadies São Paulo chapter lead",
+            reason="International student, cannot afford travel without assistance.",
+            reviewed_by=admin,
+            reviewer_notes="Strong community leader. Approved for partial amount.",
+        )
+        self.stdout.write(self.style.SUCCESS("  Created travel grant: Carol (offered, $1200)"))
+
+        # Dave: rejected application
+        dave = users[3] if len(users) > 3 else None
+        if dave:
+            TravelGrant.objects.create(
+                conference=conference,
+                user=dave,
+                status=TravelGrant.GrantStatus.REJECTED,
+                request_type=TravelGrant.RequestType.TICKET_AND_GRANT,
+                application_type=TravelGrant.ApplicationType.GENERAL,
+                travel_from="San Francisco, CA",
+                international=False,
+                first_time=False,
+                travel_plans_airfare_description="Round-trip flight SFO to PIT",
+                travel_plans_airfare_amount=Decimal("400.00"),
+                requested_amount=Decimal("400.00"),
+                experience_level=TravelGrant.ExperienceLevel.EXPERT,
+                occupation="Staff engineer at large company",
+                involvement="Occasional conference attendee",
+                reason="Would like help covering airfare.",
+                reviewed_by=admin,
+                reviewer_notes="Applicant has employer sponsorship available.",
+            )
+            self.stdout.write(self.style.SUCCESS("  Created travel grant: Dave (rejected)"))
+
+        # Eve: withdrawn application
+        eve = users[4] if len(users) > 4 else None
+        if eve:
+            TravelGrant.objects.create(
+                conference=conference,
+                user=eve,
+                status=TravelGrant.GrantStatus.WITHDRAWN,
+                request_type=TravelGrant.RequestType.TICKET_AND_GRANT,
+                application_type=TravelGrant.ApplicationType.PYLADIES,
+                travel_from="Austin, TX",
+                international=False,
+                first_time=True,
+                travel_plans_airfare_description="Round-trip flight AUS to PIT",
+                travel_plans_airfare_amount=Decimal("300.00"),
+                travel_plans_lodging_description="3 nights at conference hotel",
+                travel_plans_lodging_amount=Decimal("450.00"),
+                requested_amount=Decimal("750.00"),
+                experience_level=TravelGrant.ExperienceLevel.BEGINNER,
+                occupation="Junior developer",
+                involvement="PyLadies Austin chapter member",
+                reason="First conference, need financial assistance.",
+            )
+            self.stdout.write(self.style.SUCCESS("  Created travel grant: Eve (withdrawn)"))

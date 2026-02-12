@@ -18,10 +18,11 @@ if TYPE_CHECKING:
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, Q, QuerySet, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.timezone import localdate
 from django.views import View
@@ -29,17 +30,23 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 from django_program.conference.models import Conference, Section
 from django_program.manage.forms import (
+    ActivityForm,
     ConferenceForm,
+    DisbursementForm,
     ImportFromPretalxForm,
+    ReceiptFlagForm,
+    ReviewerMessageForm,
     RoomForm,
     ScheduleSlotForm,
     SectionForm,
     SponsorForm,
     SponsorLevelForm,
     TalkForm,
+    TravelGrantForm,
 )
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.pretalx.sync import PretalxSyncService
+from django_program.programs.models import Activity, Receipt, TravelGrant, TravelGrantMessage
 from django_program.settings import get_config
 from django_program.sponsors.models import Sponsor, SponsorLevel
 from django_program.sponsors.profiles.resolver import resolve_sponsor_profile
@@ -48,6 +55,57 @@ from pretalx_client.adapters.normalization import localized as _localized
 from pretalx_client.client import PretalxClient
 
 logger = logging.getLogger(__name__)
+
+
+def _unique_section_slug(name: str, conference: object, exclude_pk: int | None = None) -> str:
+    """Generate a unique slug for a Section within a conference.
+
+    Args:
+        name: The section name to slugify.
+        conference: The conference instance to scope uniqueness to.
+        exclude_pk: Optional PK to exclude (for updates).
+
+    Returns:
+        A unique slug string.
+    """
+    base = slugify(name) or "section"
+    candidate = base
+    counter = 1
+    while True:
+        qs = Section.objects.filter(conference=conference, slug=candidate)
+        if exclude_pk is not None:
+            qs = qs.exclude(pk=exclude_pk)
+        if not qs.exists():
+            return candidate
+        counter += 1
+        candidate = f"{base}-{counter}"
+
+
+def _unique_activity_slug(name: str, conference: object, exclude_pk: int | None = None) -> str:
+    """Generate a unique slug for an Activity within a conference.
+
+    Appends a numeric suffix (``-2``, ``-3``, ...) if a collision
+    is detected on the ``(conference, slug)`` unique constraint.
+
+    Args:
+        name: The activity name to slugify.
+        conference: The conference instance to scope uniqueness to.
+        exclude_pk: Optional PK to exclude (for updates).
+
+    Returns:
+        A unique slug string.
+    """
+    base = slugify(name) or "activity"
+    candidate = base
+    counter = 1
+    while True:
+        qs = Activity.objects.filter(conference=conference, slug=candidate)
+        if exclude_pk is not None:
+            qs = qs.exclude(pk=exclude_pk)
+        if not qs.exists():
+            return candidate
+        counter += 1
+        candidate = f"{base}-{counter}"
 
 
 class ManagePermissionMixin(LoginRequiredMixin):
@@ -609,6 +667,8 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             "unscheduled_talks": Talk.objects.filter(conference=conference, slot_start__isnull=True).count(),
             "sponsors": Sponsor.objects.filter(conference=conference).count(),
             "sponsor_levels": SponsorLevel.objects.filter(conference=conference).count(),
+            "activities": Activity.objects.filter(conference=conference).count(),
+            "travel_grants": TravelGrant.objects.filter(conference=conference).count(),
         }
 
         sponsor_profile = resolve_sponsor_profile(
@@ -713,6 +773,12 @@ class SectionEditView(ManagePermissionMixin, UpdateView):
         """
         return Section.objects.filter(conference=self.conference)
 
+    def get_form_kwargs(self) -> dict[str, Any]:
+        """Pass the conference to the form."""
+        kwargs = super().get_form_kwargs()
+        kwargs["conference"] = self.conference
+        return kwargs
+
     def get_success_url(self) -> str:
         """Redirect to the section list after a successful save.
 
@@ -722,14 +788,8 @@ class SectionEditView(ManagePermissionMixin, UpdateView):
         return reverse("manage:section-list", kwargs={"conference_slug": self.conference.slug})
 
     def form_valid(self, form: SectionForm) -> HttpResponse:
-        """Save the form and add a success message.
-
-        Args:
-            form: The validated section form.
-
-        Returns:
-            A redirect response to the success URL.
-        """
+        """Re-generate slug from name and save."""
+        form.instance.slug = _unique_section_slug(form.instance.name, self.conference, exclude_pk=form.instance.pk)
         messages.success(self.request, "Section updated successfully.")
         return super().form_valid(form)
 
@@ -747,9 +807,16 @@ class SectionCreateView(ManagePermissionMixin, CreateView):
         context["is_create"] = True
         return context
 
+    def get_form_kwargs(self) -> dict[str, Any]:
+        """Pass the conference to the form."""
+        kwargs = super().get_form_kwargs()
+        kwargs["conference"] = self.conference
+        return kwargs
+
     def form_valid(self, form: SectionForm) -> HttpResponse:
-        """Assign the conference before saving."""
+        """Assign the conference and auto-generate slug before saving."""
         form.instance.conference = self.conference
+        form.instance.slug = _unique_section_slug(form.instance.name, self.conference)
         messages.success(self.request, "Section created successfully.")
         return super().form_valid(form)
 
@@ -1360,6 +1427,334 @@ class SponsorCreateView(ManagePermissionMixin, CreateView):
         return reverse("manage:sponsor-manage-list", kwargs={"conference_slug": self.conference.slug})
 
 
+class ActivityManageListView(ManagePermissionMixin, ListView):
+    """List activities for the current conference."""
+
+    template_name = "django_program/manage/activity_list.html"
+    context_object_name = "activities"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "activities"
+        return context
+
+    def get_queryset(self) -> QuerySet[Activity]:
+        """Return activities for the current conference.
+
+        Annotates each activity with ``signup_count`` to avoid N+1
+        queries when rendering the signup column in the template.
+        """
+        return (
+            Activity.objects.filter(conference=self.conference)
+            .select_related("room")
+            .annotate(signup_count=Count("signups"))
+            .order_by("start_time", "name")
+        )
+
+
+class ActivityEditView(ManagePermissionMixin, UpdateView):
+    """Edit an activity."""
+
+    template_name = "django_program/manage/activity_edit.html"
+    form_class = ActivityForm
+    context_object_name = "activity"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and signup count to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "activities"
+        context["signup_count"] = self.object.signups.count()
+        return context
+
+    def get_queryset(self) -> QuerySet[Activity]:
+        """Scope to the current conference."""
+        return Activity.objects.filter(conference=self.conference)
+
+    def get_form(self, form_class: type[ActivityForm] | None = None) -> ActivityForm:
+        """Scope the room queryset to the current conference."""
+        form = super().get_form(form_class)
+        form.fields["room"].queryset = Room.objects.filter(conference=self.conference)
+        return form
+
+    def get_success_url(self) -> str:
+        """Redirect to the activity list."""
+        return reverse("manage:activity-list", kwargs={"conference_slug": self.conference.slug})
+
+    def form_valid(self, form: ActivityForm) -> HttpResponse:
+        """Re-generate slug from name and save."""
+        form.instance.slug = _unique_activity_slug(form.instance.name, self.conference, exclude_pk=form.instance.pk)
+        messages.success(self.request, "Activity updated successfully.")
+        return super().form_valid(form)
+
+
+class ActivityCreateView(ManagePermissionMixin, CreateView):
+    """Create a new activity."""
+
+    template_name = "django_program/manage/activity_edit.html"
+    form_class = ActivityForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add ``active_nav`` and ``is_create`` to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "activities"
+        context["is_create"] = True
+        return context
+
+    def get_form(self, form_class: type[ActivityForm] | None = None) -> ActivityForm:
+        """Scope the room queryset to the current conference."""
+        form = super().get_form(form_class)
+        form.fields["room"].queryset = Room.objects.filter(conference=self.conference)
+        return form
+
+    def form_valid(self, form: ActivityForm) -> HttpResponse:
+        """Assign the conference and auto-generate slug before saving."""
+        form.instance.conference = self.conference
+        form.instance.slug = _unique_activity_slug(form.instance.name, self.conference)
+        messages.success(self.request, "Activity created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the activity list."""
+        return reverse("manage:activity-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class RoomSearchView(ManagePermissionMixin, View):
+    """JSON API endpoint for room autocomplete within a conference."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> JsonResponse:  # noqa: ARG002
+        """Search rooms by name for the current conference.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments (unused).
+
+        Returns:
+            A JsonResponse with a list of matching rooms.
+        """
+        q = request.GET.get("q", "").strip()
+        rooms = Room.objects.filter(conference=self.conference).order_by("position", "name")
+        if q:
+            rooms = rooms.filter(name__icontains=q)
+        results = [{"id": room.pk, "name": str(room.name)} for room in rooms[:20]]
+        return JsonResponse(results, safe=False)
+
+
+class TravelGrantManageListView(ManagePermissionMixin, ListView):
+    """List travel grant applications for the current conference.
+
+    Provides summary statistics (total requested, total approved, counts
+    by status) and a status filter bar for efficient grant review.
+    """
+
+    template_name = "django_program/manage/travel_grant_list.html"
+    context_object_name = "grants"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add summary stats, status filter, and active nav to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "travel-grants"
+        context["current_status"] = self.request.GET.get("status", "")
+
+        all_grants = TravelGrant.objects.filter(conference=self.conference)
+        totals = all_grants.aggregate(
+            total_requested=Sum("requested_amount"),
+            total_approved=Sum("approved_amount"),
+        )
+        context["grant_stats"] = {
+            "total": all_grants.count(),
+            "pending": all_grants.filter(status=TravelGrant.GrantStatus.SUBMITTED).count(),
+            "approved": all_grants.filter(status=TravelGrant.GrantStatus.ACCEPTED).count(),
+            "rejected": all_grants.filter(status=TravelGrant.GrantStatus.REJECTED).count(),
+            "withdrawn": all_grants.filter(status=TravelGrant.GrantStatus.WITHDRAWN).count(),
+            "disbursed": all_grants.filter(status=TravelGrant.GrantStatus.DISBURSED).count(),
+            "total_requested": totals["total_requested"] or 0,
+            "total_approved": totals["total_approved"] or 0,
+        }
+        return context
+
+    def get_queryset(self) -> QuerySet[TravelGrant]:
+        """Return travel grants for the current conference."""
+        qs = (
+            TravelGrant.objects.filter(conference=self.conference)
+            .select_related("user", "reviewed_by")
+            .annotate(receipt_count=Count("receipts"))
+            .order_by("-created_at")
+        )
+        status_filter = self.request.GET.get("status", "").strip()
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return qs
+
+
+class TravelGrantReviewView(ManagePermissionMixin, UpdateView):
+    """Review a travel grant application."""
+
+    template_name = "django_program/manage/travel_grant_edit.html"
+    form_class = TravelGrantForm
+    context_object_name = "grant"
+
+    def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
+        """Disable browser caching to prevent stale review forms."""
+        response = super().dispatch(request, *args, **kwargs)
+        response["Cache-Control"] = "no-store"
+        return response
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add messages, message form, and review history to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "travel-grants"
+        context["has_previous_review"] = self.object.reviewed_at is not None
+        context["grant_messages"] = TravelGrantMessage.objects.filter(grant=self.object).order_by("created_at")
+        context["message_form"] = ReviewerMessageForm()
+        return context
+
+    def get_queryset(self) -> QuerySet[TravelGrant]:
+        """Scope to the current conference."""
+        return TravelGrant.objects.filter(conference=self.conference).select_related("user", "reviewed_by")
+
+    def get_success_url(self) -> str:
+        """Redirect to the travel grants list."""
+        return reverse("manage:travel-grant-list", kwargs={"conference_slug": self.conference.slug})
+
+    def form_valid(self, form: TravelGrantForm) -> HttpResponse:
+        """Record the reviewer and flash success."""
+        form.instance.reviewed_by = self.request.user
+        form.instance.reviewed_at = timezone.now()
+        messages.success(self.request, "Travel grant updated successfully.")
+        return super().form_valid(form)
+
+
+class TravelGrantSendMessageView(ManagePermissionMixin, View):
+    """POST-only view for reviewers to send a message on a grant."""
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
+        """Create a message attached to the grant."""
+        grant = get_object_or_404(TravelGrant, conference=self.conference, pk=kwargs["pk"])
+        form = ReviewerMessageForm(request.POST)
+        if form.is_valid():
+            msg = form.save(commit=False)
+            msg.grant = grant
+            msg.user = request.user
+            msg.save()
+            messages.success(request, "Message sent.")
+        return redirect(
+            reverse("manage:travel-grant-review", kwargs={"conference_slug": self.conference.slug, "pk": grant.pk})
+        )
+
+
+class TravelGrantDisburseView(ManagePermissionMixin, View):
+    """Mark a travel grant as disbursed."""
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
+        """Record disbursement details and transition the grant status.
+
+        Only grants in the ``accepted`` state can be disbursed. On success
+        the grant is moved to ``disbursed`` and the disbursement amount,
+        timestamp, and processing user are recorded.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments (expects ``pk``).
+
+        Returns:
+            A redirect to the grant review page.
+        """
+        grant = get_object_or_404(TravelGrant, pk=kwargs["pk"], conference=self.conference)
+        form = DisbursementForm(request.POST)
+        if form.is_valid() and grant.status == TravelGrant.GrantStatus.ACCEPTED:
+            grant.status = TravelGrant.GrantStatus.DISBURSED
+            grant.disbursed_amount = form.cleaned_data["disbursed_amount"]
+            grant.disbursed_at = timezone.now()
+            grant.disbursed_by = request.user
+            grant.save(update_fields=["status", "disbursed_amount", "disbursed_at", "disbursed_by"])
+            display_name = grant.user.get_full_name() or grant.user.username
+            messages.success(
+                request,
+                f"Grant for {display_name} marked as disbursed (${grant.disbursed_amount}).",
+            )
+        else:
+            messages.error(request, "Could not process disbursement.")
+        return redirect("manage:travel-grant-review", conference_slug=self.conference.slug, pk=grant.pk)
+
+
+class ReceiptReviewQueueView(ManagePermissionMixin, View):
+    """Pick a random pending receipt for review."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Redirect to a random pending receipt, or back to the grant list if none."""
+        pending = (
+            Receipt.objects.filter(
+                grant__conference=self.conference,
+                approved=False,
+                flagged=False,
+            )
+            .select_related("grant__user")
+            .order_by("?")
+            .first()
+        )
+        if pending is None:
+            messages.info(request, "No pending receipts to review.")
+            return redirect(reverse("manage:travel-grant-list", kwargs={"conference_slug": self.conference.slug}))
+        return redirect(
+            reverse(
+                "manage:receipt-review-detail",
+                kwargs={"conference_slug": self.conference.slug, "pk": pending.pk},
+            )
+        )
+
+
+class ReceiptReviewDetailView(ManagePermissionMixin, DetailView):
+    """Display a receipt for review with approve/flag controls."""
+
+    template_name = "django_program/manage/receipt_review.html"
+    context_object_name = "receipt"
+
+    def get_queryset(self) -> QuerySet[Receipt]:
+        """Return receipts scoped to the current conference."""
+        return Receipt.objects.filter(grant__conference=self.conference).select_related("grant__user")
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add navigation and flag form to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "travel-grants"
+        context["flag_form"] = ReceiptFlagForm()
+        return context
+
+
+class ReceiptApproveView(ManagePermissionMixin, View):
+    """POST-only view to approve a receipt."""
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
+        """Mark the receipt as approved by the current user."""
+        receipt = get_object_or_404(Receipt, pk=kwargs["pk"], grant__conference=self.conference)
+        receipt.approved = True
+        receipt.approved_by = request.user
+        receipt.approved_at = timezone.now()
+        receipt.save(update_fields=["approved", "approved_by", "approved_at"])
+        messages.success(request, "Receipt approved.")
+        return redirect(reverse("manage:receipt-review-queue", kwargs={"conference_slug": self.conference.slug}))
+
+
+class ReceiptFlagView(ManagePermissionMixin, View):
+    """POST-only view to flag a receipt."""
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
+        """Flag the receipt with a reason provided by the reviewer."""
+        receipt = get_object_or_404(Receipt, pk=kwargs["pk"], grant__conference=self.conference)
+        form = ReceiptFlagForm(request.POST)
+        if form.is_valid():
+            receipt.flagged = True
+            receipt.flagged_reason = form.cleaned_data["reason"]
+            receipt.flagged_by = request.user
+            receipt.flagged_at = timezone.now()
+            receipt.save(update_fields=["flagged", "flagged_reason", "flagged_by", "flagged_at"])
+            messages.success(request, "Receipt flagged.")
+        return redirect(reverse("manage:receipt-review-queue", kwargs={"conference_slug": self.conference.slug}))
+
+
 class SyncPretalxView(ManagePermissionMixin, View):
     """Trigger a Pretalx sync for the current conference.
 
@@ -1525,6 +1920,7 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
         try:
             if iter_fn is not None:
                 count = 0
+                skipped = 0
                 for progress in iter_fn():
                     if "count" in progress:
                         count = int(progress["count"])

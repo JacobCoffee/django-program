@@ -1,0 +1,145 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}{{ activity.name }}{% endblock %}
+
+{% block content %}
+<a href="{% url 'programs:activity-list' conference.slug %}" class="back-link">Back to programs</a>
+
+<div class="page-header" style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h2>{{ activity.name }}</h2>
+    <div class="talk-meta" style="margin-top: 0.5rem; margin-bottom: 0;">
+      <span class="slot-badge slot-badge--{% if activity.activity_type == 'tutorial' %}tutorial{% elif activity.activity_type == 'workshop' %}talk-sub{% elif activity.activity_type == 'sprint' %}talk{% elif activity.activity_type == 'lightning_talk' %}poster{% elif activity.activity_type == 'social' %}social{% elif activity.activity_type == 'summit' %}charlas{% else %}other{% endif %}">
+        {{ activity.get_activity_type_display }}
+      </span>
+      {% if activity.room %}
+      <span class="talk-meta-item"><span class="talk-meta-label">Room</span> {{ activity.room.name }}</span>
+      {% elif activity.location %}
+      <span class="talk-meta-item"><span class="talk-meta-label">Location</span> {{ activity.location }}</span>
+      {% endif %}
+      {% if activity.start_time %}
+      <span class="talk-meta-item"><span class="talk-meta-label">Start</span> {{ activity.start_time|date:"M j, g:i A" }}</span>
+      {% endif %}
+      {% if activity.end_time %}
+      <span class="talk-meta-item"><span class="talk-meta-label">End</span> {{ activity.end_time|date:"M j, g:i A" }}</span>
+      {% endif %}
+      {% if spots_remaining is not None %}
+      <span class="talk-meta-item"><span class="talk-meta-label">Capacity</span> {{ spots_remaining }} of {{ activity.max_participants }} remaining</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if activity.description %}
+<div class="talk-section">
+  <h3 class="section-heading" style="margin-top: 0;">Description</h3>
+  <div class="talk-section-body">{{ activity.description|linebreaks }}</div>
+</div>
+{% endif %}
+
+{% if activity.external_url %}
+<p><a href="{{ activity.external_url }}" target="_blank" rel="noopener" style="font-weight: 600;">More details &rarr;</a></p>
+{% endif %}
+
+{% if linked_talks %}
+<div class="talk-section">
+  <h3 class="section-heading">Talks ({{ linked_talks|length }})</h3>
+
+  {% for day, day_talks in schedule_by_day %}
+  <details class="schedule-day-disclosure" open>
+    <summary class="schedule-day-heading">
+      {{ day|date:"l, M j" }}
+      <span class="schedule-day-meta">{{ day_talks|length }} session{{ day_talks|length|pluralize }}</span>
+    </summary>
+    <table class="schedule-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Talk</th>
+          <th>Speaker(s)</th>
+          <th>Room</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for talk in day_talks %}
+        <tr>
+          <td class="schedule-time">
+            {% if talk.slot_start %}{{ talk.slot_start|date:"g:i A" }}{% endif %}
+            {% if talk.slot_end %}&ndash; {{ talk.slot_end|date:"g:i A" }}{% endif %}
+          </td>
+          <td class="schedule-session">
+            <a href="{% url 'pretalx:talk-detail' conference.slug talk.pretalx_code %}">{{ talk.title }}</a>
+          </td>
+          <td>
+            {% for speaker in talk.speakers.all %}
+            <a href="{% url 'pretalx:speaker-detail' conference.slug speaker.pretalx_code %}" style="font-size: 0.85rem;">{{ speaker.name }}</a>{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+          </td>
+          <td class="schedule-room">{{ talk.room.name|default:"TBD" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endfor %}
+
+  {% for talk in linked_talks %}
+    {% if not talk.slot_start and forloop.first %}
+    <h4 style="font-size: 0.85rem; color: var(--color-text-muted); margin-top: 1rem; margin-bottom: 0.5rem;">Unscheduled</h4>
+    <ul class="talk-list">
+    {% endif %}
+    {% if not talk.slot_start %}
+      <li class="talk-list-item">
+        <a href="{% url 'pretalx:talk-detail' conference.slug talk.pretalx_code %}">{{ talk.title }}</a>
+        <span class="talk-list-type">
+          {% for speaker in talk.speakers.all %}{{ speaker.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </span>
+      </li>
+    {% endif %}
+    {% if not talk.slot_start and forloop.last %}
+    </ul>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if speakers %}
+<div class="talk-section">
+  <h3 class="section-heading">Speakers ({{ speakers|length }})</h3>
+  <ul class="talk-speakers-list">
+    {% for speaker in speakers %}
+    <li><a href="{% url 'pretalx:speaker-detail' conference.slug speaker.pretalx_code %}">{{ speaker.name }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if user.is_authenticated %}
+<div class="talk-section">
+  <h3 class="section-heading">Sign Up</h3>
+  {% if spots_remaining is not None and spots_remaining <= 0 %}
+  <p style="color: var(--color-text-muted); font-style: italic;">This activity is full.</p>
+  {% else %}
+  <form method="post" action="{% url 'programs:activity-signup' conference.slug activity.slug %}" style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
+    {% csrf_token %}
+    <div style="flex: 1; min-width: 200px;">
+      <label for="note" style="display: block; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); margin-bottom: 0.3rem;">Note (optional)</label>
+      <textarea id="note" name="note" rows="2" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: inherit; font-size: 0.9rem; resize: vertical;"></textarea>
+    </div>
+    <button type="submit" style="padding: 0.55rem 1.25rem; background: var(--color-primary); color: #fff; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.9rem; cursor: pointer; white-space: nowrap;">Sign Up</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if signups %}
+<div class="talk-section">
+  <h3 class="section-heading">Signed Up ({{ signups|length }})</h3>
+  <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+    {% for signup in signups %}
+    <span style="display: inline-block; padding: 0.3rem 0.7rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.85rem;">{{ signup.user }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

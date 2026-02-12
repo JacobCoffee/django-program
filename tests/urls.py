@@ -8,4 +8,5 @@ urlpatterns = [
     path("manage/", include("django_program.manage.urls")),
     path("<slug:conference_slug>/program/", include("django_program.pretalx.urls")),
     path("<slug:conference_slug>/sponsors/", include("django_program.sponsors.urls")),
+    path("<slug:conference_slug>/programs/", include("django_program.programs.urls")),
 ]

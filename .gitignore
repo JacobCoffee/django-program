@@ -21,3 +21,6 @@ build/
 
 # Local worktrees
 .worktrees/
+
+# Uploaded media files
+travel_grant_receipts/

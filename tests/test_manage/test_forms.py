@@ -85,7 +85,7 @@ class TestSectionForm:
 
     def test_meta_fields(self):
         form = SectionForm()
-        expected = ["name", "slug", "start_date", "end_date", "order"]
+        expected = ["name", "start_date", "end_date", "order"]
         assert list(form.fields.keys()) == expected
 
     def test_date_widgets_are_date_input(self):

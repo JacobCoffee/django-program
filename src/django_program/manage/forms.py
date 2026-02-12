@@ -6,11 +6,14 @@ all fields are rendered as disabled so organizers cannot accidentally
 overwrite upstream data.
 """
 
+import datetime
+
 from django import forms
 from django.core.validators import RegexValidator
 
 from django_program.conference.models import Conference, Section
 from django_program.pretalx.models import Room, ScheduleSlot, Talk
+from django_program.programs.models import Activity, TravelGrant, TravelGrantMessage
 from django_program.sponsors.models import Sponsor, SponsorLevel
 
 
@@ -84,11 +87,43 @@ class SectionForm(forms.ModelForm):
 
     class Meta:
         model = Section
-        fields = ["name", "slug", "start_date", "end_date", "order"]
+        fields = ["name", "start_date", "end_date", "order"]
         widgets = {
             "start_date": forms.DateInput(attrs={"type": "date"}),
             "end_date": forms.DateInput(attrs={"type": "date"}),
         }
+
+    def __init__(self, *args: object, conference: Conference | None = None, **kwargs: object) -> None:
+        """Build date select choices from the conference date range."""
+        super().__init__(*args, **kwargs)
+        if conference and conference.start_date and conference.end_date:
+            day_choices = self._build_date_choices(conference.start_date, conference.end_date)
+            self.fields["start_date"] = forms.TypedChoiceField(
+                choices=[("", "---"), *day_choices],
+                coerce=datetime.date.fromisoformat,
+                label="Start date",
+            )
+            self.fields["end_date"] = forms.TypedChoiceField(
+                choices=[("", "---"), *day_choices],
+                coerce=datetime.date.fromisoformat,
+                label="End date",
+            )
+            if self.instance and self.instance.pk:
+                if self.instance.start_date:
+                    self.initial["start_date"] = self.instance.start_date.isoformat()
+                if self.instance.end_date:
+                    self.initial["end_date"] = self.instance.end_date.isoformat()
+
+    @staticmethod
+    def _build_date_choices(start: datetime.date, end: datetime.date) -> list[tuple[str, str]]:
+        """Build a list of (iso_date, label) for each day in the range."""
+        choices: list[tuple[str, str]] = []
+        current = start
+        while current <= end:
+            label = current.strftime("%A, %B %-d, %Y")
+            choices.append((current.isoformat(), label))
+            current += datetime.timedelta(days=1)
+        return choices
 
 
 class RoomForm(forms.ModelForm):
@@ -236,3 +271,82 @@ class SponsorForm(forms.ModelForm):
             for field_name in self.SYNCED_FIELDS:
                 if field_name in self.fields:
                     self.fields[field_name].disabled = True
+
+
+class ActivityForm(forms.ModelForm):
+    """Form for editing a conference activity.
+
+    The ``slug`` field is excluded because it is auto-generated from
+    the activity name.  The ``room`` field provides an optional link to
+    a Pretalx-synced room for venue assignment.
+    """
+
+    class Meta:
+        model = Activity
+        fields = [
+            "name",
+            "activity_type",
+            "description",
+            "room",
+            "location",
+            "pretalx_submission_type",
+            "start_time",
+            "end_time",
+            "max_participants",
+            "requires_ticket",
+            "external_url",
+            "is_active",
+        ]
+        widgets = {
+            "start_time": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+            "end_time": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+        }
+
+
+class TravelGrantForm(forms.ModelForm):
+    """Form for reviewing a travel grant application."""
+
+    class Meta:
+        model = TravelGrant
+        fields = [
+            "status",
+            "approved_amount",
+            "promo_code",
+            "reviewer_notes",
+        ]
+        widgets = {
+            "status": forms.Select(attrs={"autocomplete": "off"}),
+        }
+
+
+class ReviewerMessageForm(forms.ModelForm):
+    """Form for reviewers to send a message on a travel grant."""
+
+    class Meta:
+        model = TravelGrantMessage
+        fields = ["message", "visible"]
+        widgets = {
+            "message": forms.Textarea(attrs={"rows": 3, "placeholder": "Write a message..."}),
+        }
+        labels = {
+            "visible": "Visible to applicant",
+        }
+
+
+class ReceiptFlagForm(forms.Form):
+    """Form for flagging a receipt with a reason."""
+
+    reason = forms.CharField(
+        max_length=1024,
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Reason for flagging this receipt..."}),
+    )
+
+
+class DisbursementForm(forms.Form):
+    """Form for marking a travel grant as disbursed."""
+
+    disbursed_amount = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Actual amount disbursed to the grantee.",
+    )
