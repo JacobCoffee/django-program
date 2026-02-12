@@ -1,13 +1,1059 @@
+{% extends "django_program/pretalx/base.html" %}
+
 {% block title %}Apply for Travel Grant{% endblock %}
 
+{% block extra_head %}
+<style>
+  .grant-form-container {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ---- Form Sections ---- */
+  .form-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+
+  .form-section[hidden] {
+    display: none;
+  }
+
+  .form-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .form-section-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .form-section-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
+  }
+
+  .form-section-body {
+    padding: 1.5rem;
+  }
+
+  /* ---- Field Groups ---- */
+  .field-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .field-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.4rem;
+    line-height: 1.4;
+  }
+
+  .field-label .required-mark {
+    color: #dc2626;
+    margin-left: 0.15em;
+  }
+
+  .field-help {
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    line-height: 1.45;
+  }
+
+  .field-errors {
+    list-style: none;
+    padding: 0;
+    margin: 0.3rem 0 0;
+  }
+
+  .field-errors li {
+    font-size: 0.82rem;
+    color: #dc2626;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  /* ---- Standard Inputs ---- */
+  .grant-form input[type="text"],
+  .grant-form input[type="number"],
+  .grant-form input[type="email"],
+  .grant-form select,
+  .grant-form textarea {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    color: var(--color-text);
+    background: var(--color-surface);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    line-height: 1.5;
+  }
+
+  .grant-form input[type="text"]:focus,
+  .grant-form input[type="number"]:focus,
+  .grant-form input[type="email"]:focus,
+  .grant-form select:focus,
+  .grant-form textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.12);
+  }
+
+  .grant-form input.has-error,
+  .grant-form select.has-error,
+  .grant-form textarea.has-error {
+    border-color: #dc2626;
+  }
+
+  .grant-form input.has-error:focus,
+  .grant-form select.has-error:focus,
+  .grant-form textarea.has-error:focus {
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  }
+
+  .grant-form textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+
+  .grant-form select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23555770' viewBox='0 0 16 16'%3E%3Cpath d='M8 11.5l-5-5h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2.25rem;
+    cursor: pointer;
+  }
+
+  /* ---- Radio Card Group ---- */
+  .radio-card-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .radio-card-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-text);
+  }
+
+  .radio-card-group label:hover {
+    border-color: var(--color-primary-light);
+    background: #fafaff;
+  }
+
+  .radio-card-group input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .radio-card-group input[type="radio"]:checked + span,
+  .radio-card-group input[type="radio"]:checked ~ span {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .radio-card-group label:has(input[type="radio"]:checked) {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+  }
+
+  /* ---- Checkbox Inline ---- */
+  .checkbox-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: pointer;
+  }
+
+  .checkbox-inline input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .checkbox-inline .checkbox-text {
+    font-size: 0.9rem;
+    color: var(--color-text);
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  /* ---- Checkbox Group (days attending) ---- */
+  .checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+    color: var(--color-text);
+    cursor: pointer;
+    padding: 0.2rem 0;
+  }
+
+  .checkbox-group input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* ---- Currency Input ---- */
+  .currency-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .currency-prefix {
+    position: absolute;
+    left: 0.75rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .currency-wrapper input[type="number"] {
+    padding-left: 1.6rem;
+  }
+
+  /* ---- Expense Table ---- */
+  .expense-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .expense-table thead {
+    background: var(--color-bg);
+  }
+
+  .expense-table th {
+    padding: 0.6rem 1rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .expense-table th:last-child {
+    width: 160px;
+    text-align: right;
+  }
+
+  .expense-table td {
+    padding: 0.75rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .expense-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .expense-table .expense-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    width: 100px;
+    vertical-align: top;
+    padding-top: 1rem;
+  }
+
+  .expense-table .expense-desc-cell {
+    padding-right: 0.5rem;
+  }
+
+  .expense-table .expense-amount-cell {
+    width: 160px;
+  }
+
+  .expense-table input[type="text"],
+  .expense-table input[type="number"] {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.65rem;
+  }
+
+  .expense-table .currency-wrapper input[type="number"] {
+    padding-left: 1.5rem;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+  }
+
+  .expense-row-readonly td {
+    background: var(--color-bg);
+  }
+
+  .expense-readonly-value {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .expense-total-row td {
+    border-top: 2px solid var(--color-border);
+    background: var(--color-bg);
+    font-weight: 700;
+  }
+
+  .expense-total-label {
+    font-size: 0.88rem;
+    color: var(--color-text);
+  }
+
+  .expense-total-amount {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    color: var(--color-primary);
+    text-align: right;
+    display: block;
+    padding-right: 0.75rem;
+  }
+
+  /* ---- Two Column Layout ---- */
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  /* ---- Form Actions ---- */
+  .form-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    position: sticky;
+    bottom: 1rem;
+    z-index: 10;
+  }
+
+  .btn-submit {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.65rem 1.75rem;
+    background: var(--color-primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .btn-submit:hover {
+    background: var(--color-primary-hover);
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-submit:active {
+    transform: translateY(1px);
+  }
+
+  .btn-cancel {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.65rem 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .btn-cancel:hover {
+    border-color: var(--color-text-muted);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .form-actions-spacer {
+    flex: 1;
+  }
+
+  .form-progress-hint {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+  }
+
+  /* ---- Non-field Errors ---- */
+  .form-non-field-errors {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1.15rem;
+    margin-bottom: 1.5rem;
+    list-style: none;
+  }
+
+  .form-non-field-errors li {
+    font-size: 0.88rem;
+    color: #991b1b;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  .form-non-field-errors li + li {
+    margin-top: 0.3rem;
+  }
+
+  /* ---- Info Callout ---- */
+  .info-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.25rem;
+  }
+
+  .info-callout-icon {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+    margin-top: 0.1rem;
+  }
+
+  .info-callout p {
+    font-size: 0.85rem;
+    color: #1e40af;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* ---- Visually Hidden (screen readers only) ---- */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 768px) {
+    .form-section-body {
+      padding: 1.25rem 1rem;
+    }
+
+    .form-section-header {
+      padding: 0.85rem 1rem;
+    }
+
+    .field-row {
+      grid-template-columns: 1fr;
+    }
+
+    .expense-table th:first-child,
+    .expense-table td.expense-label {
+      display: none;
+    }
+
+    .expense-table .expense-desc-cell {
+      padding-right: 0.25rem;
+    }
+
+    .expense-table .expense-amount-cell {
+      width: 120px;
+    }
+
+    .form-actions {
+      flex-wrap: wrap;
+      bottom: 0;
+      border-radius: 0;
+      margin-left: -1rem;
+      margin-right: -1rem;
+      width: calc(100% + 2rem);
+    }
+
+    .form-actions-spacer {
+      display: none;
+    }
+
+    .form-progress-hint {
+      order: -1;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .radio-card-group label {
+      padding: 0.7rem 0.85rem;
+      font-size: 0.85rem;
+    }
+
+    .expense-table .expense-amount-cell {
+      width: 100px;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<a href="{% url 'programs:activity-list' conference.slug %}">Back to activities</a>
+<a href="{% url 'programs:activity-list' conference.slug %}" class="back-link">Back to Programs</a>
 
-<h2>Apply for a Travel Grant</h2>
+<div class="page-header">
+  <h2>Apply for a Travel Grant</h2>
+  <p>Request financial assistance for attending {{ conference.name }}.</p>
+</div>
 
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Submit Application</button>
-</form>
+<div class="grant-form-container">
+
+  {% if form.non_field_errors %}
+  <ul class="form-non-field-errors" role="alert">
+    {% for error in form.non_field_errors %}
+    <li>{{ error }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <form method="post" class="grant-form" novalidate>
+    {% csrf_token %}
+
+    {# Hidden field — auto-filled by JS from expense totals #}
+    <input type="hidden" name="requested_amount" id="id_requested_amount" value="{{ form.requested_amount.value|default:'0.00' }}">
+
+    <div class="form-section" id="section-request-type">
+      <div class="form-section-header">
+        <span class="form-section-number">1</span>
+        <span class="form-section-title">What are you requesting?</span>
+      </div>
+      <div class="form-section-body">
+        <fieldset style="border:none;margin:0;padding:0;">
+          <legend class="sr-only">{{ form.request_type.label }}</legend>
+          <div class="radio-card-group" id="request-type-group">
+            {% for radio in form.request_type %}
+            <label for="{{ radio.id_for_label }}">
+              {{ radio.tag }}
+              <span>{{ radio.choice_label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          {% if form.request_type.errors %}
+          <ul class="field-errors" role="alert">
+            {% for error in form.request_type.errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </fieldset>
+      </div>
+    </div>
+
+    <div class="form-section" id="section-attendance">
+      <div class="form-section-header">
+        <span class="form-section-number">2</span>
+        <span class="form-section-title">Conference Attendance</span>
+      </div>
+      <div class="form-section-body">
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label" for="{{ form.application_type.id_for_label }}">
+              {{ form.application_type.label }}
+              {% if form.application_type.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+            </label>
+            {{ form.application_type }}
+            {% if form.application_type.help_text %}
+            <p class="field-help">{{ form.application_type.help_text }}</p>
+            {% endif %}
+            {% if form.application_type.errors %}
+            <ul class="field-errors" role="alert">
+              {% for error in form.application_type.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+
+          <div class="field-group">
+            <span class="field-label">
+              {{ form.days_attending.label }}
+            </span>
+            <div class="checkbox-group">
+              {% for checkbox in form.days_attending %}
+              <label for="{{ checkbox.id_for_label }}">
+                {{ checkbox.tag }}
+                {{ checkbox.choice_label }}
+              </label>
+              {% endfor %}
+            </div>
+            {% if form.days_attending.errors %}
+            <ul class="field-errors" role="alert">
+              {% for error in form.days_attending.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section" id="section-travel-details">
+      <div class="form-section-header">
+        <span class="form-section-number">3</span>
+        <span class="form-section-title">Travel Details</span>
+      </div>
+      <div class="form-section-body">
+        <div class="field-group">
+          <label class="field-label" for="{{ form.travel_from.id_for_label }}">
+            {{ form.travel_from.label }}
+            {% if form.travel_from.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+          </label>
+          {{ form.travel_from }}
+          {% if form.travel_from.help_text %}
+          <p class="field-help">{{ form.travel_from.help_text }}</p>
+          {% endif %}
+          {% if form.travel_from.errors %}
+          <ul class="field-errors" role="alert">
+            {% for error in form.travel_from.errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+
+        <div class="field-group">
+          <label class="checkbox-inline" for="{{ form.international.id_for_label }}">
+            {{ form.international }}
+            <span class="checkbox-text">{{ form.international.label }}</span>
+          </label>
+          {% if form.international.help_text %}
+          <p class="field-help" style="margin-left: 1.6rem;">{{ form.international.help_text }}</p>
+          {% endif %}
+          {% if form.international.errors %}
+          <ul class="field-errors" role="alert">
+            {% for error in form.international.errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section" id="section-expenses">
+      <div class="form-section-header">
+        <span class="form-section-number">4</span>
+        <span class="form-section-title">Travel Expenses</span>
+      </div>
+      <div class="form-section-body">
+        <div class="info-callout">
+          <span class="info-callout-icon" aria-hidden="true">&#9432;</span>
+          <p>
+            Provide an itemized breakdown of your travel costs.
+            Include descriptions so reviewers understand your plans.
+            Conference registration is complimentary for all grant recipients.
+          </p>
+        </div>
+
+        <table class="expense-table" role="table">
+          <thead>
+            <tr>
+              <th scope="col">Expense</th>
+              <th scope="col">Description</th>
+              <th scope="col" style="text-align: right;">Amount (USD)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="expense-label">Airfare</td>
+              <td class="expense-desc-cell">
+                <label class="sr-only" for="{{ form.travel_plans_airfare_description.id_for_label }}">{{ form.travel_plans_airfare_description.label }}</label>
+                {{ form.travel_plans_airfare_description }}
+                {% if form.travel_plans_airfare_description.errors %}
+                <ul class="field-errors" role="alert">
+                  {% for error in form.travel_plans_airfare_description.errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+              </td>
+              <td class="expense-amount-cell">
+                <label class="sr-only" for="{{ form.travel_plans_airfare_amount.id_for_label }}">{{ form.travel_plans_airfare_amount.label }}</label>
+                <div class="currency-wrapper">
+                  <span class="currency-prefix" aria-hidden="true">$</span>
+                  {{ form.travel_plans_airfare_amount }}
+                </div>
+                {% if form.travel_plans_airfare_amount.errors %}
+                <ul class="field-errors" role="alert">
+                  {% for error in form.travel_plans_airfare_amount.errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="expense-label">Lodging</td>
+              <td class="expense-desc-cell">
+                <label class="sr-only" for="{{ form.travel_plans_lodging_description.id_for_label }}">{{ form.travel_plans_lodging_description.label }}</label>
+                {{ form.travel_plans_lodging_description }}
+                {% if form.travel_plans_lodging_description.errors %}
+                <ul class="field-errors" role="alert">
+                  {% for error in form.travel_plans_lodging_description.errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+              </td>
+              <td class="expense-amount-cell">
+                <label class="sr-only" for="{{ form.travel_plans_lodging_description.id_for_label }}">{{ form.travel_plans_lodging_amount.label }}</label>
+                <div class="currency-wrapper">
+                  <span class="currency-prefix" aria-hidden="true">$</span>
+                  {{ form.travel_plans_lodging_amount }}
+                </div>
+                {% if form.travel_plans_lodging_amount.errors %}
+                <ul class="field-errors" role="alert">
+                  {% for error in form.travel_plans_lodging_amount.errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+              </td>
+            </tr>
+            <tr class="expense-row-readonly">
+              <td class="expense-label">Registration</td>
+              <td class="expense-desc-cell">
+                <span class="expense-readonly-value">Conference registration</span>
+              </td>
+              <td class="expense-amount-cell">
+                <span class="expense-readonly-value" style="display: block; text-align: right; padding-right: 0.75rem;">Complimentary</span>
+              </td>
+            </tr>
+            <tr class="expense-total-row">
+              <td class="expense-label">
+                <span class="expense-total-label">Total</span>
+              </td>
+              <td>
+                <span class="expense-total-label">Estimated Grand Total</span>
+              </td>
+              <td class="expense-amount-cell">
+                <span class="expense-total-amount" id="expense-grand-total" aria-live="polite">$0.00</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="form-section" id="section-sharing">
+      <div class="form-section-header">
+        <span class="form-section-number">5</span>
+        <span class="form-section-title">Shared Expenses</span>
+      </div>
+      <div class="form-section-body">
+        <div class="field-group">
+          <label class="checkbox-inline" for="{{ form.sharing_expenses.id_for_label }}">
+            {{ form.sharing_expenses }}
+            <span class="checkbox-text">{{ form.sharing_expenses.label }}</span>
+          </label>
+          {% if form.sharing_expenses.help_text %}
+          <p class="field-help" style="margin-left: 1.6rem;">{{ form.sharing_expenses.help_text }}</p>
+          {% endif %}
+          {% if form.sharing_expenses.errors %}
+          <ul class="field-errors" role="alert">
+            {% for error in form.sharing_expenses.errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+
+        <div class="field-group" id="traveling-with-group" hidden>
+          <label class="field-label" for="{{ form.traveling_with.id_for_label }}">
+            {{ form.traveling_with.label }}
+          </label>
+          {{ form.traveling_with }}
+          {% if form.traveling_with.help_text %}
+          <p class="field-help">{{ form.traveling_with.help_text }}</p>
+          {% endif %}
+          {% if form.traveling_with.errors %}
+          <ul class="field-errors" role="alert">
+            {% for error in form.traveling_with.errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section" id="section-about">
+      <div class="form-section-header">
+        <span class="form-section-number">6</span>
+        <span class="form-section-title">About You</span>
+      </div>
+      <div class="form-section-body">
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label" for="{{ form.first_time.id_for_label }}">
+              {{ form.first_time.label }}
+              {% if form.first_time.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+            </label>
+            {{ form.first_time }}
+            {% if form.first_time.errors %}
+            <ul class="field-errors" role="alert">
+              {% for error in form.first_time.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="{{ form.experience_level.id_for_label }}">
+              {{ form.experience_level.label }}
+              {% if form.experience_level.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+            </label>
+            {{ form.experience_level }}
+            {% if form.experience_level.errors %}
+            <ul class="field-errors" role="alert">
+              {% for error in form.experience_level.errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="{{ form.occupation.id_for_label }}">
+            {{ form.occupation.label }}
+            {% if form.occupation.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+          </label>
+          {{ form.occupation }}
+          {% if form.occupation.help_text %}
+          <p class="field-help">{{ form.occupation.help_text }}</p>
+          {% endif %}
+          {% if form.occupation.errors %}
+          <ul class="field-errors" role="alert">
+            {% for error in form.occupation.errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="{{ form.involvement.id_for_label }}">
+            {{ form.involvement.label }}
+            {% if form.involvement.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+          </label>
+          {{ form.involvement }}
+          {% if form.involvement.help_text %}
+          <p class="field-help">{{ form.involvement.help_text }}</p>
+          {% endif %}
+          {% if form.involvement.errors %}
+          <ul class="field-errors" role="alert">
+            {% for error in form.involvement.errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="{{ form.reason.id_for_label }}">
+            {{ form.reason.label }}
+            {% if form.reason.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+          </label>
+          {{ form.reason }}
+          {% if form.reason.help_text %}
+          <p class="field-help">{{ form.reason.help_text }}</p>
+          {% endif %}
+          {% if form.reason.errors %}
+          <ul class="field-errors" role="alert">
+            {% for error in form.reason.errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if form.requested_amount.errors %}
+    <ul class="form-non-field-errors" role="alert">
+      {% for error in form.requested_amount.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="form-actions">
+      <button type="submit" class="btn-submit">Submit Application</button>
+      <a href="{% url 'programs:activity-list' conference.slug %}" class="btn-cancel">Cancel</a>
+      <span class="form-actions-spacer"></span>
+      <span class="form-progress-hint" id="form-progress-hint">All fields with <span style="color: #dc2626;">*</span> are required</span>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  "use strict";
+
+  var requestTypeInputs = document.querySelectorAll('input[name="request_type"]');
+  var sharingCheckbox = document.getElementById("{{ form.sharing_expenses.id_for_label }}");
+  var travelingWithGroup = document.getElementById("traveling-with-group");
+
+  var sectionAttendance = document.getElementById("section-attendance");
+  var sectionTravelDetails = document.getElementById("section-travel-details");
+  var sectionExpenses = document.getElementById("section-expenses");
+  var sectionSharing = document.getElementById("section-sharing");
+  var sectionAbout = document.getElementById("section-about");
+
+  var airfareAmount = document.getElementById("{{ form.travel_plans_airfare_amount.id_for_label }}");
+  var lodgingAmount = document.getElementById("{{ form.travel_plans_lodging_amount.id_for_label }}");
+  var grandTotal = document.getElementById("expense-grand-total");
+  var requestedAmount = document.getElementById("id_requested_amount");
+
+  var TYPE_TICKET_ONLY = "ticket_only";
+  var TYPE_TICKET_AND_GRANT = "ticket_and_grant";
+
+  function updateSectionVisibility() {
+    var selected = getSelectedRequestType();
+
+    var showAttendance = !!selected;
+    var showTravel = selected === TYPE_TICKET_ONLY || selected === TYPE_TICKET_AND_GRANT;
+    var showExpenses = selected === TYPE_TICKET_AND_GRANT;
+    var showSharing = selected === TYPE_TICKET_ONLY || selected === TYPE_TICKET_AND_GRANT;
+    var showAbout = !!selected;
+
+    toggleSection(sectionAttendance, showAttendance);
+    toggleSection(sectionTravelDetails, showTravel);
+    toggleSection(sectionExpenses, showExpenses);
+    toggleSection(sectionSharing, showSharing);
+    toggleSection(sectionAbout, showAbout);
+
+    updateProgressHint(selected);
+  }
+
+  function getSelectedRequestType() {
+    for (var i = 0; i < requestTypeInputs.length; i++) {
+      if (requestTypeInputs[i].checked) {
+        return requestTypeInputs[i].value;
+      }
+    }
+    return null;
+  }
+
+  function toggleSection(el, show) {
+    if (!el) return;
+    if (show) {
+      el.removeAttribute("hidden");
+    } else {
+      el.setAttribute("hidden", "");
+    }
+  }
+
+  function updateProgressHint(selected) {
+    var hint = document.getElementById("form-progress-hint");
+    if (!hint) return;
+    if (!selected) {
+      hint.textContent = "Select a request type to begin";
+    } else {
+      hint.innerHTML = 'All fields with <span style="color: #dc2626;">*</span> are required';
+    }
+  }
+
+  function updateTravelingWith() {
+    if (!sharingCheckbox || !travelingWithGroup) return;
+    toggleSection(travelingWithGroup, sharingCheckbox.checked);
+  }
+
+  function updateGrandTotal() {
+    var airfare = parseFloat(airfareAmount ? airfareAmount.value : 0) || 0;
+    var lodging = parseFloat(lodgingAmount ? lodgingAmount.value : 0) || 0;
+    var total = airfare + lodging;
+    if (grandTotal) {
+      grandTotal.textContent = "$" + total.toFixed(2);
+    }
+    if (requestedAmount) {
+      requestedAmount.value = total.toFixed(2);
+    }
+  }
+
+  function markFieldErrors() {
+    var errorLists = document.querySelectorAll(".field-errors");
+    for (var i = 0; i < errorLists.length; i++) {
+      var parent = errorLists[i].closest(".field-group") ||
+                   errorLists[i].closest("td") ||
+                   errorLists[i].closest("fieldset");
+      if (parent) {
+        var inputs = parent.querySelectorAll("input, select, textarea");
+        for (var j = 0; j < inputs.length; j++) {
+          inputs[j].classList.add("has-error");
+        }
+      }
+    }
+  }
+
+  for (var i = 0; i < requestTypeInputs.length; i++) {
+    requestTypeInputs[i].addEventListener("change", updateSectionVisibility);
+  }
+
+  if (sharingCheckbox) {
+    sharingCheckbox.addEventListener("change", updateTravelingWith);
+  }
+
+  if (airfareAmount) {
+    airfareAmount.addEventListener("input", updateGrandTotal);
+  }
+  if (lodgingAmount) {
+    lodgingAmount.addEventListener("input", updateGrandTotal);
+  }
+
+  updateSectionVisibility();
+  updateTravelingWith();
+  updateGrandTotal();
+  markFieldErrors();
+})();
+</script>
 {% endblock %}

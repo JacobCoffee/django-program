@@ -19,9 +19,14 @@ from django_program.manage.views import (
     ImportFromPretalxView,
     ImportPretalxStreamView,
     PretalxEventSearchView,
+    ReceiptApproveView,
+    ReceiptFlagView,
+    ReceiptReviewDetailView,
+    ReceiptReviewQueueView,
     RoomCreateView,
     RoomEditView,
     RoomListView,
+    RoomSearchView,
     ScheduleSlotEditView,
     ScheduleSlotListView,
     SectionCreateView,
@@ -41,8 +46,10 @@ from django_program.manage.views import (
     TalkDetailView,
     TalkEditView,
     TalkListView,
+    TravelGrantDisburseView,
     TravelGrantManageListView,
     TravelGrantReviewView,
+    TravelGrantSendMessageView,
 )
 
 app_name = "manage"
@@ -101,6 +108,7 @@ urlpatterns = [
         SponsorEditView.as_view(),
         name="sponsor-edit",
     ),
+    path("<slug:conference_slug>/api/rooms/", RoomSearchView.as_view(), name="room-search"),
     path("<slug:conference_slug>/activities/", ActivityManageListView.as_view(), name="activity-list"),
     path("<slug:conference_slug>/activities/add/", ActivityCreateView.as_view(), name="activity-add"),
     path(
@@ -114,4 +122,18 @@ urlpatterns = [
         TravelGrantReviewView.as_view(),
         name="travel-grant-review",
     ),
+    path(
+        "<slug:conference_slug>/travel-grants/<int:pk>/message/",
+        TravelGrantSendMessageView.as_view(),
+        name="travel-grant-send-message",
+    ),
+    path(
+        "<slug:conference_slug>/travel-grants/<int:pk>/disburse/",
+        TravelGrantDisburseView.as_view(),
+        name="travel-grant-disburse",
+    ),
+    path("<slug:conference_slug>/receipts/review/", ReceiptReviewQueueView.as_view(), name="receipt-review-queue"),
+    path("<slug:conference_slug>/receipts/<int:pk>/", ReceiptReviewDetailView.as_view(), name="receipt-review-detail"),
+    path("<slug:conference_slug>/receipts/<int:pk>/approve/", ReceiptApproveView.as_view(), name="receipt-approve"),
+    path("<slug:conference_slug>/receipts/<int:pk>/flag/", ReceiptFlagView.as_view(), name="receipt-flag"),
 ]

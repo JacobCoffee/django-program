@@ -1,17 +1,76 @@
-{% block title %}Activities{% endblock %}
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Programs{% endblock %}
 
 {% block content %}
-<h2>Activities</h2>
+<div class="page-header">
+  <h2>Programs</h2>
+  <p>Activities, workshops, sprints, and more at {{ conference.name }}.</p>
+</div>
 
-{% for activity in activities %}
-<article>
-  <h3><a href="{% url 'programs:activity-detail' conference.slug activity.slug %}">{{ activity.name }}</a></h3>
-  <p>{{ activity.get_activity_type_display }}</p>
-  {% if activity.start_time %}<p>{{ activity.start_time }}</p>{% endif %}
-  {% if activity.location %}<p>{{ activity.location }}</p>{% endif %}
-  {% if activity.max_participants %}<p>{{ activity.signup_count }} / {{ activity.max_participants }} spots filled</p>{% endif %}
-</article>
-{% empty %}
-<p>No activities yet.</p>
-{% endfor %}
+<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem;">
+  <a href="{% url 'programs:activity-list' conference.slug %}"
+     class="slot-badge {% if not current_type %}slot-badge--talk{% else %}slot-badge--other{% endif %}"
+     style="text-decoration: none; font-size: 0.82rem; padding: 0.3rem 0.7rem;">
+    All
+  </a>
+  {% for value, label in activity_types %}
+  <a href="{% url 'programs:activity-list' conference.slug %}?type={{ value }}"
+     class="slot-badge {% if current_type == value %}slot-badge--talk{% else %}slot-badge--other{% endif %}"
+     style="text-decoration: none; font-size: 0.82rem; padding: 0.3rem 0.7rem;">
+    {{ label }}
+  </a>
+  {% endfor %}
+</div>
+
+<div class="speaker-grid">
+  {% for activity in activities %}
+  <a href="{% url 'programs:activity-detail' conference.slug activity.slug %}" class="card speaker-card" style="display: block; text-decoration: none; color: inherit;">
+    <div class="card-body">
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <span class="slot-badge slot-badge--{% if activity.activity_type == 'tutorial' %}tutorial{% elif activity.activity_type == 'workshop' %}talk-sub{% elif activity.activity_type == 'sprint' %}talk{% elif activity.activity_type == 'lightning_talk' %}poster{% elif activity.activity_type == 'social' %}social{% elif activity.activity_type == 'summit' %}charlas{% else %}other{% endif %}">
+          {{ activity.get_activity_type_display }}
+        </span>
+        {% if activity.talk_count %}
+        <span style="font-size: 0.78rem; color: var(--color-text-muted);">{{ activity.talk_count }} talk{{ activity.talk_count|pluralize }}</span>
+        {% endif %}
+      </div>
+      <div class="speaker-name" style="font-size: 1.05rem; margin-bottom: 0.35rem;">{{ activity.name }}</div>
+      {% if activity.description %}
+      <p style="font-size: 0.85rem; color: var(--color-text-muted); line-height: 1.45; margin-bottom: 0.5rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+        {{ activity.description|truncatewords:30 }}
+      </p>
+      {% endif %}
+      <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; font-size: 0.82rem; color: var(--color-text-secondary);">
+        {% if activity.start_time %}
+        <span>{{ activity.start_time|date:"M j, g:i A" }}</span>
+        {% endif %}
+        {% if activity.room %}
+        <span>{{ activity.room.name }}</span>
+        {% elif activity.location %}
+        <span>{{ activity.location }}</span>
+        {% endif %}
+      </div>
+      {% if activity.max_participants %}
+      <div style="margin-top: 0.6rem;">
+        {% with filled=activity.signup_count total=activity.max_participants %}
+        <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--color-text-muted); margin-bottom: 0.25rem;">
+          <span>{{ filled }} / {{ total }} signed up</span>
+          {% with remaining=total|add:"-"|add:filled|default:0 %}
+          {% endwith %}
+        </div>
+        <div style="height: 4px; background: var(--color-border-light); border-radius: 2px; overflow: hidden;">
+          <div style="height: 100%; width: {% widthratio filled total 100 %}%; background: var(--color-primary); border-radius: 2px;"></div>
+        </div>
+        {% endwith %}
+      </div>
+      {% endif %}
+    </div>
+  </a>
+  {% empty %}
+  <div class="speaker-empty">
+    <p>No activities yet.</p>
+  </div>
+  {% endfor %}
+</div>
 {% endblock %}

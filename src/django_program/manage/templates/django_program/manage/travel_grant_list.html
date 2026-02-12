@@ -8,15 +8,80 @@
 {% endblock %}
 
 {% block content %}
+{% if grant_stats.total %}
+<div class="stat-grid" style="margin-bottom: 1.5rem;">
+  <div class="stat-card">
+    <a href="?">
+      <div class="stat-card-value">{{ grant_stats.total }}</div>
+      <div class="stat-card-label">Total Applications</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=submitted">
+      <div class="stat-card-value" style="color: var(--color-warning);">{{ grant_stats.pending }}</div>
+      <div class="stat-card-label">Submitted</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=accepted">
+      <div class="stat-card-value" style="color: var(--color-success);">{{ grant_stats.approved }}</div>
+      <div class="stat-card-label">Accepted</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=rejected">
+      <div class="stat-card-value">{{ grant_stats.rejected }}</div>
+      <div class="stat-card-label">Rejected</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=disbursed">
+      <div class="stat-card-value" style="color: #1e40af;">{{ grant_stats.disbursed }}</div>
+      <div class="stat-card-label">Disbursed</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ grant_stats.total_requested }}</div>
+    <div class="stat-card-label">Total Requested</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value" style="color: var(--color-success);">${{ grant_stats.total_approved }}</div>
+    <div class="stat-card-label">Total Approved</div>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <form method="get" style="display: flex; align-items: center; gap: 0.5rem;">
+    <select name="status" onchange="this.form.submit()">
+      <option value="">All statuses</option>
+      <option value="submitted"{% if current_status == "submitted" %} selected{% endif %}>Submitted</option>
+      <option value="info_needed"{% if current_status == "info_needed" %} selected{% endif %}>Info Needed</option>
+      <option value="offered"{% if current_status == "offered" %} selected{% endif %}>Offered</option>
+      <option value="accepted"{% if current_status == "accepted" %} selected{% endif %}>Accepted</option>
+      <option value="rejected"{% if current_status == "rejected" %} selected{% endif %}>Rejected</option>
+      <option value="declined"{% if current_status == "declined" %} selected{% endif %}>Declined</option>
+      <option value="withdrawn"{% if current_status == "withdrawn" %} selected{% endif %}>Withdrawn</option>
+      <option value="disbursed"{% if current_status == "disbursed" %} selected{% endif %}>Disbursed</option>
+    </select>
+    {% if current_status %}
+    <a href="?" class="btn btn-sm btn-secondary">Clear filter</a>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
 {% if grants %}
 <table class="data-table">
   <thead>
     <tr>
       <th>Applicant</th>
+      <th>Type</th>
       <th>Traveling From</th>
       <th>Requested</th>
       <th>Approved</th>
+      <th>Receipts</th>
       <th>Status</th>
+      <th>Reviewer</th>
       <th>Applied</th>
       <th>Actions</th>
     </tr>
@@ -24,19 +89,44 @@
   <tbody>
     {% for grant in grants %}
     <tr>
-      <td>{{ grant.user.get_full_name|default:grant.user.username }}</td>
-      <td>{{ grant.travel_from }}</td>
+      <td>
+        {{ grant.user.get_full_name|default:grant.user.username }}
+        {% if grant.user.email %}<br><span style="font-size: 0.78rem; color: var(--color-text-muted);">{{ grant.user.email }}</span>{% endif %}
+      </td>
+      <td><span style="font-size: 0.82rem;">{{ grant.get_application_type_display }}</span></td>
+      <td>{{ grant.travel_from }}{% if grant.international %} <span style="font-size: 0.72rem; color: var(--color-primary);">intl</span>{% endif %}</td>
       <td>${{ grant.requested_amount }}</td>
       <td>{% if grant.approved_amount %} ${{ grant.approved_amount }}{% else %}--{% endif %}</td>
       <td>
-        {% if grant.status == "pending" %}
-        <span class="badge badge--warning">Pending</span>
-        {% elif grant.status == "approved" %}
-        <span class="badge badge--active">Approved</span>
+        {% if grant.receipt_count is not None %}{{ grant.receipt_count }}{% else %}--{% endif %}
+      </td>
+      <td>
+        {% if grant.status == "submitted" %}
+        <span class="badge badge--warning">Submitted</span>
+        {% elif grant.status == "info_needed" %}
+        <span class="badge badge--warning">Info Needed</span>
+        {% elif grant.status == "offered" %}
+        <span class="badge badge--active">Offered</span>
+        {% elif grant.status == "accepted" %}
+        <span class="badge badge--active">Accepted</span>
         {% elif grant.status == "rejected" %}
         <span class="badge badge--inactive">Rejected</span>
+        {% elif grant.status == "declined" %}
+        <span class="badge badge--inactive">Declined</span>
         {% elif grant.status == "withdrawn" %}
         <span class="badge badge--other">Withdrawn</span>
+        {% elif grant.status == "need_more" %}
+        <span class="badge badge--warning">Requesting More</span>
+        {% elif grant.status == "disbursed" %}
+        <span class="badge badge--active">Disbursed</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if grant.reviewed_by %}
+        <span style="font-size: 0.82rem;">{{ grant.reviewed_by.get_full_name|default:grant.reviewed_by.username }}</span>
+        {% if grant.reviewed_at %}<br><span style="font-size: 0.72rem; color: var(--color-text-muted);">{{ grant.reviewed_at|date:"N j" }}</span>{% endif %}
+        {% else %}
+        <span style="color: var(--color-text-muted);">--</span>
         {% endif %}
       </td>
       <td>{{ grant.created_at|date:"N j, Y" }}</td>
@@ -47,9 +137,16 @@
     {% endfor %}
   </tbody>
 </table>
+
+{% include "django_program/manage/_pagination.html" %}
 {% else %}
 <div class="empty-state">
+  {% if current_status %}
+  <p>No travel grant applications with status "{{ current_status }}".</p>
+  <p><a href="?" class="btn btn-secondary">Show all</a></p>
+  {% else %}
   <p>No travel grant applications yet.</p>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

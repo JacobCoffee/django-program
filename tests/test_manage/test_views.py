@@ -447,7 +447,6 @@ class TestSectionViews:
             url,
             {
                 "name": "Updated Talks",
-                "slug": "talks",
                 "start_date": "2027-05-01",
                 "end_date": "2027-05-02",
                 "order": 1,
@@ -456,6 +455,7 @@ class TestSectionViews:
         assert resp.status_code == 302
         section.refresh_from_db()
         assert section.name == "Updated Talks"
+        assert section.slug == "updated-talks"
 
     def test_section_create_get(self, client_logged_in_super, conference):
         url = reverse("manage:section-add", kwargs={"conference_slug": conference.slug})
@@ -470,7 +470,6 @@ class TestSectionViews:
             url,
             {
                 "name": "Sprints",
-                "slug": "sprints",
                 "start_date": "2027-05-03",
                 "end_date": "2027-05-03",
                 "order": 2,
@@ -490,7 +489,6 @@ class TestSectionViews:
             url,
             {
                 "name": "Updated",
-                "slug": "talks",
                 "start_date": "2027-05-01",
                 "end_date": "2027-05-02",
                 "order": 1,
@@ -505,7 +503,6 @@ class TestSectionViews:
             url,
             {
                 "name": "New Section",
-                "slug": "new-section",
                 "start_date": "2027-05-01",
                 "end_date": "2027-05-01",
                 "order": 3,
@@ -1465,13 +1462,8 @@ class TestSyncPretalxStreamView:
 
     @override_settings(DJANGO_PROGRAM={"pretalx": {"base_url": "https://pretalx.com"}})
     @patch("django_program.manage.views.PretalxSyncService")
-    def test_stream_with_sync_steps_hits_skipped_bug(self, mock_sync_cls, client_logged_in_super, conference):
-        """_run_sync_step has a bug: ``skipped`` is undefined when iter_fn is used.
-
-        When all 4 default steps are included, the speakers step (iter_fn != None)
-        hits UnboundLocalError on ``if skipped:`` because ``skipped`` is only
-        assigned in the else branch (when iter_fn is None).
-        """
+    def test_stream_with_all_sync_steps(self, mock_sync_cls, client_logged_in_super, conference):
+        """Full sync with all 4 steps completes without error."""
         mock_service = mock_sync_cls.return_value
         mock_service.sync_rooms.return_value = 3
         mock_service.sync_speakers.return_value = 10
@@ -1482,8 +1474,11 @@ class TestSyncPretalxStreamView:
 
         url = reverse("manage:sync-pretalx-stream", kwargs={"conference_slug": conference.slug})
         resp = client_logged_in_super.post(url)
-        with pytest.raises(UnboundLocalError, match="skipped"):
-            _consume_streaming(resp)
+        events = _consume_streaming(resp)
+
+        complete = [e for e in events if e.get("status") == "complete"]
+        assert len(complete) == 1
+        assert complete[0]["warning"] is False
 
     @override_settings(DJANGO_PROGRAM={"pretalx": {"base_url": "https://pretalx.com"}})
     @patch("django_program.manage.views.PretalxSyncService")
@@ -1596,10 +1591,8 @@ class TestSyncPretalxStreamView:
         assert last[1] == 5  # count
         assert last[2] is False  # not error
 
-    def test_run_sync_step_with_iter_fn_hits_skipped_bug(self):
-        """_run_sync_step with iter_fn raises UnboundLocalError because
-        ``skipped`` is only set in the else branch (when iter_fn is None)
-        but ``if skipped:`` on line 1344 runs unconditionally."""
+    def test_run_sync_step_with_iter_fn(self):
+        """_run_sync_step with iter_fn completes and returns the correct count."""
         view = SyncPretalxStreamView()
         mock_sync_fn = MagicMock()
 
@@ -1610,8 +1603,10 @@ class TestSyncPretalxStreamView:
             yield {"current": 3, "total": 3}
             yield {"count": 3}
 
-        with pytest.raises(UnboundLocalError, match="skipped"):
-            list(view._run_sync_step(2, 4, "speakers", mock_sync_fn, mock_iter))
+        results = list(view._run_sync_step(2, 4, "speakers", mock_sync_fn, mock_iter))
+        last = results[-1]
+        assert last[1] == 3  # count
+        assert last[2] is False  # not an error
 
     def test_run_sync_step_error(self):
         """Test _run_sync_step when sync_fn raises RuntimeError."""
@@ -1639,9 +1634,8 @@ class TestSyncPretalxStreamView:
 
     @override_settings(DJANGO_PROGRAM={"pretalx": {"base_url": "https://pretalx.com"}})
     @patch("django_program.manage.views.PretalxSyncService")
-    def test_stream_iter_fn_with_progress_hits_skipped_bug(self, mock_sync_cls, client_logged_in_super, conference):
-        """Full sync with iter_fn steps hits UnboundLocalError at the speakers
-        step because _run_sync_step references ``skipped`` outside the else branch."""
+    def test_stream_iter_fn_with_progress(self, mock_sync_cls, client_logged_in_super, conference):
+        """Full sync with iter_fn progress steps completes successfully."""
         mock_service = mock_sync_cls.return_value
         mock_service.sync_rooms.return_value = 2
         mock_service.sync_speakers_iter.return_value = iter(
@@ -1657,8 +1651,15 @@ class TestSyncPretalxStreamView:
 
         url = reverse("manage:sync-pretalx-stream", kwargs={"conference_slug": conference.slug})
         resp = client_logged_in_super.post(url)
-        with pytest.raises(UnboundLocalError, match="skipped"):
-            _consume_streaming(resp)
+        events = _consume_streaming(resp)
+
+        done_events = [e for e in events if e.get("status") == "done"]
+        assert len(done_events) == 4
+        schedule_done = [e for e in done_events if "unscheduled" in e.get("label", "")]
+        assert len(schedule_done) == 1
+
+        complete = [e for e in events if e.get("status") == "complete"]
+        assert len(complete) == 1
 
 
 # ---------------------------------------------------------------------------

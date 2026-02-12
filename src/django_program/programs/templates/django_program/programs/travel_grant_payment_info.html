@@ -1,0 +1,569 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Payment Information{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ---- Form Section ---- */
+  .form-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+
+  .form-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .form-section-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .form-section-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
+  }
+
+  .form-section-body {
+    padding: 1.5rem;
+  }
+
+  /* ---- Info Callout ---- */
+  .info-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.5rem;
+  }
+
+  .info-callout--security {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+  }
+
+  .info-callout--security p {
+    font-size: 0.85rem;
+    color: #065f46;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .info-callout-icon {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+    margin-top: 0.1rem;
+  }
+
+  /* ---- Field Groups ---- */
+  .field-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .field-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .field-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.4rem;
+    line-height: 1.4;
+  }
+
+  .field-label .required-mark {
+    color: #dc2626;
+    margin-left: 0.15em;
+  }
+
+  .field-help {
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    line-height: 1.45;
+  }
+
+  .field-errors {
+    list-style: none;
+    padding: 0;
+    margin: 0.3rem 0 0;
+  }
+
+  .field-errors li {
+    font-size: 0.82rem;
+    color: #dc2626;
+    font-weight: 500;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .field-row-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+  }
+
+  /* ---- Form Inputs ---- */
+  .payment-form input[type="text"],
+  .payment-form input[type="email"],
+  .payment-form select,
+  .payment-form textarea {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    color: var(--color-text);
+    background: var(--color-surface);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    line-height: 1.5;
+  }
+
+  .payment-form input:focus,
+  .payment-form select:focus,
+  .payment-form textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.12);
+  }
+
+  .payment-form select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23555770' viewBox='0 0 16 16'%3E%3Cpath d='M8 11.5l-5-5h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2.25rem;
+    cursor: pointer;
+  }
+
+  .payment-form textarea {
+    resize: vertical;
+    min-height: 70px;
+  }
+
+  .payment-form input.has-error,
+  .payment-form select.has-error,
+  .payment-form textarea.has-error {
+    border-color: #dc2626;
+  }
+
+  .payment-form input.has-error:focus,
+  .payment-form select.has-error:focus,
+  .payment-form textarea.has-error:focus {
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  }
+
+  /* ---- Encrypted field indicator ---- */
+  .encrypted-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ---- Method Groups (conditional visibility) ---- */
+  .method-fields {
+    display: none;
+  }
+
+  .method-fields.active {
+    display: block;
+  }
+
+  /* ---- Form Actions ---- */
+  .form-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    position: sticky;
+    bottom: 1rem;
+    z-index: 10;
+  }
+
+  /* ---- Non-field Errors ---- */
+  .form-non-field-errors {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1.15rem;
+    margin-bottom: 1.5rem;
+    list-style: none;
+  }
+
+  .form-non-field-errors li {
+    font-size: 0.88rem;
+    color: #991b1b;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  /* ---- Buttons ---- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 1.25rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+    line-height: 1.4;
+  }
+
+  .btn:hover { text-decoration: none; box-shadow: var(--shadow-md); }
+  .btn:active { transform: translateY(1px); }
+
+  .btn--primary { background: var(--color-primary); color: #fff; }
+  .btn--primary:hover { background: var(--color-primary-hover); color: #fff; }
+
+  .btn--secondary {
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn--secondary:hover {
+    border-color: var(--color-text-muted);
+    color: var(--color-text);
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 768px) {
+    .form-section-body {
+      padding: 1.25rem 1rem;
+    }
+
+    .form-section-header {
+      padding: 0.85rem 1rem;
+    }
+
+    .field-row,
+    .field-row-3 {
+      grid-template-columns: 1fr;
+    }
+
+    .form-actions {
+      flex-wrap: wrap;
+      bottom: 0;
+      border-radius: 0;
+      margin-left: -1rem;
+      margin-right: -1rem;
+      width: calc(100% + 2rem);
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'programs:travel-grant-status' conference.slug %}" class="back-link">Back to grant status</a>
+
+<div class="page-header">
+  <h2>Payment Information</h2>
+  <p>Provide your payment details for travel grant reimbursement.</p>
+</div>
+
+<div class="info-callout info-callout--security">
+  <span class="info-callout-icon" aria-hidden="true">&#128274;</span>
+  <p>
+    All sensitive payment fields are encrypted at rest using AES-256.
+    Your information is only accessible to authorized financial administrators.
+  </p>
+</div>
+
+{% if form.non_field_errors %}
+<ul class="form-non-field-errors" role="alert">
+  {% for error in form.non_field_errors %}
+  <li>{{ error }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" class="payment-form" novalidate>
+  {% csrf_token %}
+
+  <!-- Section 1: Payment Method -->
+  <div class="form-section">
+    <div class="form-section-header">
+      <span class="form-section-number">1</span>
+      <span class="form-section-title">Payment Method</span>
+    </div>
+    <div class="form-section-body">
+      <div class="field-group">
+        <label class="field-label" for="{{ form.payment_method.id_for_label }}">
+          {{ form.payment_method.label }}
+          {% if form.payment_method.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+        </label>
+        {{ form.payment_method }}
+        {% if form.payment_method.help_text %}<p class="field-help">{{ form.payment_method.help_text }}</p>{% endif %}
+        {% if form.payment_method.errors %}<ul class="field-errors" role="alert">{% for error in form.payment_method.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <!-- PayPal fields -->
+      <div class="method-fields" id="fields-paypal">
+        <div class="field-group">
+          <label class="field-label" for="{{ form.paypal_email.id_for_label }}">
+            {{ form.paypal_email.label }}
+            <span class="encrypted-tag">&#128274; Encrypted</span>
+          </label>
+          {{ form.paypal_email }}
+          {% if form.paypal_email.help_text %}<p class="field-help">{{ form.paypal_email.help_text }}</p>{% endif %}
+          {% if form.paypal_email.errors %}<ul class="field-errors" role="alert">{% for error in form.paypal_email.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+
+      <!-- Zelle fields -->
+      <div class="method-fields" id="fields-zelle">
+        <div class="field-group">
+          <label class="field-label" for="{{ form.zelle_email.id_for_label }}">
+            {{ form.zelle_email.label }}
+            <span class="encrypted-tag">&#128274; Encrypted</span>
+          </label>
+          {{ form.zelle_email }}
+          {% if form.zelle_email.help_text %}<p class="field-help">{{ form.zelle_email.help_text }}</p>{% endif %}
+          {% if form.zelle_email.errors %}<ul class="field-errors" role="alert">{% for error in form.zelle_email.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+
+      <!-- Wise fields -->
+      <div class="method-fields" id="fields-wise">
+        <div class="field-group">
+          <label class="field-label" for="{{ form.wise_email.id_for_label }}">
+            {{ form.wise_email.label }}
+            <span class="encrypted-tag">&#128274; Encrypted</span>
+          </label>
+          {{ form.wise_email }}
+          {% if form.wise_email.help_text %}<p class="field-help">{{ form.wise_email.help_text }}</p>{% endif %}
+          {% if form.wise_email.errors %}<ul class="field-errors" role="alert">{% for error in form.wise_email.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+
+      <!-- ACH / Wire fields -->
+      <div class="method-fields" id="fields-bank">
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label" for="{{ form.bank_name.id_for_label }}">
+              {{ form.bank_name.label }}
+              <span class="encrypted-tag">&#128274; Encrypted</span>
+            </label>
+            {{ form.bank_name }}
+            {% if form.bank_name.errors %}<ul class="field-errors" role="alert">{% for error in form.bank_name.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="{{ form.bank_holder_name.id_for_label }}">
+              {{ form.bank_holder_name.label }}
+              <span class="encrypted-tag">&#128274; Encrypted</span>
+            </label>
+            {{ form.bank_holder_name }}
+            {% if form.bank_holder_name.errors %}<ul class="field-errors" role="alert">{% for error in form.bank_holder_name.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label" for="{{ form.bank_account_number.id_for_label }}">
+              {{ form.bank_account_number.label }}
+              <span class="encrypted-tag">&#128274; Encrypted</span>
+            </label>
+            {{ form.bank_account_number }}
+            {% if form.bank_account_number.errors %}<ul class="field-errors" role="alert">{% for error in form.bank_account_number.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="{{ form.bank_routing_number.id_for_label }}">
+              {{ form.bank_routing_number.label }}
+              <span class="encrypted-tag">&#128274; Encrypted</span>
+            </label>
+            {{ form.bank_routing_number }}
+            {% if form.bank_routing_number.errors %}<ul class="field-errors" role="alert">{% for error in form.bank_routing_number.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="{{ form.bank_holder_address.id_for_label }}">
+            {{ form.bank_holder_address.label }}
+            <span class="encrypted-tag">&#128274; Encrypted</span>
+          </label>
+          {{ form.bank_holder_address }}
+          {% if form.bank_holder_address.errors %}<ul class="field-errors" role="alert">{% for error in form.bank_holder_address.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="{{ form.bank_address.id_for_label }}">
+            {{ form.bank_address.label }}
+            <span class="encrypted-tag">&#128274; Encrypted</span>
+          </label>
+          {{ form.bank_address }}
+          {% if form.bank_address.errors %}<ul class="field-errors" role="alert">{% for error in form.bank_address.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="{{ form.bank_additional.id_for_label }}">
+            {{ form.bank_additional.label }}
+            <span class="encrypted-tag">&#128274; Encrypted</span>
+          </label>
+          {{ form.bank_additional }}
+          {% if form.bank_additional.help_text %}<p class="field-help">{{ form.bank_additional.help_text }}</p>{% endif %}
+          {% if form.bank_additional.errors %}<ul class="field-errors" role="alert">{% for error in form.bank_additional.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Mailing Address -->
+  <div class="form-section">
+    <div class="form-section-header">
+      <span class="form-section-number">2</span>
+      <span class="form-section-title">Legal Name &amp; Mailing Address</span>
+    </div>
+    <div class="form-section-body">
+      <div class="field-group">
+        <label class="field-label" for="{{ form.legal_name.id_for_label }}">
+          {{ form.legal_name.label }}
+          {% if form.legal_name.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+        </label>
+        {{ form.legal_name }}
+        {% if form.legal_name.help_text %}<p class="field-help">{{ form.legal_name.help_text }}</p>{% endif %}
+        {% if form.legal_name.errors %}<ul class="field-errors" role="alert">{% for error in form.legal_name.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="{{ form.address_street.id_for_label }}">
+          {{ form.address_street.label }}
+          {% if form.address_street.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+        </label>
+        {{ form.address_street }}
+        {% if form.address_street.errors %}<ul class="field-errors" role="alert">{% for error in form.address_street.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+      <div class="field-row-3">
+        <div class="field-group">
+          <label class="field-label" for="{{ form.address_city.id_for_label }}">
+            {{ form.address_city.label }}
+            {% if form.address_city.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+          </label>
+          {{ form.address_city }}
+          {% if form.address_city.errors %}<ul class="field-errors" role="alert">{% for error in form.address_city.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="{{ form.address_state.id_for_label }}">
+            {{ form.address_state.label }}
+          </label>
+          {{ form.address_state }}
+          {% if form.address_state.errors %}<ul class="field-errors" role="alert">{% for error in form.address_state.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="{{ form.address_zip.id_for_label }}">
+            {{ form.address_zip.label }}
+            {% if form.address_zip.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+          </label>
+          {{ form.address_zip }}
+          {% if form.address_zip.errors %}<ul class="field-errors" role="alert">{% for error in form.address_zip.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="{{ form.address_country.id_for_label }}">
+          {{ form.address_country.label }}
+          {% if form.address_country.field.required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}
+        </label>
+        {{ form.address_country }}
+        {% if form.address_country.errors %}<ul class="field-errors" role="alert">{% for error in form.address_country.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn--primary">Save Payment Info</button>
+    <a href="{% url 'programs:travel-grant-status' conference.slug %}" class="btn btn--secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var methodField = document.getElementById('id_payment_method');
+  if (!methodField) return;
+
+  var fieldGroups = {
+    paypal: 'fields-paypal',
+    zelle: 'fields-zelle',
+    wise: 'fields-wise',
+    ach: 'fields-bank',
+    wire: 'fields-bank',
+    check: null,
+  };
+
+  var allGroupIds = ['fields-paypal', 'fields-zelle', 'fields-wise', 'fields-bank'];
+
+  function toggleFields() {
+    var method = methodField.value;
+    var activeGroupId = fieldGroups[method] || null;
+
+    for (var i = 0; i < allGroupIds.length; i++) {
+      var el = document.getElementById(allGroupIds[i]);
+      if (el) {
+        if (allGroupIds[i] === activeGroupId) {
+          el.classList.add('active');
+        } else {
+          el.classList.remove('active');
+        }
+      }
+    }
+  }
+
+  function markFieldErrors() {
+    var errorLists = document.querySelectorAll('.field-errors');
+    for (var i = 0; i < errorLists.length; i++) {
+      var parent = errorLists[i].closest('.field-group');
+      if (parent) {
+        var inputs = parent.querySelectorAll('input, select, textarea');
+        for (var j = 0; j < inputs.length; j++) {
+          inputs[j].classList.add('has-error');
+        }
+      }
+    }
+  }
+
+  methodField.addEventListener('change', toggleFields);
+  toggleFields();
+  markFieldErrors();
+})();
+</script>
+{% endblock %}

@@ -12,6 +12,7 @@ from django_program.pretalx.sync import (
     _classify_slot,
     _parse_iso_datetime,
 )
+from django_program.programs.models import Activity
 from pretalx_client.models import PretalxSlot, PretalxSpeaker, PretalxTalk
 
 # ---------------------------------------------------------------------------
@@ -1129,3 +1130,207 @@ def test_classify_slot_other():
 def test_classify_slot_case_insensitive():
     assert _classify_slot("COFFEE BREAK", "") == ScheduleSlot.SlotType.BREAK
     assert _classify_slot("Social PARTY", "") == ScheduleSlot.SlotType.SOCIAL
+
+
+# ===========================================================================
+# _sync_activities_from_talks
+# ===========================================================================
+
+
+@pytest.mark.django_db
+def test_sync_talks_creates_activities_for_known_submission_types(settings):
+    conference = _make_conference(slug="act-sync")
+    service = _make_service(conference, settings)
+    service.client.fetch_talks = MagicMock(
+        return_value=[
+            PretalxTalk(code="T1", title="Intro to Django", state="confirmed", submission_type="Tutorial"),
+            PretalxTalk(code="T2", title="Advanced ORM", state="confirmed", submission_type="Tutorial"),
+            PretalxTalk(code="T3", title="Quick Demo", state="confirmed", submission_type="Lightning Talk"),
+        ]
+    )
+
+    service.sync_talks()
+
+    # Should have created 2 activities: "Tutorials" and "Lightning Talks"
+    activities = Activity.objects.filter(conference=conference).order_by("activity_type")
+    assert activities.count() == 2
+
+    tutorial_act = Activity.objects.get(conference=conference, pretalx_submission_type="Tutorial")
+    assert tutorial_act.activity_type == Activity.ActivityType.TUTORIAL
+    assert tutorial_act.talks.count() == 2
+    assert tutorial_act.synced_at is not None
+
+    lt_act = Activity.objects.get(conference=conference, pretalx_submission_type="Lightning Talk")
+    assert lt_act.activity_type == Activity.ActivityType.LIGHTNING_TALK
+    assert lt_act.talks.count() == 1
+
+
+@pytest.mark.django_db
+def test_sync_talks_updates_existing_activity(settings):
+    conference = _make_conference(slug="act-update")
+    Activity.objects.create(
+        conference=conference,
+        name="Tutorials",
+        slug="tutorials",
+        activity_type=Activity.ActivityType.TUTORIAL,
+        pretalx_submission_type="Tutorial",
+    )
+
+    service = _make_service(conference, settings)
+    service.client.fetch_talks = MagicMock(
+        return_value=[
+            PretalxTalk(code="T1", title="Django Intro", state="confirmed", submission_type="Tutorial"),
+        ]
+    )
+
+    service.sync_talks()
+
+    # Should not create a duplicate
+    assert Activity.objects.filter(conference=conference, pretalx_submission_type="Tutorial").count() == 1
+    activity = Activity.objects.get(conference=conference, pretalx_submission_type="Tutorial")
+    assert activity.talks.count() == 1
+    assert activity.synced_at is not None
+
+
+@pytest.mark.django_db
+def test_sync_talks_ignores_unknown_submission_types(settings):
+    conference = _make_conference(slug="act-unknown")
+    service = _make_service(conference, settings)
+    service.client.fetch_talks = MagicMock(
+        return_value=[
+            PretalxTalk(code="T1", title="Keynote", state="confirmed", submission_type="Keynote"),
+        ]
+    )
+
+    service.sync_talks()
+
+    assert Activity.objects.filter(conference=conference).count() == 0
+
+
+@pytest.mark.django_db
+def test_sync_talks_activity_slug_uniqueness(settings):
+    conference = _make_conference(slug="act-sluguniq")
+    Activity.objects.create(
+        conference=conference,
+        name="Existing",
+        slug="tutorial",
+        activity_type=Activity.ActivityType.OTHER,
+    )
+
+    service = _make_service(conference, settings)
+    service.client.fetch_talks = MagicMock(
+        return_value=[
+            PretalxTalk(code="T1", title="Django Intro", state="confirmed", submission_type="Tutorial"),
+        ]
+    )
+
+    service.sync_talks()
+
+    new_act = Activity.objects.get(conference=conference, pretalx_submission_type="Tutorial")
+    assert new_act.slug == "tutorial-2"
+
+
+# ===========================================================================
+# _sync_activities_from_talks enrichment
+# ===========================================================================
+
+
+@pytest.mark.django_db
+def test_sync_enrichment_populates_description(settings):
+    conference = _make_conference(slug="enrich-desc")
+    service = _make_service(conference, settings)
+    service.client.fetch_talks = MagicMock(
+        return_value=[
+            PretalxTalk(code="T1", title="Django Intro", state="confirmed", submission_type="Tutorial"),
+            PretalxTalk(code="T2", title="Advanced ORM", state="confirmed", submission_type="Tutorial"),
+        ]
+    )
+
+    service.sync_talks()
+
+    activity = Activity.objects.get(conference=conference, pretalx_submission_type="Tutorial")
+    assert "2 talks" in activity.description
+
+
+@pytest.mark.django_db
+def test_sync_enrichment_populates_start_end_times(settings):
+    conference = _make_conference(slug="enrich-times")
+    service = _make_service(conference, settings)
+    service.client.fetch_talks = MagicMock(
+        return_value=[
+            PretalxTalk(
+                code="T1",
+                title="Talk A",
+                state="confirmed",
+                submission_type="Tutorial",
+                slot_start="2027-05-01T10:00:00+00:00",
+                slot_end="2027-05-01T11:00:00+00:00",
+            ),
+            PretalxTalk(
+                code="T2",
+                title="Talk B",
+                state="confirmed",
+                submission_type="Tutorial",
+                slot_start="2027-05-01T14:00:00+00:00",
+                slot_end="2027-05-01T15:00:00+00:00",
+            ),
+        ]
+    )
+
+    service.sync_talks()
+
+    activity = Activity.objects.get(conference=conference, pretalx_submission_type="Tutorial")
+    assert activity.start_time is not None
+    assert activity.end_time is not None
+    assert activity.start_time.hour == 10
+    assert activity.end_time.hour == 15
+
+
+@pytest.mark.django_db
+def test_sync_enrichment_sets_room_when_all_same(settings):
+    conference = _make_conference(slug="enrich-room")
+    room = Room.objects.create(conference=conference, pretalx_id=1, name="Hall A")
+
+    service = _make_service(conference, settings)
+    service._rooms = {1: room}
+    service._room_names = {1: "Hall A"}
+    service.client.fetch_talks = MagicMock(
+        return_value=[
+            PretalxTalk(code="T1", title="Talk A", state="confirmed", submission_type="Tutorial", room="Hall A"),
+            PretalxTalk(code="T2", title="Talk B", state="confirmed", submission_type="Tutorial", room="Hall A"),
+        ]
+    )
+
+    service.sync_talks()
+
+    # Verify talks have room set
+    talks = Talk.objects.filter(conference=conference, submission_type="Tutorial")
+    for t in talks:
+        assert t.room == room, f"Talk {t.pretalx_code} room={t.room} (expected {room})"
+
+    activity = Activity.objects.get(conference=conference, pretalx_submission_type="Tutorial")
+    assert "in Hall A" in activity.description
+    assert activity.room == room
+
+
+@pytest.mark.django_db
+def test_sync_enrichment_no_room_when_different_rooms(settings):
+    conference = _make_conference(slug="enrich-multiroom")
+    room_a = Room.objects.create(conference=conference, pretalx_id=1, name="Hall A")
+    room_b = Room.objects.create(conference=conference, pretalx_id=2, name="Hall B")
+
+    service = _make_service(conference, settings)
+    service._rooms = {1: room_a, 2: room_b}
+    service._room_names = {1: "Hall A", 2: "Hall B"}
+    service.client.fetch_talks = MagicMock(
+        return_value=[
+            PretalxTalk(code="T1", title="Talk A", state="confirmed", submission_type="Tutorial", room="Hall A"),
+            PretalxTalk(code="T2", title="Talk B", state="confirmed", submission_type="Tutorial", room="Hall B"),
+        ]
+    )
+
+    service.sync_talks()
+
+    activity = Activity.objects.get(conference=conference, pretalx_submission_type="Tutorial")
+    assert activity.room is None
+    assert "across 2 rooms" in activity.description

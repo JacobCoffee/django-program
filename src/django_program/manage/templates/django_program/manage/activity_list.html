@@ -31,13 +31,16 @@
       <td>{{ activity.name }}</td>
       <td>{{ activity.get_activity_type_display }}</td>
       <td>{{ activity.start_time|default:"--" }}</td>
-      <td>{{ activity.location|default:"--" }}</td>
+      <td>{% if activity.room %}{{ activity.room.name }}{% elif activity.location %}{{ activity.location }}{% else %}--{% endif %}</td>
       <td>{{ activity.signup_count }}{% if activity.max_participants %} / {{ activity.max_participants }}{% endif %}</td>
       <td>
         {% if activity.is_active %}
         <span class="badge badge--active">Active</span>
         {% else %}
         <span class="badge badge--inactive">Inactive</span>
+        {% endif %}
+        {% if activity.synced_at %}
+        <span class="badge badge--synced">Synced</span>
         {% endif %}
       </td>
       <td>

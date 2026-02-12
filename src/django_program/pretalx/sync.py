@@ -11,11 +11,14 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
+from django.db.models import Max, Min
 from django.db.models.functions import Lower
 from django.utils import timezone
+from django.utils.text import slugify
 
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.pretalx.profiles import resolve_pretalx_profile
+from django_program.programs.models import Activity
 from django_program.settings import get_config
 from pretalx_client.adapters.normalization import localized as _localized
 from pretalx_client.client import PretalxClient
@@ -24,12 +27,23 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from django.contrib.auth.models import AbstractBaseUser
+    from django.db.models import QuerySet
 
     from django_program.conference.models import Conference
 
 logger = logging.getLogger(__name__)
 
 _PROGRESS_CHUNK = 50
+
+# Maps Pretalx submission_type names (case-insensitive) to ActivityType values.
+_SUBMISSION_TYPE_TO_ACTIVITY: dict[str, str] = {
+    "tutorial": Activity.ActivityType.TUTORIAL,
+    "workshop": Activity.ActivityType.WORKSHOP,
+    "lightning talk": Activity.ActivityType.LIGHTNING_TALK,
+    "sprint": Activity.ActivityType.SPRINT,
+    "summit": Activity.ActivityType.SUMMIT,
+    "open space": Activity.ActivityType.OPEN_SPACE,
+}
 
 
 class PretalxSyncService:
@@ -370,7 +384,119 @@ class PretalxSyncService:
             len(to_update),
             self.conference.slug,
         )
+
+        self._sync_activities_from_talks(now)
+
         yield {"count": count}
+
+    def _sync_activities_from_talks(self, now: datetime) -> None:
+        """Auto-create or update Activities for Pretalx submission types.
+
+        For each unique ``submission_type`` on synced talks that maps to a
+        known :class:`~django_program.programs.models.Activity.ActivityType`,
+        creates or updates an Activity linked to that submission type.  Also
+        populates the ``talks`` M2M with matching talks and enriches the
+        activity with scheduling data derived from those talks.
+        """
+        sub_types = (
+            Talk.objects.filter(conference=self.conference)
+            .exclude(submission_type="")
+            .values_list("submission_type", flat=True)
+            .distinct()
+        )
+
+        for sub_type in sub_types:
+            activity_type = _SUBMISSION_TYPE_TO_ACTIVITY.get(sub_type.lower())
+            if activity_type is None:
+                continue
+
+            base_slug = slugify(sub_type) or "activity"
+
+            matching_talks = Talk.objects.filter(
+                conference=self.conference,
+                submission_type=sub_type,
+            )
+
+            enrichment = self._build_activity_enrichment(matching_talks)
+
+            activity, created = Activity.objects.update_or_create(
+                conference=self.conference,
+                pretalx_submission_type=sub_type,
+                defaults={
+                    "name": f"{sub_type}s",
+                    "activity_type": activity_type,
+                    "synced_at": now,
+                    **enrichment,
+                },
+            )
+            if created:
+                activity.slug = self._unique_activity_slug(base_slug)
+                activity.save(update_fields=["slug"])
+
+            activity.talks.set(matching_talks)
+
+            verb = "Created" if created else "Updated"
+            logger.info(
+                "%s activity '%s' for submission type '%s' (%d talks)",
+                verb,
+                activity.name,
+                sub_type,
+                matching_talks.count(),
+            )
+
+    def _build_activity_enrichment(self, talks: QuerySet[Talk]) -> dict[str, object]:
+        """Derive activity metadata from a set of linked talks.
+
+        Computes a description summary, earliest/latest times, and a
+        shared room (if all talks are in the same room).
+
+        Args:
+            talks: QuerySet of Talk instances linked to this activity.
+
+        Returns:
+            A dict of field names to values suitable for Activity defaults.
+        """
+        enrichment: dict[str, object] = {}
+
+        talk_count = talks.count()
+        if talk_count == 0:
+            return enrichment
+
+        rooms = talks.exclude(room__isnull=True).order_by().values_list("room__name", flat=True).distinct()
+        room_names = list(rooms)
+        room_count = len(room_names)
+
+        if room_count == 1:
+            enrichment["description"] = f"{talk_count} talk{'s' if talk_count != 1 else ''} in {room_names[0]}"
+        elif room_count > 1:
+            enrichment["description"] = f"{talk_count} talk{'s' if talk_count != 1 else ''} across {room_count} rooms"
+        else:
+            enrichment["description"] = f"{talk_count} talk{'s' if talk_count != 1 else ''}"
+
+        agg = talks.exclude(slot_start__isnull=True).aggregate(
+            earliest=Min("slot_start"),
+            latest=Max("slot_end"),
+        )
+        if agg["earliest"]:
+            enrichment["start_time"] = agg["earliest"]
+        if agg["latest"]:
+            enrichment["end_time"] = agg["latest"]
+
+        if room_count == 1:
+            shared_room = talks.exclude(room__isnull=True).first()
+            if shared_room:
+                enrichment["room"] = shared_room.room
+
+        return enrichment
+
+    def _unique_activity_slug(self, base: str) -> str:
+        """Generate a unique Activity slug within this conference."""
+        candidate = base
+        counter = 1
+        while Activity.objects.filter(conference=self.conference, slug=candidate).exists():
+            counter += 1
+            candidate = f"{base}-{counter}"
+        return candidate
 
     def sync_schedule(self) -> tuple[int, int]:
         """Fetch schedule slots from Pretalx and upsert into the database.

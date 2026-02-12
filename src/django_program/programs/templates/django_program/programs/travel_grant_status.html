@@ -1,0 +1,962 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Travel Grant Status{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ---- Status Banner ---- */
+  .status-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 1rem 1.5rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+  }
+
+  .status-dates {
+    display: flex;
+    gap: 1.25rem;
+    margin-left: auto;
+    flex-wrap: wrap;
+  }
+
+  .status-date {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+  }
+
+  .status-date strong {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+
+  /* ---- Status Badges ---- */
+  .grant-badge {
+    display: inline-block;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .grant-badge--submitted {
+    background: #e0e7ff;
+    color: #3730a3;
+  }
+
+  .grant-badge--offered {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .grant-badge--accepted {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .grant-badge--rejected,
+  .grant-badge--declined {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .grant-badge--withdrawn {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .grant-badge--info_needed {
+    background: #ffedd5;
+    color: #9a3412;
+  }
+
+  .grant-badge--need_more {
+    background: #fef3c7;
+    color: #78350f;
+  }
+
+  .grant-badge--disbursed {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  /* ---- Offer Card ---- */
+  .offer-card {
+    background: var(--color-surface);
+    border: 2px solid #d1fae5;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1.5rem;
+  }
+
+  .offer-card-header {
+    padding: 0.85rem 1.5rem;
+    background: #ecfdf5;
+    border-bottom: 1px solid #d1fae5;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #065f46;
+  }
+
+  .offer-card-body {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .offer-amount {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #065f46;
+    font-family: var(--font-mono);
+    letter-spacing: -0.02em;
+  }
+
+  .promo-code-box {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.85rem;
+    background: var(--color-bg);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    letter-spacing: 0.03em;
+  }
+
+  .promo-code-label {
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+  }
+
+  /* ---- Action Buttons ---- */
+  .actions-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 1.25rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+    line-height: 1.4;
+  }
+
+  .btn:hover {
+    text-decoration: none;
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn:active {
+    transform: translateY(1px);
+  }
+
+  .btn--accept {
+    background: #059669;
+    color: #fff;
+  }
+
+  .btn--accept:hover {
+    background: #047857;
+    color: #fff;
+  }
+
+  .btn--decline {
+    background: #dc2626;
+    color: #fff;
+  }
+
+  .btn--decline:hover {
+    background: #b91c1c;
+    color: #fff;
+  }
+
+  .btn--withdraw {
+    background: var(--color-surface);
+    color: #dc2626;
+    border: 1px solid #fca5a5;
+  }
+
+  .btn--withdraw:hover {
+    background: #fef2f2;
+    color: #991b1b;
+  }
+
+  .btn--secondary {
+    background: var(--color-surface);
+    color: var(--color-primary);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn--secondary:hover {
+    background: var(--color-primary-light);
+    color: var(--color-primary-hover);
+  }
+
+  .btn--primary {
+    background: var(--color-primary);
+    color: #fff;
+  }
+
+  .btn--primary:hover {
+    background: var(--color-primary-hover);
+    color: #fff;
+  }
+
+  .btn--info {
+    background: #f97316;
+    color: #fff;
+  }
+
+  .btn--info:hover {
+    background: #ea580c;
+    color: #fff;
+  }
+
+  /* ---- Application Summary ---- */
+  .summary-disclosure {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+
+  .summary-toggle {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 1rem 1.5rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border-bottom: 1px solid transparent;
+    user-select: none;
+    transition: color 0.15s ease;
+  }
+
+  .summary-toggle:hover {
+    color: var(--color-text-secondary);
+  }
+
+  .summary-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .summary-toggle::after {
+    content: "\25BE";
+    margin-left: auto;
+    font-size: 0.9rem;
+    transition: transform 0.15s ease;
+  }
+
+  .summary-disclosure:not([open]) .summary-toggle::after {
+    transform: rotate(-90deg);
+  }
+
+  .summary-disclosure[open] .summary-toggle {
+    border-bottom-color: var(--color-border);
+  }
+
+  .summary-body {
+    padding: 1.25rem 1.5rem;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem 2rem;
+  }
+
+  .summary-field-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .summary-field-value {
+    font-size: 0.92rem;
+    color: var(--color-text);
+    line-height: 1.55;
+  }
+
+  .summary-field-value--muted {
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .summary-field--full {
+    grid-column: 1 / -1;
+  }
+
+  .summary-divider {
+    grid-column: 1 / -1;
+    border: none;
+    border-top: 1px solid var(--color-border-light);
+    margin: 0.25rem 0;
+  }
+
+  /* ---- Expense Breakdown (read-only) ---- */
+  .expense-summary {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    font-size: 0.88rem;
+  }
+
+  .expense-summary th {
+    padding: 0.55rem 1rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    text-align: left;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .expense-summary th:last-child {
+    text-align: right;
+  }
+
+  .expense-summary td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--color-border-light);
+    vertical-align: top;
+  }
+
+  .expense-summary tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .expense-summary .expense-item-label {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    width: 90px;
+  }
+
+  .expense-summary .expense-item-desc {
+    color: var(--color-text-secondary);
+  }
+
+  .expense-summary .expense-item-amount {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  .expense-summary .expense-total td {
+    border-top: 2px solid var(--color-border);
+    background: var(--color-bg);
+    font-weight: 700;
+  }
+
+  .expense-summary .expense-total .expense-item-amount {
+    color: var(--color-primary);
+    font-size: 0.95rem;
+  }
+
+  /* ---- Messages ---- */
+  .messages-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+
+  .messages-header {
+    padding: 1rem 1.5rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+  }
+
+  .messages-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .message-item {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .message-item:last-child {
+    border-bottom: none;
+  }
+
+  .message-item--own {
+    background: #fafaff;
+  }
+
+  .message-item--reviewer {
+    background: var(--color-surface);
+  }
+
+  .message-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .message-author {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .message-author--reviewer {
+    color: var(--color-accent);
+  }
+
+  .message-time {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .message-body {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .messages-empty {
+    padding: 2rem 1.5rem;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+
+  /* ---- Message Form ---- */
+  .message-form {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg);
+  }
+
+  .message-form label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.4rem;
+  }
+
+  .message-form textarea {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    color: var(--color-text);
+    background: var(--color-surface);
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.5;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .message-form textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.12);
+  }
+
+  .message-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.65rem;
+  }
+
+  /* ---- No Application Card ---- */
+  .no-grant-card {
+    text-align: center;
+    max-width: 520px;
+  }
+
+  .no-grant-body {
+    padding: 3rem 2rem;
+  }
+
+  .no-grant-heading {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: 0.5rem;
+  }
+
+  .no-grant-text {
+    font-size: 0.95rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 1.5rem;
+    line-height: 1.55;
+  }
+
+  /* ---- Info Callout ---- */
+  .info-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: #ffedd5;
+    border: 1px solid #fed7aa;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.5rem;
+  }
+
+  .info-callout--blue {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+
+  .info-callout-icon {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+    margin-top: 0.1rem;
+  }
+
+  .info-callout p {
+    font-size: 0.88rem;
+    color: #9a3412;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  .info-callout--blue p {
+    color: #1e40af;
+  }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 768px) {
+    .status-banner {
+      padding: 0.85rem 1rem;
+    }
+
+    .status-dates {
+      margin-left: 0;
+      width: 100%;
+    }
+
+    .offer-card-body {
+      gap: 1rem;
+    }
+
+    .summary-body {
+      padding: 1rem;
+    }
+
+    .summary-grid {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .message-item {
+      padding: 0.85rem 1rem;
+    }
+
+    .message-form {
+      padding: 0.85rem 1rem;
+    }
+
+    .actions-bar {
+      gap: 0.5rem;
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      font-size: 0.82rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .expense-summary .expense-item-label {
+      display: none;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'programs:activity-list' conference.slug %}" class="back-link">Back to programs</a>
+
+<div class="page-header">
+  <h2>Travel Grant Status</h2>
+  <p>Check the status of your travel grant application for {{ conference.name }}.</p>
+</div>
+
+{% if grant %}
+
+<!-- Status Banner -->
+<div class="card" style="margin-bottom: 1.5rem; overflow: hidden;">
+  <div class="status-banner">
+    <span class="grant-badge grant-badge--{{ grant.status }}">
+      {{ grant.get_status_display }}
+    </span>
+    <div class="status-dates">
+      <span class="status-date">Applied: <strong>{{ grant.created_at|date:"M j, Y" }}</strong></span>
+      {% if grant.reviewed_at %}
+      <span class="status-date">Last updated: <strong>{{ grant.reviewed_at|date:"M j, Y" }}</strong></span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-body">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div>
+        <span class="summary-field-label">Request Type</span>
+        <span class="summary-field-value">{{ grant.get_request_type_display }}</span>
+      </div>
+      <div>
+        <span class="summary-field-label">Requested Amount</span>
+        <span class="summary-field-value" style="font-family: var(--font-mono); font-weight: 700;">${{ grant.requested_amount }}</span>
+      </div>
+      <div>
+        <span class="summary-field-label">Traveling From</span>
+        <span class="summary-field-value">{{ grant.travel_from }}</span>
+      </div>
+      <div>
+        <span class="summary-field-label">Application Type</span>
+        <span class="summary-field-value">{{ grant.get_application_type_display }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if grant.status == "info_needed" %}
+<div class="info-callout">
+  <span class="info-callout-icon" aria-hidden="true">&#9432;</span>
+  <p>
+    The review committee has requested additional information about your application.
+    Please review the messages below and provide the requested details.
+  </p>
+</div>
+{% endif %}
+
+{% if grant.status == "offered" or grant.status == "accepted" or grant.status == "disbursed" %}
+<!-- Offer Details -->
+<div class="offer-card">
+  <div class="offer-card-header">
+    {% if grant.status == "offered" %}Grant Offer{% else %}Accepted Grant{% endif %}
+  </div>
+  <div class="offer-card-body">
+    {% if grant.approved_amount is not None %}
+    <div>
+      <span class="summary-field-label">Approved Amount</span>
+      <span class="offer-amount">${{ grant.approved_amount }}</span>
+    </div>
+    {% endif %}
+    {% if grant.promo_code %}
+    <div>
+      <span class="promo-code-label">Ticket Promo Code</span>
+      <div class="promo-code-box">{{ grant.promo_code }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if grant.status == "disbursed" %}
+<div class="offer-card" style="border-color: #bfdbfe;">
+  <div class="offer-card-header" style="background: #eff6ff; border-bottom-color: #bfdbfe; color: #1e40af;">
+    Payment Disbursed
+  </div>
+  <div class="offer-card-body">
+    <div>
+      <span class="summary-field-label">Amount Sent</span>
+      <span class="offer-amount" style="color: #1e40af;">${{ grant.disbursed_amount }}</span>
+    </div>
+    {% if grant.disbursed_at %}
+    <div>
+      <span class="summary-field-label">Disbursed On</span>
+      <span class="summary-field-value">{{ grant.disbursed_at|date:"M j, Y" }}</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Action Buttons -->
+<div class="actions-bar">
+  {% if grant.show_accept_button %}
+  <form method="post" action="{% url 'programs:travel-grant-accept' conference.slug %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn--accept"
+            onclick="return confirm('Are you sure you want to accept this travel grant offer?');">
+      Accept Offer
+    </button>
+  </form>
+  {% endif %}
+
+  {% if grant.show_decline_button %}
+  <form method="post" action="{% url 'programs:travel-grant-decline' conference.slug %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn--decline"
+            onclick="return confirm('Are you sure you want to decline this travel grant offer? This cannot be undone.');">
+      Decline Offer
+    </button>
+  </form>
+  {% endif %}
+
+  {% if grant.show_provide_info_button %}
+  <a href="{% url 'programs:travel-grant-provide-info' conference.slug %}" class="btn btn--info">
+    Provide Information
+  </a>
+  {% endif %}
+
+  {% if grant.show_edit_button %}
+  <a href="{% url 'programs:travel-grant-edit' conference.slug %}" class="btn btn--secondary">
+    Edit Application
+  </a>
+  {% endif %}
+
+  {% if grant.show_withdraw_button %}
+  <form method="post" action="{% url 'programs:travel-grant-withdraw' conference.slug %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn--withdraw"
+            onclick="return confirm('Are you sure you want to withdraw your travel grant application? This cannot be undone.');">
+      Withdraw Application
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+{% if grant.status == "accepted" and grant.approved_amount %}
+<div class="actions-bar">
+  <a href="{% url 'programs:travel-grant-receipts' conference.slug %}" class="btn btn--secondary">
+    Upload Receipts
+  </a>
+  <a href="{% url 'programs:travel-grant-payment-info' conference.slug %}" class="btn btn--secondary">
+    Payment Information
+  </a>
+</div>
+{% endif %}
+
+<!-- Application Summary (collapsible) -->
+<details class="summary-disclosure">
+  <summary class="summary-toggle">Application Details</summary>
+  <div class="summary-body">
+    <div class="summary-grid">
+      <div>
+        <span class="summary-field-label">Request Type</span>
+        <span class="summary-field-value">{{ grant.get_request_type_display }}</span>
+      </div>
+      <div>
+        <span class="summary-field-label">Application Type</span>
+        <span class="summary-field-value">{{ grant.get_application_type_display }}</span>
+      </div>
+      <div>
+        <span class="summary-field-label">Traveling From</span>
+        <span class="summary-field-value">{{ grant.travel_from }}</span>
+      </div>
+      <div>
+        <span class="summary-field-label">International</span>
+        <span class="summary-field-value">{% if grant.international %}Yes{% else %}No{% endif %}</span>
+      </div>
+      {% if grant.first_time is not None %}
+      <div>
+        <span class="summary-field-label">First Time Attending</span>
+        <span class="summary-field-value">{% if grant.first_time %}Yes{% else %}No{% endif %}</span>
+      </div>
+      {% endif %}
+      {% if grant.experience_level %}
+      <div>
+        <span class="summary-field-label">Experience Level</span>
+        <span class="summary-field-value">{{ grant.get_experience_level_display }}</span>
+      </div>
+      {% endif %}
+      {% if grant.days_attending %}
+      <div class="summary-field--full">
+        <span class="summary-field-label">Days Attending</span>
+        <span class="summary-field-value">{{ grant.days_attending }}</span>
+      </div>
+      {% endif %}
+
+      <hr class="summary-divider">
+
+      {% if grant.travel_plans_airfare_amount or grant.travel_plans_lodging_amount %}
+      <div class="summary-field--full">
+        <span class="summary-field-label">Travel Expense Breakdown</span>
+        <table class="expense-summary" style="margin-top: 0.5rem;">
+          <thead>
+            <tr>
+              <th>Expense</th>
+              <th>Description</th>
+              <th style="text-align: right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if grant.travel_plans_airfare_amount %}
+            <tr>
+              <td class="expense-item-label">Airfare</td>
+              <td class="expense-item-desc">{{ grant.travel_plans_airfare_description|default:"--" }}</td>
+              <td class="expense-item-amount">${{ grant.travel_plans_airfare_amount }}</td>
+            </tr>
+            {% endif %}
+            {% if grant.travel_plans_lodging_amount %}
+            <tr>
+              <td class="expense-item-label">Lodging</td>
+              <td class="expense-item-desc">{{ grant.travel_plans_lodging_description|default:"--" }}</td>
+              <td class="expense-item-amount">${{ grant.travel_plans_lodging_amount }}</td>
+            </tr>
+            {% endif %}
+            <tr class="expense-total">
+              <td class="expense-item-label">Total</td>
+              <td>Estimated Total</td>
+              <td class="expense-item-amount">${{ grant.travel_plans_total }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {% if grant.sharing_expenses %}
+      <div>
+        <span class="summary-field-label">Sharing Expenses</span>
+        <span class="summary-field-value">Yes</span>
+      </div>
+      {% if grant.traveling_with %}
+      <div>
+        <span class="summary-field-label">Traveling With</span>
+        <span class="summary-field-value">{{ grant.traveling_with }}</span>
+      </div>
+      {% endif %}
+      {% endif %}
+
+      <hr class="summary-divider">
+
+      {% if grant.occupation %}
+      <div class="summary-field--full">
+        <span class="summary-field-label">Occupation</span>
+        <span class="summary-field-value">{{ grant.occupation }}</span>
+      </div>
+      {% endif %}
+      {% if grant.involvement %}
+      <div class="summary-field--full">
+        <span class="summary-field-label">Community Involvement</span>
+        <span class="summary-field-value">{{ grant.involvement|linebreaksbr }}</span>
+      </div>
+      {% endif %}
+      <div class="summary-field--full">
+        <span class="summary-field-label">Reason for Applying</span>
+        <span class="summary-field-value">{{ grant.reason|linebreaksbr }}</span>
+      </div>
+    </div>
+  </div>
+</details>
+
+<!-- Messages -->
+<div class="messages-section">
+  <div class="messages-header">
+    Messages
+    {% if grant_messages %}({{ grant_messages|length }}){% endif %}
+  </div>
+
+  {% if grant_messages %}
+  <ul class="messages-list">
+    {% for message in grant_messages %}
+    <li class="message-item {% if message.user == request.user %}message-item--own{% else %}message-item--reviewer{% endif %}">
+      <div class="message-meta">
+        <span class="message-author {% if message.user != request.user %}message-author--reviewer{% endif %}">
+          {% if message.user == request.user %}You{% else %}{{ message.user }}{% endif %}
+        </span>
+        <span class="message-time">{{ message.created_at|date:"M j, Y g:i A" }}</span>
+      </div>
+      <div class="message-body">{{ message.message }}</div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="messages-empty">
+    No messages yet.
+  </div>
+  {% endif %}
+
+  {% if grant.status != "withdrawn" and grant.status != "declined" %}
+  <form method="post" action="{% url 'programs:travel-grant-message' conference.slug %}" class="message-form">
+    {% csrf_token %}
+    <label for="{{ message_form.message.id_for_label }}">Send a Message</label>
+    {{ message_form.message }}
+    <div class="message-form-actions">
+      <button type="submit" class="btn btn--primary">Send</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+
+{% else %}
+
+<!-- No Application -->
+<div class="card no-grant-card">
+  <div class="no-grant-body">
+    <p class="no-grant-heading">You haven't applied for a travel grant yet.</p>
+    <p class="no-grant-text">
+      Travel grants provide financial assistance for conference attendees
+      who need help covering the costs of travel, lodging, or registration.
+    </p>
+    <a href="{% url 'programs:travel-grant-apply' conference.slug %}" class="btn btn--primary">
+      Apply for a Travel Grant
+    </a>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

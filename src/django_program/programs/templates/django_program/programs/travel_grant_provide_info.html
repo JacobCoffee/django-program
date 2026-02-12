@@ -1,0 +1,149 @@
+{% extends "django_program/pretalx/base.html" %}
+
+{% block title %}Provide Information{% endblock %}
+
+{% block extra_head %}
+<style>
+  .provide-info-container {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .info-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .info-card-header {
+    padding: 1rem 1.5rem;
+    background: #fff7ed;
+    border-bottom: 1px solid #fed7aa;
+  }
+  .info-card-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #9a3412;
+  }
+  .info-card-header p {
+    margin: 0.35rem 0 0;
+    font-size: 0.85rem;
+    color: #c2410c;
+    line-height: 1.5;
+  }
+  .info-card-body {
+    padding: 1.5rem;
+  }
+  .info-card-body label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.4rem;
+  }
+  .info-card-body textarea {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    color: var(--color-text);
+    background: var(--color-surface);
+    resize: vertical;
+    min-height: 120px;
+    line-height: 1.5;
+  }
+  .info-card-body textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.12);
+  }
+  .info-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+  .btn-submit {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.6rem 1.5rem;
+    background: var(--color-primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .btn-submit:hover {
+    background: var(--color-primary-hover);
+  }
+  .btn-cancel {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.6rem 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 0.88rem;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn-cancel:hover {
+    border-color: var(--color-text-muted);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+  .field-errors {
+    list-style: none;
+    padding: 0;
+    margin: 0.3rem 0 0;
+  }
+  .field-errors li {
+    font-size: 0.82rem;
+    color: #dc2626;
+    font-weight: 500;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'programs:travel-grant-status' conference.slug %}" class="back-link">Back to Grant Status</a>
+
+<div class="page-header">
+  <h2>Provide Information</h2>
+</div>
+
+<div class="provide-info-container">
+  <div class="info-card">
+    <div class="info-card-header">
+      <h3>Information Requested</h3>
+      <p>The reviewers have requested additional information about your travel grant application. Please provide the details below.</p>
+    </div>
+    <div class="info-card-body">
+      <form method="post">
+        {% csrf_token %}
+        <label for="{{ form.message.id_for_label }}">Your Response</label>
+        {{ form.message }}
+        {% if form.message.errors %}
+        <ul class="field-errors" role="alert">
+          {% for error in form.message.errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        <div class="info-actions">
+          <button type="submit" class="btn-submit">Submit Information</button>
+          <a href="{% url 'programs:travel-grant-status' conference.slug %}" class="btn-cancel">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

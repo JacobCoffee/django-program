@@ -63,6 +63,7 @@ class ProgramConfig:
     order_reference_prefix: str = "ORD"
     currency: str = "USD"
     currency_symbol: str = "$"
+    max_grant_amount: int = 3000
 
 
 @functools.lru_cache(maxsize=1)

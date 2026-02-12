@@ -1,5 +1,7 @@
 """URL configuration for the example development server."""
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
@@ -12,4 +14,6 @@ urlpatterns = [
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("manage/", include("django_program.manage.urls")),
     path("<slug:conference_slug>/program/", include("django_program.pretalx.urls")),
+    path("<slug:conference_slug>/programs/", include("django_program.programs.urls")),
+    *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
 ]

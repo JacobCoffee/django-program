@@ -23,7 +23,16 @@
     {% for field in form %}
     <div class="form-group">
       <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {% if field.name == "room" %}
+      <div style="position: relative;">
+        <input type="text" id="room-search" placeholder="Search rooms..." autocomplete="off"
+               style="margin-bottom: 0.25rem;">
+        {{ field }}
+        <div id="room-results" style="display:none; position:absolute; z-index:10; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-sm); width:100%; max-height:200px; overflow-y:auto; box-shadow:var(--shadow-md);"></div>
+      </div>
+      {% else %}
       {{ field }}
+      {% endif %}
       {% if field.help_text %}
       <span class="helptext">{{ field.help_text }}</span>
       {% endif %}
@@ -47,4 +56,81 @@
 <h2 class="section-heading" style="margin-top: 2rem;">Signups ({{ signup_count }})</h2>
 <p style="color: var(--color-text-secondary); font-size: 0.9rem;">{{ signup_count }} attendee{{ signup_count|pluralize }} signed up for this activity.</p>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var searchInput = document.getElementById('room-search');
+  var selectEl = document.getElementById('id_room');
+  var resultsDiv = document.getElementById('room-results');
+  if (!searchInput || !selectEl) return;
+
+  var allOptions = [];
+  for (var i = 0; i < selectEl.options.length; i++) {
+    var opt = selectEl.options[i];
+    allOptions.push({value: opt.value, text: opt.text});
+  }
+
+  // Show current selection in search input
+  if (selectEl.value) {
+    for (var j = 0; j < allOptions.length; j++) {
+      if (allOptions[j].value === selectEl.value) {
+        searchInput.value = allOptions[j].text === '---------' ? '' : allOptions[j].text;
+        break;
+      }
+    }
+  }
+
+  function showResults(filter) {
+    resultsDiv.innerHTML = '';
+    var lowerFilter = (filter || '').toLowerCase();
+    var matches = allOptions.filter(function(o) {
+      return o.text !== '---------' && (!lowerFilter || o.text.toLowerCase().indexOf(lowerFilter) !== -1);
+    });
+    if (matches.length === 0) {
+      resultsDiv.style.display = 'none';
+      return;
+    }
+    matches.forEach(function(o) {
+      var div = document.createElement('div');
+      div.textContent = o.text;
+      div.style.padding = '0.4rem 0.75rem';
+      div.style.cursor = 'pointer';
+      div.style.fontSize = '0.9rem';
+      div.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        selectEl.value = o.value;
+        searchInput.value = o.text;
+        resultsDiv.style.display = 'none';
+      });
+      div.addEventListener('mouseenter', function() {
+        div.style.background = 'var(--color-primary-light)';
+      });
+      div.addEventListener('mouseleave', function() {
+        div.style.background = '';
+      });
+      resultsDiv.appendChild(div);
+    });
+    resultsDiv.style.display = 'block';
+  }
+
+  searchInput.addEventListener('focus', function() { showResults(searchInput.value); });
+  searchInput.addEventListener('input', function() { showResults(searchInput.value); });
+  searchInput.addEventListener('blur', function() {
+    setTimeout(function() { resultsDiv.style.display = 'none'; }, 150);
+  });
+
+  // Allow clearing
+  searchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      resultsDiv.style.display = 'none';
+      searchInput.blur();
+    }
+    if (e.key === 'Backspace' && searchInput.value === '') {
+      selectEl.value = '';
+    }
+  });
+})();
+</script>
 {% endblock %}

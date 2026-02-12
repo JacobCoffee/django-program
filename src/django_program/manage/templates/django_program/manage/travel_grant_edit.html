@@ -27,12 +27,48 @@
     <div class="info-item-value">{{ grant.user.email|default:"--" }}</div>
   </div>
   <div class="info-item">
+    <div class="info-item-label">Request Type</div>
+    <div class="info-item-value">{{ grant.get_request_type_display }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Application Type</div>
+    <div class="info-item-value">{{ grant.get_application_type_display }}</div>
+  </div>
+  <div class="info-item">
     <div class="info-item-label">Traveling From</div>
-    <div class="info-item-value">{{ grant.travel_from }}</div>
+    <div class="info-item-value">{{ grant.travel_from }}{% if grant.international %} <span style="font-size: 0.72rem; color: var(--color-primary);">intl</span>{% endif %}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">First Time Attending</div>
+    <div class="info-item-value">{% if grant.first_time is None %}--{% elif grant.first_time %}Yes{% else %}No{% endif %}</div>
   </div>
   <div class="info-item">
     <div class="info-item-label">Requested Amount</div>
     <div class="info-item-value">${{ grant.requested_amount }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Current Status</div>
+    <div class="info-item-value">
+      {% if grant.status == "submitted" %}
+      <span class="badge badge--warning">Submitted</span>
+      {% elif grant.status == "info_needed" %}
+      <span class="badge badge--warning">Info Needed</span>
+      {% elif grant.status == "offered" %}
+      <span class="badge badge--active">Offered</span>
+      {% elif grant.status == "accepted" %}
+      <span class="badge badge--active">Accepted</span>
+      {% elif grant.status == "rejected" %}
+      <span class="badge badge--inactive">Rejected</span>
+      {% elif grant.status == "declined" %}
+      <span class="badge badge--inactive">Declined</span>
+      {% elif grant.status == "withdrawn" %}
+      <span class="badge badge--other">Withdrawn</span>
+      {% elif grant.status == "need_more" %}
+      <span class="badge badge--warning">Requesting More</span>
+      {% elif grant.status == "disbursed" %}
+      <span class="badge badge--active">Disbursed</span>
+      {% endif %}
+    </div>
   </div>
   <div class="info-item">
     <div class="info-item-label">Applied</div>
@@ -40,10 +76,213 @@
   </div>
 </div>
 
+{% if grant.travel_plans_airfare_amount or grant.travel_plans_lodging_amount or grant.travel_plans_transit_amount or grant.travel_plans_visa_amount %}
+<h2 class="section-heading">Travel Plan Breakdown</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr><th>Category</th><th>Description</th><th style="text-align: right;">Amount</th></tr>
+  </thead>
+  <tbody>
+    {% if grant.travel_plans_airfare_amount %}
+    <tr><td>Airfare</td><td>{{ grant.travel_plans_airfare_description|default:"--" }}</td><td style="text-align: right;">${{ grant.travel_plans_airfare_amount }}</td></tr>
+    {% endif %}
+    {% if grant.travel_plans_lodging_amount %}
+    <tr><td>Lodging</td><td>{{ grant.travel_plans_lodging_description|default:"--" }}</td><td style="text-align: right;">${{ grant.travel_plans_lodging_amount }}</td></tr>
+    {% endif %}
+    {% if grant.travel_plans_transit_amount %}
+    <tr><td>Local Transit</td><td>{{ grant.travel_plans_transit_description|default:"--" }}</td><td style="text-align: right;">${{ grant.travel_plans_transit_amount }}</td></tr>
+    {% endif %}
+    {% if grant.travel_plans_visa_amount %}
+    <tr><td>Visa</td><td>{{ grant.travel_plans_visa_description|default:"--" }}</td><td style="text-align: right;">${{ grant.travel_plans_visa_amount }}</td></tr>
+    {% endif %}
+    <tr style="font-weight: 600;"><td colspan="2">Travel Plans Total</td><td style="text-align: right;">${{ grant.travel_plans_total }}</td></tr>
+  </tbody>
+</table>
+{% endif %}
+
+<h2 class="section-heading">Applicant Profile</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Experience Level</div>
+    <div class="info-item-value">{{ grant.get_experience_level_display|default:"--" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Days Attending</div>
+    <div class="info-item-value">{{ grant.days_attending|default:"--" }}</div>
+  </div>
+  {% if grant.sharing_expenses %}
+  <div class="info-item">
+    <div class="info-item-label">Sharing Expenses</div>
+    <div class="info-item-value">Yes{% if grant.traveling_with %} (with {{ grant.traveling_with }}){% endif %}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if grant.occupation %}
+<h2 class="section-heading">Occupation</h2>
+<div style="background: var(--color-bg); border: 1px solid var(--color-border-light); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 2rem; font-size: 0.95rem; line-height: 1.6;">
+  {{ grant.occupation|linebreaks }}
+</div>
+{% endif %}
+
+{% if grant.involvement %}
+<h2 class="section-heading">Community Involvement</h2>
+<div style="background: var(--color-bg); border: 1px solid var(--color-border-light); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 2rem; font-size: 0.95rem; line-height: 1.6;">
+  {{ grant.involvement|linebreaks }}
+</div>
+{% endif %}
+
 <h2 class="section-heading">Reason</h2>
 <div style="background: var(--color-bg); border: 1px solid var(--color-border-light); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 2rem; font-size: 0.95rem; line-height: 1.6;">
   {{ grant.reason|linebreaks }}
 </div>
+
+{% if has_previous_review %}
+<h2 class="section-heading">Previous Review</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Reviewed By</div>
+    <div class="info-item-value">{{ grant.reviewed_by.get_full_name|default:grant.reviewed_by.username }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Reviewed At</div>
+    <div class="info-item-value">{{ grant.reviewed_at|date:"N j, Y, P" }}</div>
+  </div>
+  {% if grant.approved_amount %}
+  <div class="info-item">
+    <div class="info-item-label">Approved Amount</div>
+    <div class="info-item-value">${{ grant.approved_amount }}</div>
+  </div>
+  {% endif %}
+  {% if grant.promo_code %}
+  <div class="info-item">
+    <div class="info-item-label">Promo Code</div>
+    <div class="info-item-value">{{ grant.promo_code }}</div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<h2 class="section-heading">Messages ({{ grant_messages|length }})</h2>
+{% if grant_messages %}
+<div style="margin-bottom: 2rem;">
+  {% for msg in grant_messages %}
+  <div style="background: {% if not msg.visible %}#fef3c7{% elif msg.user == grant.user %}var(--color-bg){% else %}#eff6ff{% endif %}; border: 1px solid var(--color-border-light); border-radius: var(--radius-sm); padding: 0.85rem 1rem; margin-bottom: 0.5rem;">
+    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+      <span style="font-size: 0.82rem; font-weight: 600; color: var(--color-text);">
+        {% if msg.user == grant.user %}{{ grant.user.get_full_name|default:grant.user.username }} (applicant){% else %}{{ msg.user.get_full_name|default:msg.user.username }}{% endif %}
+      </span>
+      {% if not msg.visible %}<span style="font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 3px; padding: 0.1rem 0.4rem;">Private</span>{% endif %}
+      <span style="font-size: 0.75rem; color: var(--color-text-muted); margin-left: auto;">{{ msg.created_at|date:"N j, Y, P" }}</span>
+    </div>
+    <p style="font-size: 0.88rem; color: var(--color-text-secondary); line-height: 1.5; margin: 0;">{{ msg.message }}</p>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p style="font-size: 0.88rem; color: var(--color-text-muted); margin-bottom: 2rem;">No messages yet.</p>
+{% endif %}
+
+<h3 style="font-size: 0.88rem; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 0.5rem;">Send Message</h3>
+<div style="background: var(--color-bg); border: 1px solid var(--color-border-light); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 2rem;">
+  <form method="post" action="{% url 'manage:travel-grant-send-message' conference.slug grant.pk %}">
+    {% csrf_token %}
+    <div class="form-group">
+      {{ message_form.message }}
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;">
+      <button type="submit" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.45rem 1rem;">Send</button>
+      <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--color-text-secondary); cursor: pointer;">
+        {{ message_form.visible }}
+        Visible to applicant
+      </label>
+    </div>
+  </form>
+</div>
+
+{% if grant.receipts.all %}
+<h2 class="section-heading">Receipts ({{ grant.receipts.count }})</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr><th>Type</th><th>Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+    {% for receipt in grant.receipts.all %}
+    <tr>
+      <td>{{ receipt.get_receipt_type_display }}</td>
+      <td>{{ receipt.date|date:"M j, Y" }}</td>
+      <td>${{ receipt.amount }}</td>
+      <td>
+        {% if receipt.approved %}<span class="badge badge--active">Approved</span>
+        {% elif receipt.flagged %}<span class="badge badge--inactive">Flagged</span>
+        {% else %}<span class="badge badge--warning">Pending</span>{% endif %}
+      </td>
+      <td><a href="{% url 'manage:receipt-review-detail' conference.slug receipt.pk %}" class="btn btn-sm btn-secondary">Review</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if grant.payment_info %}
+<h2 class="section-heading">Payment Info</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Payment Method</div>
+    <div class="info-item-value">{{ grant.payment_info.get_payment_method_display }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Legal Name</div>
+    <div class="info-item-value">{{ grant.payment_info.legal_name }}</div>
+  </div>
+</div>
+{% endif %}
+
+{% if grant.status == "accepted" %}
+<div class="card" style="margin-bottom: 1.5rem; border-color: #bfdbfe;">
+  <div style="padding: 0.85rem 1.5rem; background: #eff6ff; border-bottom: 1px solid #bfdbfe;">
+    <span style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #1e40af;">Disbursement</span>
+  </div>
+  <div class="card-body">
+    <form method="post" action="{% url 'manage:travel-grant-disburse' conference.slug grant.pk %}">
+      {% csrf_token %}
+      <div style="display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px;">
+          <label style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.35rem;">Disbursement Amount</label>
+          <input type="number" name="disbursed_amount" step="0.01" value="{{ grant.approved_amount }}" style="width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.9rem;">
+        </div>
+        <button type="submit" class="btn btn--primary" onclick="return confirm('Mark this grant as disbursed? This records that payment has been sent.');">
+          Mark as Disbursed
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if grant.status == "disbursed" %}
+<div class="card" style="margin-bottom: 1.5rem; border-color: #bfdbfe;">
+  <div style="padding: 0.85rem 1.5rem; background: #eff6ff; border-bottom: 1px solid #bfdbfe;">
+    <span style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #1e40af;">Disbursement Complete</span>
+  </div>
+  <div class="card-body">
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+      <div>
+        <span style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.25rem;">Amount</span>
+        <span style="font-family: var(--font-mono); font-weight: 700; font-size: 1.1rem; color: #1e40af;">${{ grant.disbursed_amount }}</span>
+      </div>
+      <div>
+        <span style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.25rem;">Date</span>
+        <span style="font-size: 0.92rem;">{{ grant.disbursed_at|date:"M j, Y g:i A" }}</span>
+      </div>
+      <div>
+        <span style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.25rem;">Processed By</span>
+        <span style="font-size: 0.92rem;">{{ grant.disbursed_by }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <h2 class="section-heading">Review</h2>
 <div class="form-container">
