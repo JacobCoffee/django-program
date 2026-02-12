@@ -195,7 +195,7 @@ class SponsorLevelForm(forms.ModelForm):
 
     class Meta:
         model = SponsorLevel
-        fields = ["name", "slug", "cost", "description", "benefits_summary", "comp_ticket_count", "order"]
+        fields = ["name", "cost", "description", "benefits_summary", "comp_ticket_count", "order"]
 
 
 class SponsorForm(forms.ModelForm):
@@ -205,7 +205,6 @@ class SponsorForm(forms.ModelForm):
         model = Sponsor
         fields = [
             "name",
-            "slug",
             "level",
             "website_url",
             "logo",

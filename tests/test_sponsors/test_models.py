@@ -25,7 +25,6 @@ def level(conference: Conference) -> SponsorLevel:
     return SponsorLevel.objects.create(
         conference=conference,
         name="Gold",
-        slug="gold",
         cost=Decimal("5000.00"),
     )
 
@@ -36,7 +35,6 @@ def sponsor(conference: Conference, level: SponsorLevel) -> Sponsor:
         conference=conference,
         level=level,
         name="Acme Corp",
-        slug="acme-corp",
     )
 
 

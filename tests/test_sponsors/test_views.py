@@ -26,7 +26,6 @@ def level(conference: Conference) -> SponsorLevel:
     return SponsorLevel.objects.create(
         conference=conference,
         name="Gold",
-        slug="gold",
         cost=Decimal("5000.00"),
         comp_ticket_count=0,
     )
@@ -38,7 +37,6 @@ def sponsor(conference: Conference, level: SponsorLevel) -> Sponsor:
         conference=conference,
         level=level,
         name="TestCo",
-        slug="testco",
         is_active=True,
     )
 
@@ -57,7 +55,6 @@ def test_sponsor_list_excludes_inactive(client: Client, conference: Conference, 
         conference=conference,
         level=level,
         name="InactiveCo",
-        slug="inactiveco",
         is_active=False,
     )
     response = client.get(f"/{conference.slug}/sponsors/")
@@ -80,7 +77,6 @@ def test_sponsor_detail_404_for_inactive(client: Client, conference: Conference,
         conference=conference,
         level=level,
         name="GoneCo",
-        slug="goneco",
         is_active=False,
     )
     response = client.get(f"/{conference.slug}/sponsors/{inactive.slug}/")

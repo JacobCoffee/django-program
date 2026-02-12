@@ -26,7 +26,6 @@ def test_comp_vouchers_created_on_sponsor_create(conference: Conference):
     level = SponsorLevel.objects.create(
         conference=conference,
         name="Platinum",
-        slug="platinum",
         cost=Decimal("10000.00"),
         comp_ticket_count=3,
     )
@@ -35,7 +34,6 @@ def test_comp_vouchers_created_on_sponsor_create(conference: Conference):
         conference=conference,
         level=level,
         name="BigCo",
-        slug="bigco",
     )
 
     vouchers = Voucher.objects.filter(conference=conference, code__startswith="SPONSOR-BIGCO-")
@@ -52,7 +50,6 @@ def test_no_vouchers_when_comp_count_zero(conference: Conference):
     level = SponsorLevel.objects.create(
         conference=conference,
         name="Bronze",
-        slug="bronze",
         cost=Decimal("500.00"),
         comp_ticket_count=0,
     )
@@ -61,7 +58,6 @@ def test_no_vouchers_when_comp_count_zero(conference: Conference):
         conference=conference,
         level=level,
         name="SmallCo",
-        slug="smallco",
     )
 
     assert Voucher.objects.filter(conference=conference, code__startswith="SPONSOR-SMALLCO-").count() == 0
@@ -72,7 +68,6 @@ def test_no_vouchers_on_sponsor_update(conference: Conference):
     level = SponsorLevel.objects.create(
         conference=conference,
         name="Silver",
-        slug="silver",
         cost=Decimal("2000.00"),
         comp_ticket_count=2,
     )
@@ -81,7 +76,6 @@ def test_no_vouchers_on_sponsor_update(conference: Conference):
         conference=conference,
         level=level,
         name="MidCo",
-        slug="midco",
     )
     assert Voucher.objects.filter(conference=conference, code__startswith="SPONSOR-MIDCO-").count() == 2
 
@@ -95,7 +89,6 @@ def test_bulk_create_ignore_conflicts_is_idempotent(conference: Conference):
     level = SponsorLevel.objects.create(
         conference=conference,
         name="Gold",
-        slug="gold",
         cost=Decimal("5000.00"),
         comp_ticket_count=2,
     )
@@ -111,7 +104,6 @@ def test_bulk_create_ignore_conflicts_is_idempotent(conference: Conference):
         conference=conference,
         level=level,
         name="PreCo",
-        slug="preco",
     )
 
     assert Voucher.objects.filter(conference=conference, code__startswith="SPONSOR-PRECO-").count() == 2

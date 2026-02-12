@@ -34,7 +34,6 @@ def level(conference):
     return SponsorLevel.objects.create(
         conference=conference,
         name="Gold",
-        slug="gold",
         cost=Decimal("5000.00"),
         comp_ticket_count=0,
     )
@@ -46,7 +45,6 @@ def sponsor(conference, level):
         conference=conference,
         level=level,
         name="TestCorp",
-        slug="testcorp",
         is_active=True,
     )
 
@@ -86,7 +84,6 @@ def test_sponsor_level_create(authed_client: Client, conference):
         url,
         {
             "name": "Silver",
-            "slug": "silver",
             "cost": "2000.00",
             "comp_ticket_count": "2",
             "order": "1",
@@ -111,7 +108,6 @@ def test_sponsor_level_edit(authed_client: Client, conference, level):
         url,
         {
             "name": "Platinum",
-            "slug": "gold",
             "cost": "10000.00",
             "comp_ticket_count": "5",
             "order": "0",
@@ -148,7 +144,6 @@ def test_sponsor_create(authed_client: Client, conference, level):
         url,
         {
             "name": "NewCorp",
-            "slug": "newcorp",
             "level": level.pk,
             "is_active": "on",
         },
@@ -172,7 +167,6 @@ def test_sponsor_edit(authed_client: Client, conference, sponsor, level):
         url,
         {
             "name": "UpdatedCorp",
-            "slug": "testcorp",
             "level": level.pk,
             "is_active": "on",
         },

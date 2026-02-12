@@ -20,7 +20,6 @@ class SponsorLevelAdmin(admin.ModelAdmin):
     list_display = ("name", "conference", "cost", "comp_ticket_count", "order")
     list_filter = ("conference",)
     search_fields = ("name", "slug")
-    prepopulated_fields = {"slug": ("name",)}
 
 
 @admin.register(Sponsor)
@@ -30,5 +29,4 @@ class SponsorAdmin(admin.ModelAdmin):
     list_display = ("name", "conference", "level", "is_active")
     list_filter = ("conference", "level", "is_active")
     search_fields = ("name", "slug", "contact_name", "contact_email")
-    prepopulated_fields = {"slug": ("name",)}
     inlines = (SponsorBenefitInline,)

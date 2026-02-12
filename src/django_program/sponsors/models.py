@@ -1,6 +1,7 @@
 """Sponsor level, sponsor, and benefit models for django-program."""
 
 from django.db import models
+from django.utils.text import slugify
 
 
 class SponsorLevel(models.Model):
@@ -17,7 +18,7 @@ class SponsorLevel(models.Model):
         related_name="sponsor_levels",
     )
     name = models.CharField(max_length=200)
-    slug = models.SlugField(max_length=200)
+    slug = models.SlugField(max_length=200, blank=True)
     cost = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True, default="")
     benefits_summary = models.TextField(
@@ -40,6 +41,12 @@ class SponsorLevel(models.Model):
     def __str__(self) -> str:
         return f"{self.name} ({self.conference.slug})"
 
+    def save(self, *args: object, **kwargs: object) -> None:
+        """Auto-generate slug from name if not set."""
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
 
 class Sponsor(models.Model):
     """A sponsoring organization for a conference.
@@ -60,7 +67,7 @@ class Sponsor(models.Model):
         related_name="sponsors",
     )
     name = models.CharField(max_length=200)
-    slug = models.SlugField(max_length=200)
+    slug = models.SlugField(max_length=200, blank=True)
     website_url = models.URLField(blank=True, default="")
     logo = models.ImageField(upload_to="sponsors/logos/", blank=True, default="")
     description = models.TextField(blank=True, default="")
@@ -76,6 +83,12 @@ class Sponsor(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.level.name})"
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        """Auto-generate slug from name if not set."""
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
 
 
 class SponsorBenefit(models.Model):
