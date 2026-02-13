@@ -82,6 +82,10 @@ typehints_use_rtype = True
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "httpx": ("https://www.python-httpx.org/", None),
+    "django_program": (
+        "https://jacobcoffee.github.io/django-program/",
+        ("../../../docs/_build/html/objects.inv", None),
+    ),
 }
 
 myst_enable_extensions = [

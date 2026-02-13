@@ -8,7 +8,7 @@ UV            ?= uv $(UV_OPTS)
 
 .PHONY: help install dev clean lint fmt test docs
 .PHONY: type-check ruff security
-.PHONY: docs-serve docs-clean
+.PHONY: docs-serve docs-clean docs-pretalx
 .PHONY: install-uv install-prek upgrade
 .PHONY: ci
 .PHONY: act act-ci act-docs act-list
@@ -133,9 +133,11 @@ pretalx-sync-schema: pretalx-codegen ## Alias for pretalx-codegen (used by CI wo
 
 ##@ Documentation
 
-docs: docs-clean ## Build documentation
-	@echo "=> Building documentation"
+docs: docs-clean ## Build all documentation (django-program + pretalx-client)
+	@echo "=> Building pretalx-client documentation (first, for intersphinx)"
 	@$(UV) sync --group docs
+	@$(UV) run sphinx-build -M html packages/pretalx-client/docs packages/pretalx-client/docs/_build/ -E -a -j auto --keep-going
+	@echo "=> Building django-program documentation"
 	@$(UV) run sphinx-build -M html docs docs/_build/ -E -a -j auto --keep-going
 
 docs-serve: docs-clean ## Serve documentation with live reload
@@ -143,9 +145,15 @@ docs-serve: docs-clean ## Serve documentation with live reload
 	@$(UV) sync --group docs
 	@$(UV) run sphinx-autobuild docs docs/_build/ -j auto --port 0
 
-docs-clean: ## Clean built documentation
+docs-pretalx: ## Build pretalx-client documentation only
+	@echo "=> Building pretalx-client documentation"
+	@$(UV) sync --group docs
+	@rm -rf packages/pretalx-client/docs/_build
+	@$(UV) run sphinx-build -M html packages/pretalx-client/docs packages/pretalx-client/docs/_build/ -E -a -j auto --keep-going
+
+docs-clean: ## Clean all documentation build assets
 	@echo "=> Cleaning documentation build assets"
-	@rm -rf docs/_build
+	@rm -rf docs/_build packages/pretalx-client/docs/_build
 	@echo "=> Removed existing documentation build assets"
 
 # =============================================================================

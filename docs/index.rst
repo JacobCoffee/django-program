@@ -115,6 +115,12 @@ Quick Start
 
 .. toctree::
    :hidden:
+   :caption: Packages
+
+   pretalx-client docs <https://jacobcoffee.github.io/django-program/pretalx-client/>
+
+.. toctree::
+   :hidden:
    :caption: Project
 
    GitHub <https://github.com/JacobCoffee/django-program>

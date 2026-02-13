@@ -86,6 +86,10 @@ intersphinx_mapping = {
         "https://docs.djangoproject.com/en/5.2/",
         "https://docs.djangoproject.com/en/5.2/_objects/",
     ),
+    "pretalx_client": (
+        "https://jacobcoffee.github.io/django-program/pretalx-client/",
+        ("../packages/pretalx-client/docs/_build/html/objects.inv", None),
+    ),
 }
 
 todo_include_todos = True

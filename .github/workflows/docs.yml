@@ -6,11 +6,15 @@ on:
     paths:
       - "docs/**"
       - "src/**"
+      - "packages/pretalx-client/docs/**"
+      - "packages/pretalx-client/src/**"
   pull_request:
     branches: [main]
     paths:
       - "docs/**"
       - "src/**"
+      - "packages/pretalx-client/docs/**"
+      - "packages/pretalx-client/src/**"
   workflow_dispatch:
 
 concurrency:
@@ -42,8 +46,22 @@ jobs:
       - name: Install dependencies
         run: uv sync --group docs
 
-      - name: Build documentation
-        run: uv run sphinx-build -M html docs docs/_build/ -E -a -j auto --keep-going -W
+      - name: Build pretalx-client docs (first, for intersphinx)
+        run: >-
+          uv run sphinx-build -M html
+          packages/pretalx-client/docs packages/pretalx-client/docs/_build/
+          -E -a -j auto --keep-going
+
+      - name: Build django-program docs
+        run: >-
+          uv run sphinx-build -M html
+          docs docs/_build/
+          -E -a -j auto --keep-going -W
+
+      - name: Merge doc sites
+        run: |
+          mkdir -p docs/_build/html/pretalx-client
+          cp -r packages/pretalx-client/docs/_build/html/* docs/_build/html/pretalx-client/
 
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
