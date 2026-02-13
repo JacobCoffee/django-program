@@ -546,7 +546,7 @@ def test_disbursed_grant_shows_info_on_review(authed_client: Client, conference,
 
 @pytest.mark.django_db
 def test_activity_dashboard_get(authed_client: Client, conference, activity, regular_user):
-    ActivitySignup.objects.create(activity=activity, user=regular_user, status="confirmed")
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED)
     url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
     response = authed_client.get(url)
     assert response.status_code == 200
@@ -558,8 +558,8 @@ def test_activity_dashboard_get(authed_client: Client, conference, activity, reg
 
 @pytest.mark.django_db
 def test_activity_dashboard_status_filter(authed_client: Client, conference, activity, regular_user, superuser):
-    ActivitySignup.objects.create(activity=activity, user=regular_user, status="confirmed")
-    ActivitySignup.objects.create(activity=activity, user=superuser, status="waitlisted")
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED)
+    ActivitySignup.objects.create(activity=activity, user=superuser, status=ActivitySignup.SignupStatus.WAITLISTED)
     url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
     response = authed_client.get(url, {"status": "waitlisted"})
     assert response.status_code == 200
@@ -569,7 +569,7 @@ def test_activity_dashboard_status_filter(authed_client: Client, conference, act
 
 @pytest.mark.django_db
 def test_activity_dashboard_excludes_cancelled_by_default(authed_client: Client, conference, activity, regular_user):
-    ActivitySignup.objects.create(activity=activity, user=regular_user, status="cancelled")
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CANCELLED)
     url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
     response = authed_client.get(url)
     assert len(response.context["signups"]) == 0
@@ -610,7 +610,7 @@ def test_activity_dashboard_denied_for_non_organizer(client: Client, conference,
 
 @pytest.mark.django_db
 def test_activity_dashboard_csv_export(authed_client: Client, conference, activity, regular_user):
-    ActivitySignup.objects.create(activity=activity, user=regular_user, status="confirmed")
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED)
     url = reverse("manage:activity-dashboard-export", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
     response = authed_client.get(url)
     assert response.status_code == 200
@@ -624,8 +624,8 @@ def test_activity_dashboard_csv_export(authed_client: Client, conference, activi
 def test_activity_dashboard_csv_export_with_status_filter(
     authed_client: Client, conference, activity, regular_user, superuser
 ):
-    ActivitySignup.objects.create(activity=activity, user=regular_user, status="confirmed")
-    ActivitySignup.objects.create(activity=activity, user=superuser, status="waitlisted")
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED)
+    ActivitySignup.objects.create(activity=activity, user=superuser, status=ActivitySignup.SignupStatus.WAITLISTED)
     url = reverse("manage:activity-dashboard-export", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
     response = authed_client.get(url, {"status": "confirmed"})
     content = response.content.decode()
@@ -640,7 +640,9 @@ def test_activity_dashboard_csv_export_escapes_formula_cells(authed_client: Clie
         password="password",
         first_name="=Malicious Name",
     )
-    ActivitySignup.objects.create(activity=activity, user=user, status="confirmed", note="+SUM(1,2)")
+    ActivitySignup.objects.create(
+        activity=activity, user=user, status=ActivitySignup.SignupStatus.CONFIRMED, note="+SUM(1,2)"
+    )
     url = reverse("manage:activity-dashboard-export", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
     response = authed_client.get(url)
     content = response.content.decode()
@@ -653,7 +655,9 @@ def test_activity_dashboard_csv_export_escapes_formula_cells(authed_client: Clie
 
 @pytest.mark.django_db
 def test_activity_promote_waitlisted_signup(authed_client: Client, conference, activity, regular_user):
-    signup = ActivitySignup.objects.create(activity=activity, user=regular_user, status="waitlisted")
+    signup = ActivitySignup.objects.create(
+        activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.WAITLISTED
+    )
     url = reverse(
         "manage:activity-promote-signup",
         kwargs={"conference_slug": conference.slug, "pk": activity.pk, "signup_pk": signup.pk},
@@ -675,8 +679,10 @@ def test_activity_promote_waitlisted_signup_warns_on_overbook(authed_client: Cli
         is_active=True,
     )
     holder = User.objects.create_user(username="holder", password="password")
-    ActivitySignup.objects.create(activity=activity, user=holder, status="confirmed")
-    signup = ActivitySignup.objects.create(activity=activity, user=regular_user, status="waitlisted")
+    ActivitySignup.objects.create(activity=activity, user=holder, status=ActivitySignup.SignupStatus.CONFIRMED)
+    signup = ActivitySignup.objects.create(
+        activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.WAITLISTED
+    )
     url = reverse(
         "manage:activity-promote-signup",
         kwargs={"conference_slug": conference.slug, "pk": activity.pk, "signup_pk": signup.pk},
@@ -693,7 +699,9 @@ def test_activity_promote_waitlisted_signup_warns_on_overbook(authed_client: Cli
 
 @pytest.mark.django_db
 def test_activity_promote_non_waitlisted_404(authed_client: Client, conference, activity, regular_user):
-    signup = ActivitySignup.objects.create(activity=activity, user=regular_user, status="confirmed")
+    signup = ActivitySignup.objects.create(
+        activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED
+    )
     url = reverse(
         "manage:activity-promote-signup",
         kwargs={"conference_slug": conference.slug, "pk": activity.pk, "signup_pk": signup.pk},

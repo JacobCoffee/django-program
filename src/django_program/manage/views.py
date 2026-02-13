@@ -6,6 +6,7 @@ superadmins.  All conference-scoped views inherit from
 and enforces access control.
 """
 
+import csv
 import itertools
 import json
 import logging
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Count, Q, QuerySet, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -112,6 +113,15 @@ def _unique_activity_slug(name: str, conference: object, exclude_pk: int | None 
             return candidate
         counter += 1
         candidate = f"{base}-{counter}"
+
+
+def _safe_csv_cell(value: object) -> str:
+    """Return a CSV-safe string that cannot be interpreted as a formula."""
+    text = str(value or "")
+    stripped = text.lstrip()
+    if stripped and stripped[0] in ("=", "+", "-", "@"):
+        return f"'{text}"
+    return text
 
 
 class ManagePermissionMixin(LoginRequiredMixin):
@@ -1539,6 +1549,141 @@ class ActivityCreateView(ManagePermissionMixin, CreateView):
     def get_success_url(self) -> str:
         """Redirect to the activity list."""
         return reverse("manage:activity-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class ActivityOrganizerMixin(LoginRequiredMixin):
+    """Permission mixin for per-activity organizer views.
+
+    Grants access if the user is a superuser, holds the global
+    ``change_conference`` permission, holds the ``manage_activity``
+    permission, or is listed in the activity's ``organizers`` M2M.
+    """
+
+    conference: Conference
+    activity: Activity
+    kwargs: dict[str, str]
+
+    def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
+        """Resolve conference and activity, then check permissions."""
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()  # type: ignore[return-value]
+
+        self.conference = get_object_or_404(Conference, slug=kwargs.get("conference_slug", ""))
+        self.activity = get_object_or_404(Activity, pk=kwargs.get("pk"), conference=self.conference)
+
+        user = request.user
+        if not (
+            user.is_superuser
+            or user.has_perm("program_conference.change_conference")
+            or user.has_perm("program_programs.manage_activity")
+            or self.activity.organizers.filter(pk=user.pk).exists()
+        ):
+            raise PermissionDenied
+
+        return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Inject conference, activity, and sidebar metadata into context."""
+        context: dict[str, object] = super().get_context_data(**kwargs)  # type: ignore[misc]
+        context["conference"] = self.conference
+        context["activity"] = self.activity
+        return context
+
+
+class ActivityDashboardView(ActivityOrganizerMixin, ListView):
+    """Attendee list and signup management for a single activity."""
+
+    template_name = "django_program/manage/activity_dashboard.html"
+    context_object_name = "signups"
+    paginate_by = 50
+
+    def get_queryset(self) -> QuerySet[ActivitySignup]:
+        """Return signups for this activity, optionally filtered by status."""
+        qs = ActivitySignup.objects.filter(activity=self.activity).select_related("user").order_by("created_at")
+        status = self.request.GET.get("status", "")
+        return qs.filter(status=status) if status else qs.exclude(status=ActivitySignup.SignupStatus.CANCELLED)
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add signup stats, spots remaining, and filter state."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "activities"
+
+        all_signups = ActivitySignup.objects.filter(activity=self.activity)
+        confirmed = all_signups.filter(status=ActivitySignup.SignupStatus.CONFIRMED).count()
+        waitlisted = all_signups.filter(status=ActivitySignup.SignupStatus.WAITLISTED).count()
+        cancelled = all_signups.filter(status=ActivitySignup.SignupStatus.CANCELLED).count()
+        context["signup_stats"] = {
+            "total_active": confirmed + waitlisted,
+            "confirmed": confirmed,
+            "waitlisted": waitlisted,
+            "cancelled": cancelled,
+        }
+        context["spots_remaining"] = self.activity.spots_remaining
+        context["current_status"] = self.request.GET.get("status", "")
+        return context
+
+
+class ActivityDashboardExportView(ActivityOrganizerMixin, View):
+    """Export activity signups as CSV."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Return a CSV download of signups for this activity."""
+        status = request.GET.get("status", "")
+        qs = ActivitySignup.objects.filter(activity=self.activity).select_related("user").order_by("created_at")
+        qs = qs.filter(status=status) if status else qs.exclude(status=ActivitySignup.SignupStatus.CANCELLED)
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{self.activity.slug}-signups.csv"'
+        writer = csv.writer(response)
+        writer.writerow(["Username", "Full Name", "Email", "Status", "Note", "Signed Up"])
+        for signup in qs:
+            writer.writerow(
+                [
+                    _safe_csv_cell(signup.user.username),
+                    _safe_csv_cell(signup.user.get_full_name()),
+                    _safe_csv_cell(signup.user.email),
+                    signup.status,
+                    _safe_csv_cell(signup.note),
+                    signup.created_at.isoformat(),
+                ]
+            )
+        return response
+
+
+class ActivityPromoteSignupView(ActivityOrganizerMixin, View):
+    """Promote a waitlisted signup to confirmed."""
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
+        """Set a waitlisted signup's status to confirmed."""
+        with transaction.atomic():
+            activity = get_object_or_404(
+                Activity.objects.select_for_update(),
+                pk=self.activity.pk,
+                conference=self.conference,
+            )
+            signup = get_object_or_404(
+                ActivitySignup,
+                pk=kwargs.get("signup_pk"),
+                activity=activity,
+                status=ActivitySignup.SignupStatus.WAITLISTED,
+            )
+            was_full = activity.spots_remaining is not None and activity.spots_remaining <= 0
+            signup.status = ActivitySignup.SignupStatus.CONFIRMED
+            signup.save(update_fields=["status"])
+
+        if was_full:
+            messages.warning(
+                request,
+                f"Promoted {signup.user.username} to confirmed."
+                " This activity is at capacity and may now be overbooked.",
+            )
+        else:
+            messages.success(request, f"Promoted {signup.user.username} to confirmed.")
+        return redirect(
+            "manage:activity-dashboard",
+            conference_slug=self.conference.slug,
+            pk=self.activity.pk,
+        )
 
 
 class RoomSearchView(ManagePermissionMixin, View):

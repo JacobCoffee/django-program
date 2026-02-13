@@ -556,7 +556,7 @@ def test_signup_status_default_confirmed(activity: Activity, user: User):
 @pytest.mark.django_db
 def test_signup_status_choices(activity: Activity, user: User):
     """All three status values are valid."""
-    for status_val in ("confirmed", "waitlisted", "cancelled"):
+    for status_val in ActivitySignup.SignupStatus:
         ActivitySignup.objects.all().delete()
         signup = ActivitySignup.objects.create(activity=activity, user=user, status=status_val)
         assert signup.status == status_val
@@ -604,9 +604,9 @@ def test_spots_remaining_excludes_waitlisted_and_cancelled(activity: Activity):
     user1 = User.objects.create_user(username="u1", password="pass")
     user2 = User.objects.create_user(username="u2", password="pass")
     user3 = User.objects.create_user(username="u3", password="pass")
-    ActivitySignup.objects.create(activity=activity, user=user1, status="confirmed")
-    ActivitySignup.objects.create(activity=activity, user=user2, status="waitlisted")
-    ActivitySignup.objects.create(activity=activity, user=user3, status="cancelled")
+    ActivitySignup.objects.create(activity=activity, user=user1, status=ActivitySignup.SignupStatus.CONFIRMED)
+    ActivitySignup.objects.create(activity=activity, user=user2, status=ActivitySignup.SignupStatus.WAITLISTED)
+    ActivitySignup.objects.create(activity=activity, user=user3, status=ActivitySignup.SignupStatus.CANCELLED)
     assert activity.spots_remaining == 4
 
 
@@ -617,8 +617,8 @@ def test_promote_next_waitlisted_promotes_oldest(activity: Activity):
     activity.save()
     user1 = User.objects.create_user(username="first", password="pass")
     user2 = User.objects.create_user(username="second", password="pass")
-    ActivitySignup.objects.create(activity=activity, user=user1, status="waitlisted")
-    ActivitySignup.objects.create(activity=activity, user=user2, status="waitlisted")
+    ActivitySignup.objects.create(activity=activity, user=user1, status=ActivitySignup.SignupStatus.WAITLISTED)
+    ActivitySignup.objects.create(activity=activity, user=user2, status=ActivitySignup.SignupStatus.WAITLISTED)
     promoted = activity.promote_next_waitlisted()
     assert promoted is not None
     assert promoted.user == user1

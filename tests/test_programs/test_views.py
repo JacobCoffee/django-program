@@ -1220,8 +1220,8 @@ def test_detail_context_has_waitlist_count(client: Client, conference: Conferenc
     )
     user1 = User.objects.create_user(username="confirmed_user", password="pass")
     user2 = User.objects.create_user(username="waitlisted_user", password="pass")
-    ActivitySignup.objects.create(activity=act, user=user1, status="confirmed")
-    ActivitySignup.objects.create(activity=act, user=user2, status="waitlisted")
+    ActivitySignup.objects.create(activity=act, user=user1, status=ActivitySignup.SignupStatus.CONFIRMED)
+    ActivitySignup.objects.create(activity=act, user=user2, status=ActivitySignup.SignupStatus.WAITLISTED)
 
     response = client.get(f"/{conference.slug}/programs/{act.slug}/")
     assert response.context["waitlist_count"] == 1
@@ -1242,9 +1242,9 @@ def test_list_annotation_counts_only_confirmed(client: Client, conference: Confe
     user1 = User.objects.create_user(username="c1", password="pass")
     user2 = User.objects.create_user(username="w1", password="pass")
     user3 = User.objects.create_user(username="x1", password="pass")
-    ActivitySignup.objects.create(activity=act, user=user1, status="confirmed")
-    ActivitySignup.objects.create(activity=act, user=user2, status="waitlisted")
-    ActivitySignup.objects.create(activity=act, user=user3, status="cancelled")
+    ActivitySignup.objects.create(activity=act, user=user1, status=ActivitySignup.SignupStatus.CONFIRMED)
+    ActivitySignup.objects.create(activity=act, user=user2, status=ActivitySignup.SignupStatus.WAITLISTED)
+    ActivitySignup.objects.create(activity=act, user=user3, status=ActivitySignup.SignupStatus.CANCELLED)
 
     response = client.get(f"/{conference.slug}/programs/")
     activities = list(response.context["activities"])
