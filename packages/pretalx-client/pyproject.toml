@@ -73,6 +73,12 @@ select = ["ALL"]
 known-first-party = ["pretalx_client"]
 
 [tool.ruff.lint.per-file-ignores]
+"docs/conf.py" = [
+  "A001",   # Variable shadowing builtin
+  "INP001", # Implicit namespace package
+  "PTH",    # Use pathlib
+  "DTZ",    # Datetime timezone
+]
 "**/generated/**/*.*" = [
   "ANN",      # Type annotations (auto-generated)
   "ARG",      # Unused arguments (auto-generated signatures)

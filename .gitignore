@@ -16,6 +16,9 @@ staticfiles/
 
 # Generated docs/build outputs
 docs/_build/
+docs/api/_autosummary/
+packages/*/docs/_build/
+packages/*/docs/api/generated/
 dist/
 build/
 
