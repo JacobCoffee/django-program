@@ -18,8 +18,11 @@ django.setup()
 project = "django-program"
 copyright = f"{datetime.now().year}, Jacob Coffee"
 author = "Jacob Coffee"
-release = get_version("django-program")
-version = ".".join(release.split(".")[:2])
+try:
+    release = get_version("django-program")
+except Exception:  # noqa: BLE001
+    release = "0.1.0"
+version = ".".join(release.split(".")[:2]) de4cc3b (fix: address PR review comments on CI/CD and docs)
 
 extensions = [
     "sphinx.ext.autodoc",
