@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
+from django.db import models
 from django.db.models import Count, Q, QuerySet, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -50,7 +51,7 @@ from django_program.manage.forms import (
 )
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.pretalx.sync import PretalxSyncService
-from django_program.programs.models import Activity, Receipt, TravelGrant, TravelGrantMessage
+from django_program.programs.models import Activity, ActivitySignup, Receipt, TravelGrant, TravelGrantMessage
 from django_program.registration.models import AddOn, Order, Payment, TicketType, Voucher
 from django_program.settings import get_config
 from django_program.sponsors.models import Sponsor, SponsorLevel
@@ -1453,13 +1454,22 @@ class ActivityManageListView(ManagePermissionMixin, ListView):
     def get_queryset(self) -> QuerySet[Activity]:
         """Return activities for the current conference.
 
-        Annotates each activity with ``signup_count`` to avoid N+1
-        queries when rendering the signup column in the template.
+        Annotates each activity with ``signup_count`` (confirmed only)
+        and ``waitlist_count`` to avoid N+1 queries.
         """
         return (
             Activity.objects.filter(conference=self.conference)
             .select_related("room")
-            .annotate(signup_count=Count("signups"))
+            .annotate(
+                signup_count=Count(
+                    "signups",
+                    filter=models.Q(signups__status=ActivitySignup.SignupStatus.CONFIRMED),
+                ),
+                waitlist_count=Count(
+                    "signups",
+                    filter=models.Q(signups__status=ActivitySignup.SignupStatus.WAITLISTED),
+                ),
+            )
             .order_by("start_time", "name")
         )
 
@@ -1472,10 +1482,11 @@ class ActivityEditView(ManagePermissionMixin, UpdateView):
     context_object_name = "activity"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add ``active_nav`` and signup count to the template context."""
+        """Add ``active_nav`` and signup counts to the template context."""
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "activities"
-        context["signup_count"] = self.object.signups.count()
+        context["signup_count"] = self.object.signups.filter(status=ActivitySignup.SignupStatus.CONFIRMED).count()
+        context["waitlist_count"] = self.object.signups.filter(status=ActivitySignup.SignupStatus.WAITLISTED).count()
         return context
 
     def get_queryset(self) -> QuerySet[Activity]:

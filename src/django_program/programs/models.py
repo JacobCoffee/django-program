@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.validators import FileExtensionValidator
-from django.db import models
+from django.db import models, transaction
 from encrypted_fields import EncryptedCharField, EncryptedTextField
 
 
@@ -105,18 +105,45 @@ class Activity(models.Model):
 
     @property
     def spots_remaining(self) -> int | None:
-        """Return the number of remaining spots, or None if unlimited."""
+        """Return the number of remaining confirmed spots, or None if unlimited."""
         if self.max_participants is None:
             return None
-        return max(0, self.max_participants - self.signups.count())
+        confirmed = self.signups.filter(status=ActivitySignup.SignupStatus.CONFIRMED).count()
+        return max(0, self.max_participants - confirmed)
+
+    def promote_next_waitlisted(self) -> ActivitySignup | None:
+        """Promote the oldest waitlisted signup to confirmed.
+
+        Must be called inside a transaction. Returns the promoted signup
+        or None if no one is waitlisted.
+        """
+        with transaction.atomic():
+            next_signup = (
+                self.signups.select_for_update()
+                .filter(status=ActivitySignup.SignupStatus.WAITLISTED)
+                .order_by("created_at")
+                .first()
+            )
+            if next_signup is not None:
+                next_signup.status = ActivitySignup.SignupStatus.CONFIRMED
+                next_signup.save(update_fields=["status"])
+            return next_signup
 
 
 class ActivitySignup(models.Model):
     """A user's signup for an activity.
 
-    Each user may sign up for a given activity at most once, enforced
-    by the ``unique_together`` constraint.
+    Each user may have at most one non-cancelled signup per activity,
+    enforced by a conditional ``UniqueConstraint``.  The status field
+    tracks whether the signup is confirmed, waitlisted, or cancelled.
     """
+
+    class SignupStatus(models.TextChoices):
+        """Lifecycle states for an activity signup."""
+
+        CONFIRMED = "confirmed", "Confirmed"
+        WAITLISTED = "waitlisted", "Waitlisted"
+        CANCELLED = "cancelled", "Cancelled"
 
     activity = models.ForeignKey(
         Activity,
@@ -128,19 +155,51 @@ class ActivitySignup(models.Model):
         on_delete=models.CASCADE,
         related_name="activity_signups",
     )
+    status = models.CharField(
+        max_length=20,
+        choices=SignupStatus.choices,
+        default=SignupStatus.CONFIRMED,
+    )
     note = models.TextField(
         blank=True,
         default="",
         help_text="Optional note from the attendee.",
     )
+    cancelled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
-        unique_together = [("activity", "user")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["activity", "user"],
+                condition=~models.Q(status="cancelled"),
+                name="unique_active_signup_per_user",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.user} - {self.activity.name}"
+
+    @property
+    def is_confirmed(self) -> bool:
+        """Whether this signup is confirmed."""
+        return self.status == self.SignupStatus.CONFIRMED
+
+    @property
+    def is_waitlisted(self) -> bool:
+        """Whether this signup is on the waitlist."""
+        return self.status == self.SignupStatus.WAITLISTED
+
+    @property
+    def is_cancelled(self) -> bool:
+        """Whether this signup has been cancelled."""
+        return self.status == self.SignupStatus.CANCELLED
+
+    @property
+    def can_cancel(self) -> bool:
+        """Whether this signup can be cancelled (confirmed or waitlisted)."""
+        return self.status in (self.SignupStatus.CONFIRMED, self.SignupStatus.WAITLISTED)
 
 
 # ---------------------------------------------------------------------------

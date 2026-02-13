@@ -32,7 +32,10 @@
       <td>{{ activity.get_activity_type_display }}</td>
       <td>{{ activity.start_time|default:"--" }}</td>
       <td>{% if activity.room %}{{ activity.room.name }}{% elif activity.location %}{{ activity.location }}{% else %}--{% endif %}</td>
-      <td>{{ activity.signup_count }}{% if activity.max_participants %} / {{ activity.max_participants }}{% endif %}</td>
+      <td>
+        {{ activity.signup_count }}{% if activity.max_participants %} / {{ activity.max_participants }}{% endif %}
+        {% if activity.waitlist_count %}<br><span style="font-size: 0.8em; color: var(--color-text-muted);">{{ activity.waitlist_count }} waitlisted</span>{% endif %}
+      </td>
       <td>
         {% if activity.is_active %}
         <span class="badge badge--active">Active</span>

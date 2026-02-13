@@ -104,7 +104,8 @@ def test_activity_signup_requires_login(client: Client, conference: Conference, 
 
 
 @pytest.mark.django_db
-def test_activity_signup_full(client: Client, conference: Conference, user: User):
+def test_activity_signup_full_creates_waitlisted(client: Client, conference: Conference, user: User):
+    """When activity is full, signing up creates a waitlisted signup."""
     full_activity = Activity.objects.create(
         conference=conference,
         name="Full Event",
@@ -116,7 +117,8 @@ def test_activity_signup_full(client: Client, conference: Conference, user: User
     client.force_login(user)
     response = client.post(f"/{conference.slug}/programs/{full_activity.slug}/signup/")
     assert response.status_code == 302
-    assert not ActivitySignup.objects.filter(activity=full_activity, user=user).exists()
+    signup = ActivitySignup.objects.get(activity=full_activity, user=user)
+    assert signup.status == ActivitySignup.SignupStatus.WAITLISTED
 
 
 @pytest.mark.django_db
@@ -1008,3 +1010,243 @@ def test_payment_info_post_invalid_rerenders(
     )
     assert response.status_code == 200
     assert "form" in response.context
+
+
+# ---- Activity Signup Waitlisting & Cancellation ----
+
+
+@pytest.mark.django_db
+def test_signup_confirms_when_spots_available(client: Client, conference: Conference, user: User):
+    """Signup is confirmed when spots are available."""
+    act = Activity.objects.create(
+        conference=conference,
+        name="Open",
+        slug="open",
+        activity_type=Activity.ActivityType.SPRINT,
+        max_participants=10,
+        is_active=True,
+    )
+    client.force_login(user)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+    signup = ActivitySignup.objects.get(activity=act, user=user)
+    assert signup.status == ActivitySignup.SignupStatus.CONFIRMED
+
+
+@pytest.mark.django_db
+def test_signup_unlimited_always_confirms(client: Client, conference: Conference, user: User):
+    """Unlimited activities always confirm signups."""
+    act = Activity.objects.create(
+        conference=conference,
+        name="Unlimited",
+        slug="unlimited",
+        activity_type=Activity.ActivityType.SPRINT,
+        is_active=True,
+    )
+    client.force_login(user)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+    signup = ActivitySignup.objects.get(activity=act, user=user)
+    assert signup.is_confirmed
+
+
+@pytest.mark.django_db
+def test_signup_idempotent_for_existing_active(client: Client, conference: Conference, activity: Activity, user: User):
+    """Re-posting signup when already signed up shows info message, no duplicate."""
+    client.force_login(user)
+    client.post(f"/{conference.slug}/programs/{activity.slug}/signup/")
+    client.post(f"/{conference.slug}/programs/{activity.slug}/signup/")
+    assert (
+        ActivitySignup.objects.filter(activity=activity, user=user)
+        .exclude(status=ActivitySignup.SignupStatus.CANCELLED)
+        .count()
+        == 1
+    )
+
+
+@pytest.mark.django_db
+def test_signup_after_cancel_creates_new(client: Client, conference: Conference, activity: Activity, user: User):
+    """A user can re-signup after cancelling."""
+    client.force_login(user)
+    client.post(f"/{conference.slug}/programs/{activity.slug}/signup/")
+    client.post(f"/{conference.slug}/programs/{activity.slug}/cancel-signup/")
+    client.post(f"/{conference.slug}/programs/{activity.slug}/signup/")
+    active_signups = ActivitySignup.objects.filter(activity=activity, user=user).exclude(
+        status=ActivitySignup.SignupStatus.CANCELLED
+    )
+    assert active_signups.count() == 1
+    assert active_signups.first().is_confirmed
+
+
+@pytest.mark.django_db
+def test_cancel_confirmed_sets_status_and_timestamp(
+    client: Client, conference: Conference, activity: Activity, user: User
+):
+    """Cancelling a confirmed signup sets status to cancelled and sets cancelled_at."""
+    client.force_login(user)
+    client.post(f"/{conference.slug}/programs/{activity.slug}/signup/")
+    client.post(f"/{conference.slug}/programs/{activity.slug}/cancel-signup/")
+    signup = ActivitySignup.objects.get(activity=activity, user=user)
+    assert signup.status == ActivitySignup.SignupStatus.CANCELLED
+    assert signup.cancelled_at is not None
+
+
+@pytest.mark.django_db
+def test_cancel_confirmed_promotes_next_waitlisted(client: Client, conference: Conference):
+    """Cancelling a confirmed signup promotes the oldest waitlisted person."""
+    act = Activity.objects.create(
+        conference=conference,
+        name="Full",
+        slug="full",
+        activity_type=Activity.ActivityType.SUMMIT,
+        max_participants=1,
+        is_active=True,
+    )
+    user1 = User.objects.create_user(username="first", password="pass")
+    user2 = User.objects.create_user(username="second", password="pass")
+
+    # user1 gets confirmed, user2 gets waitlisted
+    client.force_login(user1)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+    client.force_login(user2)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+
+    signup2 = ActivitySignup.objects.get(activity=act, user=user2)
+    assert signup2.is_waitlisted
+
+    # user1 cancels - user2 should be promoted
+    client.force_login(user1)
+    client.post(f"/{conference.slug}/programs/{act.slug}/cancel-signup/")
+
+    signup2.refresh_from_db()
+    assert signup2.is_confirmed
+
+
+@pytest.mark.django_db
+def test_cancel_waitlisted_no_promotion(client: Client, conference: Conference):
+    """Cancelling a waitlisted signup does not trigger promotion."""
+    act = Activity.objects.create(
+        conference=conference,
+        name="Summit",
+        slug="summit",
+        activity_type=Activity.ActivityType.SUMMIT,
+        max_participants=1,
+        is_active=True,
+    )
+    user1 = User.objects.create_user(username="confirmed_user", password="pass")
+    user2 = User.objects.create_user(username="waitlisted1", password="pass")
+    user3 = User.objects.create_user(username="waitlisted2", password="pass")
+
+    client.force_login(user1)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+    client.force_login(user2)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+    client.force_login(user3)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+
+    # user2 cancels their waitlisted signup - user3 should stay waitlisted
+    client.force_login(user2)
+    client.post(f"/{conference.slug}/programs/{act.slug}/cancel-signup/")
+
+    signup3 = ActivitySignup.objects.get(activity=act, user=user3)
+    assert signup3.is_waitlisted
+
+
+@pytest.mark.django_db
+def test_cancel_requires_login(client: Client, conference: Conference, activity: Activity):
+    """Cancel signup requires authentication."""
+    response = client.post(f"/{conference.slug}/programs/{activity.slug}/cancel-signup/")
+    assert response.status_code == 302
+    assert "/accounts/login/" in response.url or "login" in response.url
+
+
+@pytest.mark.django_db
+def test_cancel_no_signup_shows_error(client: Client, conference: Conference, activity: Activity, user: User):
+    """Cancelling when no active signup exists shows an error."""
+    client.force_login(user)
+    response = client.post(f"/{conference.slug}/programs/{activity.slug}/cancel-signup/")
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_promotion_order_is_fifo(client: Client, conference: Conference):
+    """Promotion is FIFO — oldest waitlisted person is promoted first."""
+    act = Activity.objects.create(
+        conference=conference,
+        name="FIFO",
+        slug="fifo",
+        activity_type=Activity.ActivityType.SUMMIT,
+        max_participants=1,
+        is_active=True,
+    )
+    user1 = User.objects.create_user(username="slot_holder", password="pass")
+    user2 = User.objects.create_user(username="waiter_first", password="pass")
+    user3 = User.objects.create_user(username="waiter_second", password="pass")
+
+    client.force_login(user1)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+    client.force_login(user2)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+    client.force_login(user3)
+    client.post(f"/{conference.slug}/programs/{act.slug}/signup/")
+
+    # Cancel the confirmed user
+    client.force_login(user1)
+    client.post(f"/{conference.slug}/programs/{act.slug}/cancel-signup/")
+
+    # user2 (first waiter) should be promoted, user3 should still be waitlisted
+    assert ActivitySignup.objects.get(activity=act, user=user2).is_confirmed
+    assert ActivitySignup.objects.get(activity=act, user=user3).is_waitlisted
+
+
+@pytest.mark.django_db
+def test_detail_context_has_user_signup(client: Client, conference: Conference, activity: Activity, user: User):
+    """Detail view includes user_signup in context."""
+    client.force_login(user)
+    client.post(f"/{conference.slug}/programs/{activity.slug}/signup/")
+    response = client.get(f"/{conference.slug}/programs/{activity.slug}/")
+    assert response.context["user_signup"] is not None
+    assert response.context["user_signup"].user == user
+
+
+@pytest.mark.django_db
+def test_detail_context_has_waitlist_count(client: Client, conference: Conference):
+    """Detail view includes waitlist_count in context."""
+    act = Activity.objects.create(
+        conference=conference,
+        name="Capped",
+        slug="capped",
+        activity_type=Activity.ActivityType.SUMMIT,
+        max_participants=1,
+        is_active=True,
+    )
+    user1 = User.objects.create_user(username="confirmed_user", password="pass")
+    user2 = User.objects.create_user(username="waitlisted_user", password="pass")
+    ActivitySignup.objects.create(activity=act, user=user1, status="confirmed")
+    ActivitySignup.objects.create(activity=act, user=user2, status="waitlisted")
+
+    response = client.get(f"/{conference.slug}/programs/{act.slug}/")
+    assert response.context["waitlist_count"] == 1
+    assert len(response.context["signups"]) == 1
+
+
+@pytest.mark.django_db
+def test_list_annotation_counts_only_confirmed(client: Client, conference: Conference):
+    """List view signup_count annotation only counts confirmed signups."""
+    act = Activity.objects.create(
+        conference=conference,
+        name="Mixed",
+        slug="mixed",
+        activity_type=Activity.ActivityType.SPRINT,
+        max_participants=5,
+        is_active=True,
+    )
+    user1 = User.objects.create_user(username="c1", password="pass")
+    user2 = User.objects.create_user(username="w1", password="pass")
+    user3 = User.objects.create_user(username="x1", password="pass")
+    ActivitySignup.objects.create(activity=act, user=user1, status="confirmed")
+    ActivitySignup.objects.create(activity=act, user=user2, status="waitlisted")
+    ActivitySignup.objects.create(activity=act, user=user3, status="cancelled")
+
+    response = client.get(f"/{conference.slug}/programs/")
+    activities = list(response.context["activities"])
+    assert activities[0].signup_count == 1
+    assert activities[0].waitlist_count == 1

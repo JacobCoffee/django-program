@@ -54,7 +54,7 @@
 
 {% if not is_create and signup_count %}
 <h2 class="section-heading" style="margin-top: 2rem;">Signups ({{ signup_count }})</h2>
-<p style="color: var(--color-text-secondary); font-size: 0.9rem;">{{ signup_count }} attendee{{ signup_count|pluralize }} signed up for this activity.</p>
+<p style="color: var(--color-text-secondary); font-size: 0.9rem;">{{ signup_count }} confirmed{% if waitlist_count %}, {{ waitlist_count }} waitlisted{% endif %}</p>
 {% endif %}
 {% endblock %}
 

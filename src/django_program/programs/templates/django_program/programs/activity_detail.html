@@ -24,7 +24,7 @@
       <span class="talk-meta-item"><span class="talk-meta-label">End</span> {{ activity.end_time|date:"M j, g:i A" }}</span>
       {% endif %}
       {% if spots_remaining is not None %}
-      <span class="talk-meta-item"><span class="talk-meta-label">Capacity</span> {{ spots_remaining }} of {{ activity.max_participants }} remaining</span>
+      <span class="talk-meta-item"><span class="talk-meta-label">Capacity</span> {{ spots_remaining }} of {{ activity.max_participants }} remaining{% if waitlist_count %} ({{ waitlist_count }} waitlisted){% endif %}</span>
       {% endif %}
     </div>
   </div>
@@ -117,8 +117,28 @@
 {% if user.is_authenticated %}
 <div class="talk-section">
   <h3 class="section-heading">Sign Up</h3>
-  {% if spots_remaining is not None and spots_remaining <= 0 %}
-  <p style="color: var(--color-text-muted); font-style: italic;">This activity is full.</p>
+  {% if user_signup and user_signup.is_confirmed %}
+  <p style="font-weight: 600; color: var(--color-success, #16a34a);">You are signed up for this activity.</p>
+  <form method="post" action="{% url 'programs:activity-cancel-signup' conference.slug activity.slug %}" style="margin-top: 0.5rem;">
+    {% csrf_token %}
+    <button type="submit" style="padding: 0.45rem 1rem; background: var(--color-danger, #dc2626); color: #fff; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.85rem; cursor: pointer;">Cancel Signup</button>
+  </form>
+  {% elif user_signup and user_signup.is_waitlisted %}
+  <p style="font-weight: 600; color: var(--color-warning, #d97706);">You are on the waitlist for this activity.</p>
+  <form method="post" action="{% url 'programs:activity-cancel-signup' conference.slug activity.slug %}" style="margin-top: 0.5rem;">
+    {% csrf_token %}
+    <button type="submit" style="padding: 0.45rem 1rem; background: var(--color-danger, #dc2626); color: #fff; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.85rem; cursor: pointer;">Leave Waitlist</button>
+  </form>
+  {% elif spots_remaining is not None and spots_remaining <= 0 %}
+  <p style="color: var(--color-text-muted); font-style: italic;">This activity is full. You can join the waitlist.</p>
+  <form method="post" action="{% url 'programs:activity-signup' conference.slug activity.slug %}" style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; margin-top: 0.5rem;">
+    {% csrf_token %}
+    <div style="flex: 1; min-width: 200px;">
+      <label for="note" style="display: block; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); margin-bottom: 0.3rem;">Note (optional)</label>
+      <textarea id="note" name="note" rows="2" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: inherit; font-size: 0.9rem; resize: vertical;"></textarea>
+    </div>
+    <button type="submit" style="padding: 0.55rem 1.25rem; background: var(--color-warning, #d97706); color: #fff; border: none; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.9rem; cursor: pointer; white-space: nowrap;">Join Waitlist</button>
+  </form>
   {% else %}
   <form method="post" action="{% url 'programs:activity-signup' conference.slug activity.slug %}" style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
     {% csrf_token %}

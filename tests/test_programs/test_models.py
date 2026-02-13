@@ -80,7 +80,8 @@ def test_activity_signup_str(activity: Activity, user: User):
 
 
 @pytest.mark.django_db
-def test_activity_signup_unique(activity: Activity, user: User):
+def test_activity_signup_unique_active(activity: Activity, user: User):
+    """Only one non-cancelled signup per user per activity is allowed."""
     ActivitySignup.objects.create(activity=activity, user=user)
     with pytest.raises(IntegrityError):
         ActivitySignup.objects.create(activity=activity, user=user)
@@ -540,3 +541,103 @@ def test_travel_grant_message_str(conference: Conference, user: User):
         visible=True,
     )
     assert str(msg) == f"Grant message for {user} by {user}"
+
+
+# ---- ActivitySignup status lifecycle ----
+
+
+@pytest.mark.django_db
+def test_signup_status_default_confirmed(activity: Activity, user: User):
+    """Default signup status is CONFIRMED."""
+    signup = ActivitySignup.objects.create(activity=activity, user=user)
+    assert signup.status == ActivitySignup.SignupStatus.CONFIRMED
+
+
+@pytest.mark.django_db
+def test_signup_status_choices(activity: Activity, user: User):
+    """All three status values are valid."""
+    for status_val in ("confirmed", "waitlisted", "cancelled"):
+        ActivitySignup.objects.all().delete()
+        signup = ActivitySignup.objects.create(activity=activity, user=user, status=status_val)
+        assert signup.status == status_val
+
+
+@pytest.mark.django_db
+def test_signup_is_confirmed_property(activity: Activity, user: User):
+    signup = ActivitySignup.objects.create(activity=activity, user=user)
+    assert signup.is_confirmed is True
+    assert signup.is_waitlisted is False
+    assert signup.is_cancelled is False
+
+
+@pytest.mark.django_db
+def test_signup_is_waitlisted_property(activity: Activity, user: User):
+    signup = ActivitySignup.objects.create(activity=activity, user=user, status=ActivitySignup.SignupStatus.WAITLISTED)
+    assert signup.is_waitlisted is True
+    assert signup.is_confirmed is False
+
+
+@pytest.mark.django_db
+def test_signup_is_cancelled_property(activity: Activity, user: User):
+    signup = ActivitySignup.objects.create(activity=activity, user=user, status=ActivitySignup.SignupStatus.CANCELLED)
+    assert signup.is_cancelled is True
+    assert signup.can_cancel is False
+
+
+@pytest.mark.django_db
+def test_signup_can_cancel_confirmed(activity: Activity, user: User):
+    signup = ActivitySignup.objects.create(activity=activity, user=user)
+    assert signup.can_cancel is True
+
+
+@pytest.mark.django_db
+def test_signup_can_cancel_waitlisted(activity: Activity, user: User):
+    signup = ActivitySignup.objects.create(activity=activity, user=user, status=ActivitySignup.SignupStatus.WAITLISTED)
+    assert signup.can_cancel is True
+
+
+@pytest.mark.django_db
+def test_spots_remaining_excludes_waitlisted_and_cancelled(activity: Activity):
+    """spots_remaining only counts confirmed signups against capacity."""
+    activity.max_participants = 5
+    activity.save()
+    user1 = User.objects.create_user(username="u1", password="pass")
+    user2 = User.objects.create_user(username="u2", password="pass")
+    user3 = User.objects.create_user(username="u3", password="pass")
+    ActivitySignup.objects.create(activity=activity, user=user1, status="confirmed")
+    ActivitySignup.objects.create(activity=activity, user=user2, status="waitlisted")
+    ActivitySignup.objects.create(activity=activity, user=user3, status="cancelled")
+    assert activity.spots_remaining == 4
+
+
+@pytest.mark.django_db
+def test_promote_next_waitlisted_promotes_oldest(activity: Activity):
+    """promote_next_waitlisted promotes the oldest waitlisted signup."""
+    activity.max_participants = 1
+    activity.save()
+    user1 = User.objects.create_user(username="first", password="pass")
+    user2 = User.objects.create_user(username="second", password="pass")
+    ActivitySignup.objects.create(activity=activity, user=user1, status="waitlisted")
+    ActivitySignup.objects.create(activity=activity, user=user2, status="waitlisted")
+    promoted = activity.promote_next_waitlisted()
+    assert promoted is not None
+    assert promoted.user == user1
+    assert promoted.status == ActivitySignup.SignupStatus.CONFIRMED
+
+
+@pytest.mark.django_db
+def test_promote_next_waitlisted_returns_none_when_empty(activity: Activity):
+    """promote_next_waitlisted returns None when no one is waitlisted."""
+    result = activity.promote_next_waitlisted()
+    assert result is None
+
+
+@pytest.mark.django_db
+def test_cancelled_signup_allows_new_signup(activity: Activity, user: User):
+    """A user can re-signup after cancelling (conditional unique constraint)."""
+    signup = ActivitySignup.objects.create(activity=activity, user=user)
+    signup.status = ActivitySignup.SignupStatus.CANCELLED
+    signup.save()
+    new_signup = ActivitySignup.objects.create(activity=activity, user=user)
+    assert new_signup.pk != signup.pk
+    assert new_signup.is_confirmed

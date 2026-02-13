@@ -8,6 +8,7 @@ endpoints scoped to a conference slug.
 from django.urls import path
 
 from django_program.programs.views import (
+    ActivityCancelSignupView,
     ActivityDetailView,
     ActivityListView,
     ActivitySignupView,
@@ -41,4 +42,5 @@ urlpatterns = [
     path("travel-grants/payment-info/", PaymentInfoView.as_view(), name="travel-grant-payment-info"),
     path("<slug:slug>/", ActivityDetailView.as_view(), name="activity-detail"),
     path("<slug:slug>/signup/", ActivitySignupView.as_view(), name="activity-signup"),
+    path("<slug:slug>/cancel-signup/", ActivityCancelSignupView.as_view(), name="activity-cancel-signup"),
 ]
