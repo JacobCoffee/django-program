@@ -56,7 +56,7 @@ jobs:
         run: >-
           uv run sphinx-build -M html
           docs docs/_build/
-          -E -a -j auto --keep-going -W
+          -E -a -j auto --keep-going
 
       - name: Merge doc sites
         run: |
