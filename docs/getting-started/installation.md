@@ -117,6 +117,8 @@ django-program ships its own templates. Make sure your `TEMPLATES` setting inclu
 app directories so Django can find them:
 
 ```python
+from pathlib import Path
+
 import django_program
 
 TEMPLATES = [
