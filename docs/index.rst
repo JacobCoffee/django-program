@@ -52,7 +52,7 @@ Key Features
 ------------
 
 - **Ticket Sales** -- Ticket types with availability windows, stock limits, per-user caps, and voucher-gated access
-- **Cart & Checkout** -- Expiring carts, voucher discounts (percentage, fixed, comp), Stripe Checkout Sessions
+- **Cart & Checkout** -- Expiring carts, voucher discounts (percentage, fixed, comp), Stripe PaymentIntents confirmed via Stripe.js
 - **Pretalx Sync** -- Typed HTTP client with automatic /talks/ fallback, multilingual field handling, and weekly drift detection
 - **Sponsors** -- Sponsor levels, benefits, comp vouchers auto-generated on sponsor creation
 - **Program Activities** -- Sprints, tutorials, open spaces with signup caps, waitlisting, and travel grants

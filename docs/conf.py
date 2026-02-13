@@ -3,6 +3,7 @@
 import os
 import sys
 from datetime import datetime
+from importlib.metadata import version as get_version
 
 sys.path.insert(0, os.path.abspath(".."))
 sys.path.insert(0, os.path.abspath("../src"))
@@ -17,8 +18,8 @@ django.setup()
 project = "django-program"
 copyright = f"{datetime.now().year}, Jacob Coffee"
 author = "Jacob Coffee"
-release = "0.1.0"
-version = "0.1.0"
+release = get_version("django-program")
+version = ".".join(release.split(".")[:2])
 
 extensions = [
     "sphinx.ext.autodoc",
