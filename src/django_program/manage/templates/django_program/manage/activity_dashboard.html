@@ -1,0 +1,118 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}{{ activity.name }} - Attendees{% endblock %}
+
+{% block breadcrumbs %}
+<a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a> &rsaquo;
+<a href="{% url 'manage:activity-list' conference.slug %}">Activities</a> &rsaquo;
+{{ activity.name }} &rsaquo; Attendees
+{% endblock %}
+
+{% block page_title %}
+<h1>{{ activity.name }}</h1>
+<p>Manage attendees and signups</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:activity-dashboard-export' conference.slug activity.pk %}{% if current_status %}?status={{ current_status }}{% endif %}" class="btn btn-secondary">Export CSV</a>
+{% if user.is_superuser or perms.program_conference.change_conference %}
+<a href="{% url 'manage:activity-edit' conference.slug activity.pk %}" class="btn btn-primary">Edit Activity</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="stat-grid" style="margin-bottom: 1.5rem;">
+  <div class="stat-card">
+    <a href="?">
+      <div class="stat-card-value">{{ signup_stats.total_active }}</div>
+      <div class="stat-card-label">Total Active</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=confirmed">
+      <div class="stat-card-value" style="color: var(--color-success);">{{ signup_stats.confirmed }}</div>
+      <div class="stat-card-label">Confirmed</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=waitlisted">
+      <div class="stat-card-value" style="color: var(--color-warning);">{{ signup_stats.waitlisted }}</div>
+      <div class="stat-card-label">Waitlisted</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{% if spots_remaining is not None %}{{ spots_remaining }}{% else %}&infin;{% endif %}</div>
+    <div class="stat-card-label">Spots Remaining</div>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <form method="get" style="display: flex; align-items: center; gap: 0.5rem;">
+    <select name="status" onchange="this.form.submit()">
+      <option value="">Active (excl. cancelled)</option>
+      <option value="confirmed"{% if current_status == "confirmed" %} selected{% endif %}>Confirmed</option>
+      <option value="waitlisted"{% if current_status == "waitlisted" %} selected{% endif %}>Waitlisted</option>
+      <option value="cancelled"{% if current_status == "cancelled" %} selected{% endif %}>Cancelled</option>
+    </select>
+    {% if current_status %}
+    <a href="?" class="btn btn-sm btn-secondary">Clear filter</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if signups %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Attendee</th>
+      <th>Email</th>
+      <th>Status</th>
+      <th>Note</th>
+      <th>Signed Up</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for signup in signups %}
+    <tr>
+      <td>{{ signup.user.get_full_name|default:signup.user.username }}</td>
+      <td>{{ signup.user.email|default:"--" }}</td>
+      <td>
+        {% if signup.status == "confirmed" %}
+        <span class="badge badge--active">Confirmed</span>
+        {% elif signup.status == "waitlisted" %}
+        <span class="badge badge--warning">Waitlisted</span>
+        {% elif signup.status == "cancelled" %}
+        <span class="badge badge--inactive">Cancelled</span>
+        {% endif %}
+      </td>
+      <td>{{ signup.note|default:"--" }}</td>
+      <td>{{ signup.created_at|date:"N j, Y H:i" }}</td>
+      <td>
+        {% if signup.status == "waitlisted" %}
+        <p style="margin: 0 0 0.35rem 0; font-size: 0.75rem; color: var(--color-text-muted);">
+          Manual promotion can overbook this activity.
+        </p>
+        <form method="post" action="{% url 'manage:activity-promote-signup' conference.slug activity.pk signup.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-primary">Force Promote</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+{% else %}
+<div class="empty-state">
+  {% if current_status %}
+  <p>No signups with status "{{ current_status }}".</p>
+  <p><a href="?" class="btn btn-secondary">Show all active</a></p>
+  {% else %}
+  <p>No signups for this activity yet.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

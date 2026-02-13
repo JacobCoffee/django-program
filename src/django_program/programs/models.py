@@ -88,6 +88,12 @@ class Activity(models.Model):
         help_text="External link for more details.",
     )
     is_active = models.BooleanField(default=True)
+    organizers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="organized_activities",
+        blank=True,
+        help_text="Users who can manage signups for this activity.",
+    )
     synced_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -99,6 +105,9 @@ class Activity(models.Model):
     class Meta:
         ordering = ["start_time", "name"]
         unique_together = [("conference", "slug")]
+        permissions = [
+            ("manage_activity", "Can manage activity signups"),
+        ]
 
     def __str__(self) -> str:
         return str(self.name)

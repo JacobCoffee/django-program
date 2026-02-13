@@ -302,10 +302,12 @@ class ActivityForm(forms.ModelForm):
             "requires_ticket",
             "external_url",
             "is_active",
+            "organizers",
         ]
         widgets = {
             "start_time": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
             "end_time": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+            "organizers": forms.CheckboxSelectMultiple,
         }
 
 

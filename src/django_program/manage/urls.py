@@ -11,8 +11,11 @@ from django.urls import path
 
 from django_program.manage.views import (
     ActivityCreateView,
+    ActivityDashboardExportView,
+    ActivityDashboardView,
     ActivityEditView,
     ActivityManageListView,
+    ActivityPromoteSignupView,
     AddOnCreateView,
     AddOnEditView,
     AddOnListView,
@@ -127,6 +130,21 @@ urlpatterns = [
         "<slug:conference_slug>/activities/<int:pk>/edit/",
         ActivityEditView.as_view(),
         name="activity-edit",
+    ),
+    path(
+        "<slug:conference_slug>/activities/<int:pk>/dashboard/",
+        ActivityDashboardView.as_view(),
+        name="activity-dashboard",
+    ),
+    path(
+        "<slug:conference_slug>/activities/<int:pk>/dashboard/export/",
+        ActivityDashboardExportView.as_view(),
+        name="activity-dashboard-export",
+    ),
+    path(
+        "<slug:conference_slug>/activities/<int:pk>/dashboard/<int:signup_pk>/promote/",
+        ActivityPromoteSignupView.as_view(),
+        name="activity-promote-signup",
     ),
     path("<slug:conference_slug>/travel-grants/", TravelGrantManageListView.as_view(), name="travel-grant-list"),
     path(

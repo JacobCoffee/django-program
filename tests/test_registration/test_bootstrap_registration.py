@@ -255,7 +255,7 @@ class TestSetupGroups:
         call_command("setup_groups")
         call_command("setup_groups")
 
-        assert Group.objects.filter(name__startswith="Program:").count() == 4
+        assert Group.objects.filter(name__startswith="Program:").count() == 5
 
 
 # ---------------------------------------------------------------

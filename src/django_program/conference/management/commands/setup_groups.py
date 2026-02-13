@@ -39,6 +39,8 @@ _GROUP_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("program_registration", "view_cartitem"),
         ("program_registration", "view_payment"),
         ("program_registration", "view_credit"),
+        # Activity signup management
+        ("program_programs", "manage_activity"),
     ],
     "Program: Registration & Ticket Support": [
         # View conference context
@@ -81,6 +83,12 @@ _GROUP_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("program_registration", "view_tickettype"),
         ("program_registration", "view_addon"),
     ],
+    "Program: Activity Organizers": [
+        ("program_conference", "view_conference"),
+        ("program_programs", "manage_activity"),
+        ("program_programs", "view_activity"),
+        ("program_programs", "view_activitysignup"),
+    ],
     "Program: Read-Only Staff": [
         ("program_conference", "view_conference"),
         ("program_conference", "view_section"),
@@ -100,11 +108,12 @@ _GROUP_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
 class Command(BaseCommand):
     """Create default permission groups for conference staff roles.
 
-    Creates four groups with appropriate permissions:
+    Creates five groups with appropriate permissions:
 
-    * **Conference Organizers** -- full conference, ticket, and voucher management
+    * **Conference Organizers** -- full conference, ticket, voucher, and activity management
     * **Registration & Ticket Support** -- ticket ops, voucher issuing, order support
     * **Finance & Accounting** -- orders, payments, credits, and revenue visibility
+    * **Activity Organizers** -- per-activity signup management
     * **Read-Only Staff** -- view-only access to all registration models
 
     Safe to run multiple times; existing groups are updated with the defined

@@ -47,6 +47,7 @@
         {% endif %}
       </td>
       <td>
+        <a href="{% url 'manage:activity-dashboard' conference.slug activity.pk %}" class="btn btn-sm btn-secondary">Dashboard</a>
         <a href="{% url 'manage:activity-edit' conference.slug activity.pk %}" class="btn btn-sm btn-secondary">Edit</a>
       </td>
     </tr>
