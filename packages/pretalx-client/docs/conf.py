@@ -85,6 +85,10 @@ typehints_use_rtype = True
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "httpx": ("https://www.python-httpx.org/", None),
+    # Tuple inventory: try local build first, fall back to remote.
+    # Local inv only exists when built via root `make docs` (which builds
+    # django-program after this package). Standalone builds get the 2
+    # expected intersphinx warnings.
     "django_program": (
         "https://jacobcoffee.github.io/django-program/",
         ("../../../docs/_build/html/objects.inv", None),

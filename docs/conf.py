@@ -86,6 +86,9 @@ intersphinx_mapping = {
         "https://docs.djangoproject.com/en/5.2/",
         "https://docs.djangoproject.com/en/5.2/_objects/",
     ),
+    # Tuple inventory: try local build first, fall back to remote.
+    # Sphinx accepts (str|None, ...) as inventory_locations.
+    # Local inventory exists because make docs builds pretalx-client first.
     "pretalx_client": (
         "https://jacobcoffee.github.io/django-program/pretalx-client/",
         ("../packages/pretalx-client/docs/_build/html/objects.inv", None),

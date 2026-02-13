@@ -268,20 +268,25 @@ Stripe webhook events are handled by a registry-based dispatch system in `django
 
 ### Setup
 
-Wire the webhook view in your URL config:
+The webhook is included automatically by the registration URL conf. Mount it with the
+standard conference-slug prefix:
 
 ```python
-from django_program.registration.webhooks import stripe_webhook
+from django.urls import include, path
 
 urlpatterns = [
     path(
-        "webhooks/stripe/<slug:conference_slug>/",
-        stripe_webhook,
+        "<slug:conference_slug>/register/",
+        include("django_program.registration.urls"),
     ),
 ]
 ```
 
-Each conference has its own webhook endpoint. The view verifies the event signature against the conference's webhook secret, deduplicates by Stripe event ID (stored in {class}`~django_program.registration.models.StripeEvent`), and dispatches to the registered handler.
+This exposes the webhook at `/<conference_slug>/register/webhooks/stripe/`. Each
+conference has its own webhook endpoint. The view verifies the event signature against
+the conference's webhook secret, deduplicates by Stripe event ID (stored in
+{class}`~django_program.registration.models.StripeEvent`), and dispatches to the
+registered handler.
 
 The view always returns HTTP 200, even on processing errors. Errors are captured to {class}`~django_program.registration.models.EventProcessingException` with the full traceback.
 
