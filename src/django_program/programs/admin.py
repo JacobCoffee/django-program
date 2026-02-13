@@ -17,8 +17,8 @@ class ActivitySignupInline(admin.TabularInline):
 
     model = ActivitySignup
     extra = 0
-    fields = ("user", "note", "created_at")
-    readonly_fields = ("created_at",)
+    fields = ("user", "status", "note", "cancelled_at", "created_at")
+    readonly_fields = ("cancelled_at", "created_at")
 
 
 @admin.register(Activity)
@@ -38,6 +38,16 @@ class ActivityAdmin(admin.ModelAdmin):
     search_fields = ("name", "slug", "pretalx_submission_type")
     prepopulated_fields = {"slug": ("name",)}
     inlines = (ActivitySignupInline,)
+
+
+@admin.register(ActivitySignup)
+class ActivitySignupAdmin(admin.ModelAdmin):
+    """Admin interface for managing activity signups."""
+
+    list_display = ("user", "activity", "status", "cancelled_at", "created_at")
+    list_filter = ("status", "activity__conference")
+    search_fields = ("user__username", "user__email", "activity__name")
+    readonly_fields = ("cancelled_at", "created_at")
 
 
 class TravelGrantMessageInline(admin.TabularInline):

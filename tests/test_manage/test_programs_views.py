@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from django.contrib.auth.models import User
+from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 from django.urls import reverse
@@ -311,6 +312,59 @@ def test_activity_create_with_room(authed_client: Client, conference):
     assert activity.slug == "room-activity"
 
 
+# ---- Manual room creation (no pretalx_id) ----
+
+
+@pytest.mark.django_db
+def test_manual_room_creation_without_pretalx_id(conference):
+    """Rooms can be created without a pretalx_id for non-Pretalx venues."""
+    room = Room.objects.create(conference=conference, name="Off-Venue Space")
+    assert room.pretalx_id is None
+    assert room.pk is not None
+
+
+@pytest.mark.django_db
+def test_multiple_manual_rooms_allowed(conference):
+    """Multiple rooms with pretalx_id=None should not violate uniqueness."""
+    Room.objects.create(conference=conference, name="Room A")
+    Room.objects.create(conference=conference, name="Room B")
+    assert Room.objects.filter(conference=conference, pretalx_id=None).count() == 2
+
+
+@pytest.mark.django_db
+def test_activity_create_with_manual_room(authed_client: Client, conference):
+    """Activities can be assigned to manually created rooms."""
+    room = Room.objects.create(conference=conference, name="Off-Site Venue")
+    url = reverse("manage:activity-add", kwargs={"conference_slug": conference.slug})
+    response = authed_client.post(
+        url,
+        {
+            "name": "Off-Site Workshop",
+            "activity_type": "workshop",
+            "room": room.pk,
+            "is_active": "on",
+        },
+    )
+    assert response.status_code == 302
+    activity = Activity.objects.get(conference=conference, name="Off-Site Workshop")
+    assert activity.room == room
+    assert activity.room.pretalx_id is None
+
+
+@pytest.mark.django_db
+def test_room_search_includes_manual_rooms(authed_client: Client, conference):
+    """Room search API returns both Pretalx-synced and manual rooms."""
+    Room.objects.create(conference=conference, pretalx_id=1, name="Main Hall")
+    Room.objects.create(conference=conference, name="Garden Tent")
+    url = reverse("manage:room-search", kwargs={"conference_slug": conference.slug})
+    response = authed_client.get(url)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    names = {r["name"] for r in data}
+    assert "Garden Tent" in names
+
+
 # ---- Receipt review views ----
 
 
@@ -485,3 +539,182 @@ def test_disbursed_grant_shows_info_on_review(authed_client: Client, conference,
     assert grant_ctx.status == TravelGrant.GrantStatus.DISBURSED
     assert grant_ctx.disbursed_amount == Decimal("400.00")
     assert grant_ctx.disbursed_by == superuser
+
+
+# ---- Activity Dashboard views ----
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_get(authed_client: Client, conference, activity, regular_user):
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED)
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = authed_client.get(url)
+    assert response.status_code == 200
+    assert response.context["active_nav"] == "activities"
+    stats = response.context["signup_stats"]
+    assert stats["confirmed"] == 1
+    assert stats["total_active"] == 1
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_status_filter(authed_client: Client, conference, activity, regular_user, superuser):
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED)
+    ActivitySignup.objects.create(activity=activity, user=superuser, status=ActivitySignup.SignupStatus.WAITLISTED)
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = authed_client.get(url, {"status": "waitlisted"})
+    assert response.status_code == 200
+    assert len(response.context["signups"]) == 1
+    assert response.context["signups"][0].user == superuser
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_excludes_cancelled_by_default(authed_client: Client, conference, activity, regular_user):
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CANCELLED)
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = authed_client.get(url)
+    assert len(response.context["signups"]) == 0
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_accessible_by_activity_organizer(client: Client, conference, activity):
+    organizer = User.objects.create_user(username="organizer", password="password")
+    activity.organizers.add(organizer)
+    client.force_login(organizer)
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = client.get(url)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_hides_edit_link_for_activity_organizer(client: Client, conference, activity):
+    organizer = User.objects.create_user(username="organizer-no-edit", password="password")
+    activity.organizers.add(organizer)
+    client.force_login(organizer)
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = client.get(url)
+    assert response.status_code == 200
+    assert f"/manage/{conference.slug}/activities/{activity.pk}/edit/" not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_denied_for_non_organizer(client: Client, conference, activity):
+    nobody = User.objects.create_user(username="nobody", password="password")
+    client.force_login(nobody)
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = client.get(url)
+    assert response.status_code == 403
+
+
+# ---- Activity Dashboard CSV Export ----
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_csv_export(authed_client: Client, conference, activity, regular_user):
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED)
+    url = reverse("manage:activity-dashboard-export", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = authed_client.get(url)
+    assert response.status_code == 200
+    assert response["Content-Type"] == "text/csv"
+    content = response.content.decode()
+    assert "Username" in content
+    assert regular_user.username in content
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_csv_export_with_status_filter(
+    authed_client: Client, conference, activity, regular_user, superuser
+):
+    ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED)
+    ActivitySignup.objects.create(activity=activity, user=superuser, status=ActivitySignup.SignupStatus.WAITLISTED)
+    url = reverse("manage:activity-dashboard-export", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = authed_client.get(url, {"status": "confirmed"})
+    content = response.content.decode()
+    assert regular_user.username in content
+    assert superuser.username not in content
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_csv_export_escapes_formula_cells(authed_client: Client, conference, activity):
+    user = User.objects.create_user(
+        username="formula_user",
+        password="password",
+        first_name="=Malicious Name",
+    )
+    ActivitySignup.objects.create(
+        activity=activity, user=user, status=ActivitySignup.SignupStatus.CONFIRMED, note="+SUM(1,2)"
+    )
+    url = reverse("manage:activity-dashboard-export", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = authed_client.get(url)
+    content = response.content.decode()
+    assert "'=Malicious Name" in content
+    assert "'+SUM(1,2)" in content
+
+
+# ---- Activity Promote Signup ----
+
+
+@pytest.mark.django_db
+def test_activity_promote_waitlisted_signup(authed_client: Client, conference, activity, regular_user):
+    signup = ActivitySignup.objects.create(
+        activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.WAITLISTED
+    )
+    url = reverse(
+        "manage:activity-promote-signup",
+        kwargs={"conference_slug": conference.slug, "pk": activity.pk, "signup_pk": signup.pk},
+    )
+    response = authed_client.post(url)
+    assert response.status_code == 302
+    signup.refresh_from_db()
+    assert signup.status == "confirmed"
+
+
+@pytest.mark.django_db
+def test_activity_promote_waitlisted_signup_warns_on_overbook(authed_client: Client, conference, regular_user):
+    activity = Activity.objects.create(
+        conference=conference,
+        name="Limited Session",
+        slug="limited-session",
+        activity_type=Activity.ActivityType.SPRINT,
+        max_participants=1,
+        is_active=True,
+    )
+    holder = User.objects.create_user(username="holder", password="password")
+    ActivitySignup.objects.create(activity=activity, user=holder, status=ActivitySignup.SignupStatus.CONFIRMED)
+    signup = ActivitySignup.objects.create(
+        activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.WAITLISTED
+    )
+    url = reverse(
+        "manage:activity-promote-signup",
+        kwargs={"conference_slug": conference.slug, "pk": activity.pk, "signup_pk": signup.pk},
+    )
+    response = authed_client.post(url, follow=True)
+    assert response.status_code == 200
+
+    signup.refresh_from_db()
+    assert signup.status == "confirmed"
+
+    msgs = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("may now be overbooked" in message for message in msgs)
+
+
+@pytest.mark.django_db
+def test_activity_promote_non_waitlisted_404(authed_client: Client, conference, activity, regular_user):
+    signup = ActivitySignup.objects.create(
+        activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED
+    )
+    url = reverse(
+        "manage:activity-promote-signup",
+        kwargs={"conference_slug": conference.slug, "pk": activity.pk, "signup_pk": signup.pk},
+    )
+    response = authed_client.post(url)
+    assert response.status_code == 404
+
+
+# ---- Activity organizers M2M ----
+
+
+@pytest.mark.django_db
+def test_activity_organizers_m2m(activity, regular_user):
+    activity.organizers.add(regular_user)
+    assert regular_user in activity.organizers.all()
+    assert activity in regular_user.organized_activities.all()

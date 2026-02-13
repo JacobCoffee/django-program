@@ -5,10 +5,10 @@ from django.db import models
 
 
 class Room(models.Model):
-    """A room or venue space synced from the Pretalx API.
+    """A room or venue space, either synced from Pretalx or created manually.
 
-    Each room is uniquely identified per conference by its Pretalx integer ID.
-    Stores metadata like capacity and display position for schedule rendering.
+    Rooms synced from Pretalx are uniquely identified per conference by their
+    Pretalx integer ID.  Manually created rooms have ``pretalx_id=None``.
     """
 
     conference = models.ForeignKey(
@@ -16,7 +16,7 @@ class Room(models.Model):
         on_delete=models.CASCADE,
         related_name="rooms",
     )
-    pretalx_id = models.PositiveIntegerField()
+    pretalx_id = models.PositiveIntegerField(null=True, blank=True)
     name = models.CharField(max_length=300)
     description = models.TextField(blank=True, default="")
     capacity = models.PositiveIntegerField(null=True, blank=True)
@@ -27,7 +27,13 @@ class Room(models.Model):
 
     class Meta:
         ordering = ["position", "name"]
-        unique_together = [("conference", "pretalx_id")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["conference", "pretalx_id"],
+                condition=~models.Q(pretalx_id=None),
+                name="unique_room_pretalx_id_per_conference",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name

@@ -10,7 +10,6 @@ import pytest
 from django.contrib.auth.models import Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages.storage.fallback import FallbackStorage
-from django.db.utils import IntegrityError
 from django.test import Client, RequestFactory, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -585,16 +584,17 @@ class TestRoomViews:
         assert resp.context["is_create"] is True
         assert resp.context["is_synced"] is False
 
-    def test_room_create_post_fails_without_pretalx_id(self, client_logged_in_super, conference):
-        """Room.pretalx_id is NOT NULL and not in the form, so a manual create
-        via RoomCreateView hits an IntegrityError.  This documents the current
-        design limitation: rooms are expected to come from Pretalx sync."""
+    def test_room_create_post_without_pretalx_id(self, client_logged_in_super, conference):
+        """Manual room creation succeeds with pretalx_id=None."""
         url = reverse("manage:room-add", kwargs={"conference_slug": conference.slug})
-        with pytest.raises(IntegrityError, match="pretalx_id"):
-            client_logged_in_super.post(
-                url,
-                {"name": "New Room", "description": "Desc", "capacity": 100, "position": 3},
-            )
+        resp = client_logged_in_super.post(
+            url,
+            {"name": "New Room", "description": "Desc", "capacity": 100, "position": 3},
+        )
+        assert resp.status_code == 302
+        room = Room.objects.get(conference=conference, name="New Room")
+        assert room.pretalx_id is None
+        assert room.capacity == 100
 
     def test_room_create_sets_conference_in_form_valid(self, superuser, conference):
         """Verify RoomCreateView.form_valid assigns the conference to the instance."""

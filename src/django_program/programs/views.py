@@ -10,11 +10,12 @@ from typing import TYPE_CHECKING
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import Count, Prefetch, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView
 
@@ -53,8 +54,8 @@ class ActivityListView(ConferenceMixin, ListView):
         """Return active activities for the current conference.
 
         Supports an optional ``?type=`` query parameter to filter by
-        activity type.  Annotates ``signup_count`` and ``talk_count``
-        to avoid N+1 queries.
+        activity type.  Annotates ``signup_count`` (confirmed only),
+        ``waitlist_count``, and ``talk_count`` to avoid N+1 queries.
 
         Returns:
             A queryset of active Activity instances ordered by time and name.
@@ -62,7 +63,15 @@ class ActivityListView(ConferenceMixin, ListView):
         qs = (
             Activity.objects.filter(conference=self.conference, is_active=True)
             .select_related("room")
-            .annotate(signup_count=Count("signups", distinct=True), talk_count=Count("talks", distinct=True))
+            .annotate(
+                signup_count=Count(
+                    "signups", filter=models.Q(signups__status=ActivitySignup.SignupStatus.CONFIRMED), distinct=True
+                ),
+                waitlist_count=Count(
+                    "signups", filter=models.Q(signups__status=ActivitySignup.SignupStatus.WAITLISTED), distinct=True
+                ),
+                talk_count=Count("talks", distinct=True),
+            )
             .order_by("start_time", "name")
         )
         activity_type = self.request.GET.get("type", "")
@@ -109,13 +118,26 @@ class ActivityDetailView(ConferenceMixin, DetailView):
 
         Returns:
             Context dict with ``signups``, ``spots_remaining``,
-            ``linked_talks``, ``speakers``, and ``schedule_by_day``.
+            ``user_signup``, ``waitlist_count``, ``linked_talks``,
+            ``speakers``, and ``schedule_by_day``.
         """
         context = super().get_context_data(**kwargs)
         activity: Activity = self.object
 
-        context["signups"] = activity.signups.select_related("user")
+        context["signups"] = activity.signups.filter(status=ActivitySignup.SignupStatus.CONFIRMED).select_related(
+            "user"
+        )
         context["spots_remaining"] = activity.spots_remaining
+        context["waitlist_count"] = activity.signups.filter(status=ActivitySignup.SignupStatus.WAITLISTED).count()
+
+        user_signup = None
+        if self.request.user.is_authenticated:
+            user_signup = (
+                activity.signups.filter(user=self.request.user)
+                .exclude(status=ActivitySignup.SignupStatus.CANCELLED)
+                .first()
+            )
+        context["user_signup"] = user_signup
 
         linked_talks = (
             activity.talks.select_related("room")
@@ -151,7 +173,8 @@ class ActivitySignupView(LoginRequiredMixin, ConferenceMixin, View):
         """Handle the signup form submission.
 
         Uses ``select_for_update`` inside a transaction to prevent race
-        conditions when checking capacity.
+        conditions when checking capacity.  When the activity is at
+        capacity the signup is created with ``WAITLISTED`` status.
 
         Args:
             request: The incoming HTTP request.
@@ -167,15 +190,64 @@ class ActivitySignupView(LoginRequiredMixin, ConferenceMixin, View):
                 slug=self.kwargs["slug"],
                 is_active=True,
             )
-            if activity.spots_remaining is not None and activity.spots_remaining <= 0:
-                messages.error(request, "This activity is full.")
+            existing = (
+                ActivitySignup.objects.filter(activity=activity, user=request.user)
+                .exclude(status=ActivitySignup.SignupStatus.CANCELLED)
+                .first()
+            )
+            if existing:
+                messages.info(request, "You are already signed up for this activity.")
                 return redirect(reverse("programs:activity-detail", args=[self.conference.slug, activity.slug]))
-            ActivitySignup.objects.get_or_create(
+
+            at_capacity = activity.spots_remaining is not None and activity.spots_remaining <= 0
+            status = ActivitySignup.SignupStatus.WAITLISTED if at_capacity else ActivitySignup.SignupStatus.CONFIRMED
+            ActivitySignup.objects.create(
                 activity=activity,
                 user=request.user,
-                defaults={"note": request.POST.get("note", "")},
+                status=status,
+                note=request.POST.get("note", ""),
             )
-        messages.success(request, f"You have signed up for {activity.name}.")
+
+        detail_url = reverse("programs:activity-detail", args=[self.conference.slug, activity.slug])
+        if status == ActivitySignup.SignupStatus.WAITLISTED:
+            messages.success(
+                request, f"This activity is full. You have been added to the waitlist for {activity.name}."
+            )
+        else:
+            messages.success(request, f"You have signed up for {activity.name}.")
+        return redirect(detail_url)
+
+
+class ActivityCancelSignupView(LoginRequiredMixin, ConferenceMixin, View):
+    """POST-only view for cancelling an activity signup."""
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Cancel the user's signup and promote the next waitlisted person if applicable."""
+        with transaction.atomic():
+            activity = get_object_or_404(
+                Activity.objects.select_for_update(),
+                conference=self.conference,
+                slug=self.kwargs["slug"],
+                is_active=True,
+            )
+            signup = (
+                ActivitySignup.objects.filter(activity=activity, user=request.user)
+                .exclude(status=ActivitySignup.SignupStatus.CANCELLED)
+                .first()
+            )
+            if signup is None:
+                messages.error(request, "You do not have an active signup for this activity.")
+                return redirect(reverse("programs:activity-detail", args=[self.conference.slug, activity.slug]))
+
+            was_confirmed = signup.is_confirmed
+            signup.status = ActivitySignup.SignupStatus.CANCELLED
+            signup.cancelled_at = timezone.now()
+            signup.save(update_fields=["status", "cancelled_at"])
+
+            if was_confirmed:
+                activity.promote_next_waitlisted()
+
+        messages.success(request, f"Your signup for {activity.name} has been cancelled.")
         return redirect(reverse("programs:activity-detail", args=[self.conference.slug, activity.slug]))
 
 
