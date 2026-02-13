@@ -22,7 +22,7 @@ try:
     release = get_version("django-program")
 except Exception:  # noqa: BLE001
     release = "0.1.0"
-version = ".".join(release.split(".")[:2]) de4cc3b (fix: address PR review comments on CI/CD and docs)
+version = ".".join(release.split(".")[:2])
 
 extensions = [
     "sphinx.ext.autodoc",
