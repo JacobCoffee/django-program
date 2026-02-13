@@ -43,7 +43,9 @@ napoleon_include_special_with_doc = True
 napoleon_use_admonition_for_examples = True
 napoleon_use_admonition_for_notes = True
 napoleon_use_admonition_for_references = False
-napoleon_use_ivar = False
+# Use :ivar: for Attributes sections to avoid duplicate object descriptions
+# with autodoc's dataclass field introspection.
+napoleon_use_ivar = True
 napoleon_use_param = True
 napoleon_use_rtype = True
 napoleon_use_keyword = True
@@ -70,9 +72,10 @@ autosummary_imported_members = False
 # Exclude generated subpackage from autosummary recursion
 autosummary_filename_map = {}
 
-# Don't warn about duplicate object descriptions between autosummary
-# and the manual modules page.
-suppress_warnings = ["myst.header", "ref.duplicate", "duplicate"]
+# Intersphinx inventory warnings are expected when building standalone.
+# The autodoc signature warnings are from a circular TYPE_CHECKING import
+# in adapters/talks.py (PretalxClient); the function still documents fine.
+suppress_warnings = ["myst.header", "ref.python", "autodoc"]
 
 typehints_fully_qualified = False
 always_document_param_types = True

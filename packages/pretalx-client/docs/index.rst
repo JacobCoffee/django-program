@@ -73,7 +73,6 @@ What It Does
    :caption: Reference
 
    api/index
-   api/modules
    architecture
 
 .. toctree::
