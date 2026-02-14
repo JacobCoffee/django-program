@@ -568,6 +568,41 @@ class TestApplyTypeDefaults:
 
 
 # ===========================================================================
+# apply_type_defaults() timezone fallback
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestApplyTypeDefaultsTimezoneFallback:
+    def test_invalid_timezone_falls_back_to_utc(self, settings):
+        conf = _make_conference(slug="td-badtz", timezone="Not/A/Timezone")
+        service = _make_service(conf, settings)
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="R")
+        Talk.objects.create(
+            conference=conf,
+            pretalx_code="P1",
+            title="P",
+            submission_type="Poster",
+        )
+        SubmissionTypeDefault.objects.create(
+            conference=conf,
+            submission_type="Poster",
+            default_room=room,
+            default_date=date(2027, 5, 1),
+            default_start_time=time(9, 0),
+            default_end_time=time(17, 0),
+        )
+
+        count = service.apply_type_defaults()
+
+        assert count == 1
+        talk = Talk.objects.get(pretalx_code="P1")
+        assert talk.room == room
+        assert talk.slot_start is not None
+        assert talk.slot_start == datetime(2027, 5, 1, 9, 0, tzinfo=UTC)
+
+
+# ===========================================================================
 # AbstractOverride._get_parent_conference_id
 # ===========================================================================
 

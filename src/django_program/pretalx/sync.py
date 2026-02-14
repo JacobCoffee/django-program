@@ -8,7 +8,7 @@ performance.
 
 import logging
 import zoneinfo
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
@@ -689,7 +689,15 @@ class PretalxSyncService:
         if not defaults.exists():
             return 0
 
-        conf_tz = zoneinfo.ZoneInfo(str(self.conference.timezone))
+        try:
+            conf_tz = zoneinfo.ZoneInfo(str(self.conference.timezone))
+        except zoneinfo.ZoneInfoNotFoundError, KeyError:
+            logger.warning(
+                "Invalid timezone '%s' for conference %s; falling back to UTC for type defaults.",
+                self.conference.timezone,
+                self.conference.slug,
+            )
+            conf_tz = UTC
         to_update: list[Talk] = []
         update_fields: set[str] = set()
 
