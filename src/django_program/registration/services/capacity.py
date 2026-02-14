@@ -20,6 +20,10 @@ def get_global_sold_count(conference: object) -> int:
     orders that are PAID, PARTIALLY_REFUNDED, or PENDING with an active
     inventory hold.
 
+    Uses ``addon__isnull=True`` rather than ``ticket_type__isnull=False`` so
+    that line items whose ticket type was deleted (SET_NULL) are still counted
+    toward the sold total, preventing oversells.
+
     Args:
         conference: The conference to count sales for.
 
@@ -30,7 +34,7 @@ def get_global_sold_count(conference: object) -> int:
     return (
         OrderLineItem.objects.filter(
             order__conference=conference,
-            ticket_type__isnull=False,
+            addon__isnull=True,
         )
         .filter(
             models.Q(order__status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED])
@@ -65,6 +69,9 @@ def validate_global_capacity(conference: object, desired_total: int) -> None:
     at the same time. The caller **must** already be inside a
     ``transaction.atomic`` block.
 
+    The early-return check for unlimited conferences happens **after** the lock
+    is acquired so that a stale in-memory instance cannot bypass enforcement.
+
     Args:
         conference: The conference to validate against.
         desired_total: The total number of ticket items in the cart
@@ -74,11 +81,14 @@ def validate_global_capacity(conference: object, desired_total: int) -> None:
         ValidationError: If the desired total exceeds the conference's
             ``total_capacity``.
     """
-    if conference.total_capacity == 0:
+    locked = Conference.objects.select_for_update().get(pk=conference.pk)
+    if locked.total_capacity == 0:
         return
-    Conference.objects.select_for_update().filter(pk=conference.pk).first()
-    remaining = get_global_remaining(conference)
-    if remaining is not None and desired_total > remaining:
+    sold = get_global_sold_count(locked)
+    remaining = locked.total_capacity - sold
+    if desired_total > remaining:
+        if remaining <= 0:
+            raise ValidationError(f"This conference is sold out (venue capacity: {locked.total_capacity}).")
         raise ValidationError(
-            f"Only {remaining} tickets remaining for this conference (venue capacity: {conference.total_capacity})."
+            f"Only {remaining} tickets remaining for this conference (venue capacity: {locked.total_capacity})."
         )

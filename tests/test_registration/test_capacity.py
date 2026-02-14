@@ -236,6 +236,30 @@ class TestGetGlobalSoldCount:
         )
         assert get_global_sold_count(conference) == 7
 
+    def test_counts_orphaned_line_items_after_ticket_type_deleted(self, conference, user):
+        """Line items whose ticket_type was deleted (SET_NULL) must still count."""
+        tt = TicketType.objects.create(
+            conference=conference,
+            name="Ephemeral",
+            slug="ephemeral",
+            price=Decimal("50.00"),
+            total_quantity=0,
+            limit_per_user=10,
+            is_active=True,
+        )
+        order = _make_order(conference=conference, user=user, status=Order.Status.PAID)
+        OrderLineItem.objects.create(
+            order=order,
+            description="Ephemeral",
+            quantity=4,
+            unit_price=Decimal("50.00"),
+            line_total=Decimal("200.00"),
+            ticket_type=tt,
+        )
+        assert get_global_sold_count(conference) == 4
+        tt.delete()
+        assert get_global_sold_count(conference) == 4
+
 
 @pytest.mark.django_db
 class TestGetGlobalRemaining:
@@ -287,3 +311,32 @@ class TestValidateGlobalCapacity:
 
         with pytest.raises(ValidationError, match="Only 2 tickets remaining"):
             validate_global_capacity(conference, 3)
+
+    def test_sold_out_message_when_at_capacity(self, conference, user, ticket_type):
+        """When remaining is exactly 0, the error should say 'sold out'."""
+        order = _make_order(conference=conference, user=user, status=Order.Status.PAID)
+        OrderLineItem.objects.create(
+            order=order,
+            description="Ticket",
+            quantity=10,
+            unit_price=Decimal("100.00"),
+            line_total=Decimal("1000.00"),
+            ticket_type=ticket_type,
+        )
+        with pytest.raises(ValidationError, match="sold out"):
+            validate_global_capacity(conference, 1)
+
+    def test_sold_out_message_when_oversold(self, conference, user, ticket_type):
+        """When capacity is lowered below current sales, the error should say 'sold out'."""
+        order = _make_order(conference=conference, user=user, status=Order.Status.PAID)
+        OrderLineItem.objects.create(
+            order=order,
+            description="Ticket",
+            quantity=12,
+            unit_price=Decimal("100.00"),
+            line_total=Decimal("1200.00"),
+            ticket_type=ticket_type,
+        )
+        # remaining is negative (-2), should show "sold out" not "-2 tickets remaining"
+        with pytest.raises(ValidationError, match="sold out"):
+            validate_global_capacity(conference, 1)
