@@ -41,6 +41,18 @@ Built for PyCon US but designed to work for any conference that uses Django.
 
       Speaker and schedule sync architecture, schema regeneration, and the pretalx-client package.
 
+   .. grid-item-card:: Programs & Activities
+      :link: programs-activities
+      :link-type: doc
+
+      Travel grants, sprints, tutorials, open spaces, and activity signups.
+
+   .. grid-item-card:: Management Dashboard
+      :link: management-dashboard
+      :link-type: doc
+
+      Financial overview, voucher bulk generation, and organizer tools.
+
    .. grid-item-card:: API Reference
       :link: api/index
       :link-type: doc
@@ -103,6 +115,8 @@ Quick Start
    getting-started/index
    configuration
    registration-flow
+   programs-activities
+   management-dashboard
 
 .. toctree::
    :maxdepth: 2

@@ -18,6 +18,63 @@ Before getting into the flow, here are the models involved:
 | {class}`~django_program.registration.models.Payment` | A financial transaction against an order. Methods: `STRIPE`, `COMP`, `CREDIT`, `MANUAL`. |
 | {class}`~django_program.registration.models.Credit` | A store credit issued from a refund, applicable to future orders. |
 
+## Global Ticket Capacity
+
+The `Conference.total_capacity` field sets a hard venue-wide cap on the number of tickets sold across all ticket types. Add-ons do not count toward this cap since they do not consume venue seats.
+
+### Setting the capacity
+
+Set `total_capacity` on the Conference model through any of these:
+
+- **Management dashboard** -- edit the conference and fill in the "Total capacity" field on the `ConferenceForm`.
+- **Django admin** -- set the field directly on the Conference admin page.
+- **TOML bootstrap** -- add `total_capacity = 2500` to the `[conference]` table in your config file.
+
+A value of `0` means unlimited (no global cap enforced). This is the default.
+
+### How enforcement works
+
+Global capacity is checked at two points in the registration flow:
+
+1. **Adding a ticket to the cart** -- `add_ticket()` calls `validate_global_capacity()` with the cart's current ticket count plus the new quantity. If the total exceeds the remaining global capacity, a `ValidationError` is raised.
+
+2. **Checkout** -- `CheckoutService.checkout()` re-validates global capacity for all ticket items in the cart via `_revalidate_global_capacity()`. This catches the case where capacity filled up between adding items and checking out.
+
+Both paths call the same underlying function in `django_program.registration.services.capacity`:
+
+```python
+from django_program.registration.services.capacity import (
+    get_global_remaining,
+    get_global_sold_count,
+)
+
+# How many tickets have been sold (paid + pending with active hold)?
+sold = get_global_sold_count(conference)
+
+# How many tickets are left? Returns None if capacity is unlimited.
+remaining = get_global_remaining(conference)
+```
+
+### Sold count calculation
+
+`get_global_sold_count()` counts `OrderLineItem` quantities where:
+
+- The line item is a **ticket** (not an add-on), identified by `addon__isnull=True`.
+- The order status is `PAID`, `PARTIALLY_REFUNDED`, or `PENDING` with `hold_expires_at` still in the future.
+
+Using `addon__isnull=True` instead of `ticket_type__isnull=False` is deliberate: if a ticket type is deleted (SET_NULL on the FK), its line items are still counted. This prevents overselling after administrative cleanup.
+
+### Concurrency safety
+
+`validate_global_capacity()` acquires a row-level lock on the Conference row with `select_for_update()` before reading the sold count. The caller must already be inside a `transaction.atomic` block. This prevents two concurrent requests from both seeing "1 ticket remaining" and both succeeding.
+
+### Error messages
+
+When capacity is exceeded, the user sees one of:
+
+- `"This conference is sold out (venue capacity: 2500)."` -- when zero tickets remain.
+- `"Only 12 tickets remaining for this conference (venue capacity: 2500)."` -- when some tickets remain but fewer than requested.
+
 ## Cart Lifecycle
 
 The cart service (`django_program.registration.services.cart`) is a collection of stateless functions. No classes to instantiate.

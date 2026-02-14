@@ -34,6 +34,17 @@ DJANGO_PROGRAM = {
         "publisher": "pycon",           # default
         "flight": "sponsors",           # default
     },
+    # Feature toggles (all default to True)
+    "features": {
+        "registration_enabled": True,
+        "sponsors_enabled": True,
+        "travel_grants_enabled": True,
+        "programs_enabled": True,
+        "pretalx_sync_enabled": True,
+        "public_ui_enabled": True,
+        "manage_ui_enabled": True,
+        "all_ui_enabled": True,
+    },
     # General
     "cart_expiry_minutes": 30,          # default
     "pending_order_expiry_minutes": 15, # default
@@ -93,6 +104,157 @@ Most conferences can ignore this section entirely.
 | `currency_symbol` | `str` | `"$"` | Display symbol for the currency. |
 | `max_grant_amount` | `int` | `3000` | Maximum travel grant amount in the configured currency. |
 
+### Feature toggles
+
+Feature toggles disable entire modules and UI sections per-conference. Every toggle
+defaults to `True` (enabled). Disable a module by setting its flag to `False` in
+settings, or override it per-conference through the database.
+
+#### Settings defaults
+
+Add a `features` dict to `DJANGO_PROGRAM` in your Django settings:
+
+```python
+DJANGO_PROGRAM = {
+    "features": {
+        "registration_enabled": True,
+        "sponsors_enabled": True,
+        "travel_grants_enabled": False,   # disable travel grants globally
+        "programs_enabled": True,
+        "pretalx_sync_enabled": True,
+        "public_ui_enabled": True,
+        "manage_ui_enabled": True,
+        "all_ui_enabled": True,           # master switch for all UI
+    },
+    # ... other settings ...
+}
+```
+
+Changing these values requires a server restart.
+
+#### Available toggles
+
+**Module toggles** control backend functionality:
+
+| Key | Default | Controls |
+|---|---|---|
+| `registration_enabled` | `True` | Ticket types, cart, checkout, orders |
+| `sponsors_enabled` | `True` | Sponsor levels, benefits, comp vouchers |
+| `travel_grants_enabled` | `True` | Travel grant applications and review |
+| `programs_enabled` | `True` | Activities and signups |
+| `pretalx_sync_enabled` | `True` | Speaker/talk/room sync from Pretalx |
+
+**UI toggles** control interface visibility:
+
+| Key | Default | Controls |
+|---|---|---|
+| `public_ui_enabled` | `True` | Public-facing conference pages |
+| `manage_ui_enabled` | `True` | Organizer management dashboard |
+| `all_ui_enabled` | `True` | Master switch -- when `False`, both `public_ui` and `manage_ui` are forced off regardless of their individual values |
+
+#### Per-conference database overrides
+
+Each conference can override the global defaults through a `FeatureFlags` row in the
+database. These overrides take effect immediately without a server restart.
+
+The `FeatureFlags` model uses nullable booleans with three states:
+
+- **`None`** (blank) -- use the default from `DJANGO_PROGRAM["features"]`
+- **`True`** -- force the feature on for this conference
+- **`False`** -- force the feature off for this conference
+
+Resolution order for each flag:
+
+1. If the conference has a `FeatureFlags` row with an explicit `True` or `False`, that value wins.
+2. Otherwise, the default from `DJANGO_PROGRAM["features"]` is used.
+3. For `public_ui` and `manage_ui`, the `all_ui_enabled` master switch is evaluated first.
+
+#### Django admin
+
+Open the Conference admin page. The **Feature flags** inline appears below the
+conference fields, grouped into "Module Toggles" and "UI Toggles". Each dropdown
+offers three choices:
+
+- **Default (enabled)** -- inherit from settings
+- **Yes -- force ON** -- override to enabled
+- **No -- force OFF** -- override to disabled
+
+Feature flags are also available as a standalone admin model at
+**Conference > Feature flags** for a cross-conference overview.
+
+#### Checking features in Python code
+
+Use `is_feature_enabled()` to check a toggle at runtime:
+
+```python
+from django_program.features import is_feature_enabled
+
+# Check against global settings only
+if is_feature_enabled("registration"):
+    ...
+
+# Check with per-conference DB override
+if is_feature_enabled("sponsors", conference=my_conference):
+    ...
+```
+
+Raise a 404 when a feature is disabled:
+
+```python
+from django_program.features import require_feature
+
+def my_view(request):
+    require_feature("registration", conference=request.conference)
+    # ... view logic ...
+```
+
+Guard a class-based view with the `FeatureRequiredMixin`:
+
+```python
+from django_program.features import FeatureRequiredMixin
+
+class TicketListView(ConferenceMixin, FeatureRequiredMixin, ListView):
+    required_feature = ("registration", "public_ui")
+```
+
+The mixin checks all listed features during `dispatch()`. If the view also uses
+`ConferenceMixin` (placed before `FeatureRequiredMixin` in the MRO), per-conference
+overrides are picked up automatically from `self.conference`.
+
+#### Using features in templates
+
+Add the context processor to your `TEMPLATES` setting:
+
+```python
+TEMPLATES = [
+    {
+        "OPTIONS": {
+            "context_processors": [
+                # ... existing processors ...
+                "django_program.context_processors.program_features",
+            ],
+        },
+    },
+]
+```
+
+Then use `program_features` in your templates to conditionally render sections:
+
+```html+django
+{% if program_features.registration_enabled %}
+    <a href="{% url 'registration:ticket-list' %}">Buy Tickets</a>
+{% endif %}
+
+{% if program_features.sponsors_enabled %}
+    <a href="{% url 'sponsors:sponsor-list' %}">Our Sponsors</a>
+{% endif %}
+```
+
+The context processor resolves each flag through `is_feature_enabled()`, so master
+switch logic and per-conference DB overrides are applied. When the request has a
+`conference` attribute (set by middleware or the view), that conference's `FeatureFlags`
+row is consulted automatically.
+
 ### Accessing config in code
 
 ```python
@@ -145,7 +307,13 @@ slug = "pycon-us-2027"           # optional, auto-generated from name
 venue = "Convention Center"      # optional
 pretalx_event_slug = "pycon-us"  # optional, for Pretalx sync
 website_url = "https://..."      # optional
+total_capacity = 2500            # optional, 0 = unlimited (default)
 ```
+
+`total_capacity` sets the maximum number of tickets sold across all ticket types for the
+entire conference. Add-ons do not count toward this limit. Set to `0` or omit entirely
+for unlimited capacity. See [Global Ticket Capacity](registration-flow.md#global-ticket-capacity)
+for enforcement details.
 
 ### Sections (required, at least one)
 
