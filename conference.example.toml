@@ -6,6 +6,7 @@ timezone = "America/New_York"
 venue = "David L. Lawrence Convention Center, Pittsburgh PA"
 pretalx_event_slug = "pycon-us-2027"
 website_url = "https://us.pycon.org/2027/"
+total_capacity = 2500
 
 [[conference.sections]]
 name = "Tutorials"

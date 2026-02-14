@@ -22,6 +22,7 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
+from django_program.registration.services.capacity import validate_global_capacity
 from django_program.settings import get_config
 
 
@@ -129,6 +130,11 @@ def add_ticket(cart: Cart, ticket_type: TicketType, qty: int = 1) -> CartItem:
         qty=qty,
         existing_in_cart=existing_in_cart,
         existing_in_orders=existing_in_orders,
+    )
+
+    validate_global_capacity(
+        cart.conference,
+        _get_cart_total_ticket_qty(cart) + qty,
     )
 
     if ticket_type.requires_voucher:
@@ -666,6 +672,9 @@ def _validate_ticket_quantity(cart: Cart, ticket_type: TicketType, new_qty: int)
             f"{ticket_type.limit_per_user} for '{ticket_type.name}'."
         )
 
+    other_ticket_qty = _get_cart_total_ticket_qty(cart, exclude_ticket_type=ticket_type)
+    validate_global_capacity(cart.conference, other_ticket_qty + new_qty)
+
 
 def _validate_addon_quantity(addon: AddOn, new_qty: int) -> None:
     """Validate remaining stock for a new add-on quantity."""
@@ -706,6 +715,24 @@ def _cascade_remove_orphaned_addons(cart: Cart, removing_ticket_type_id: int) ->
             continue
         if not required_ids & remaining_ticket_ids:
             addon_item.delete()
+
+
+def _get_cart_total_ticket_qty(cart: Cart, *, exclude_ticket_type: TicketType | None = None) -> int:
+    """Return the total ticket quantity in the cart (excluding add-ons).
+
+    Args:
+        cart: The cart to sum ticket items from.
+        exclude_ticket_type: Optionally exclude items of this ticket type
+            from the sum (used by ``update_quantity`` to compute the total
+            of *other* tickets before adding the new quantity).
+
+    Returns:
+        The total number of ticket items in the cart.
+    """
+    qs = cart.items.filter(ticket_type__isnull=False)
+    if exclude_ticket_type is not None:
+        qs = qs.exclude(ticket_type=exclude_ticket_type)
+    return qs.aggregate(total=models.Sum("quantity"))["total"] or 0
 
 
 def _item_is_voucher_applicable(

@@ -22,6 +22,7 @@ from django_program.registration.models import (
     Payment,
     Voucher,
 )
+from django_program.registration.services.capacity import validate_global_capacity
 from django_program.registration.services.cart import get_summary_from_items
 from django_program.registration.signals import order_paid
 from django_program.settings import get_config
@@ -352,6 +353,28 @@ def _revalidate_stock(items: list[object]) -> None:
             _revalidate_ticket_stock(item)
         elif item.addon is not None:
             _revalidate_addon_stock(item, now, ticket_type_ids)
+
+    _revalidate_global_capacity(items)
+
+
+def _revalidate_global_capacity(items: list[object]) -> None:
+    """Validate that checkout ticket quantities fit within the global cap.
+
+    Sums ticket quantities from the cart items and validates against the
+    conference's ``total_capacity``.
+
+    Args:
+        items: Pre-fetched cart items from the checkout flow.
+
+    Raises:
+        ValidationError: If the total tickets would exceed the global cap.
+    """
+    ticket_items = [item for item in items if item.ticket_type_id is not None]
+    if not ticket_items:
+        return
+    total_qty = sum(item.quantity for item in ticket_items)
+    conference = ticket_items[0].ticket_type.conference
+    validate_global_capacity(conference, total_qty)
 
 
 def _revalidate_ticket_stock(item: object) -> None:

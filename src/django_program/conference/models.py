@@ -26,6 +26,11 @@ class Conference(models.Model):
     stripe_publishable_key = EncryptedCharField(max_length=200, blank=True, null=True, default=None)
     stripe_webhook_secret = EncryptedCharField(max_length=200, blank=True, null=True, default=None)
 
+    total_capacity = models.PositiveIntegerField(
+        default=0,
+        help_text="Maximum total tickets across all types. 0 means unlimited.",
+    )
+
     is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

@@ -137,6 +137,18 @@
     </div>
 
     <div class="fieldset">
+      <div class="fieldset-legend">Capacity</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="{{ form.total_capacity.id_for_label }}">{{ form.total_capacity.label }}</label>
+          {{ form.total_capacity }}
+          {% if form.total_capacity.help_text %}<span class="helptext">{{ form.total_capacity.help_text }}</span>{% endif %}
+          {% for error in form.total_capacity.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="fieldset">
       <div class="fieldset-legend">Integrations &amp; Status</div>
       <div class="form-row--tail">
         <div class="form-group">
