@@ -8,6 +8,7 @@ from django import forms
 
 from django_program.conference.models import Section
 from django_program.programs.models import PaymentInfo, Receipt, TravelGrant, TravelGrantMessage
+from django_program.programs.utils import get_conference_days
 from django_program.settings import get_config
 
 if TYPE_CHECKING:
@@ -109,10 +110,15 @@ class TravelGrantApplicationForm(forms.ModelForm):
 
         self.fields["travel_from"].widget.attrs["placeholder"] = "City, State/Country"
 
-        # Build day choices from conference sections (e.g. Tutorials, Talks, Sprints)
-        if conference and conference.start_date and conference.end_date:
-            day_choices = self._build_day_choices(conference)
-            self.fields["days_attending"].choices = day_choices
+        # Prefer schedule-derived day choices (richer labels from actual Pretalx
+        # data), falling back to section-based choices when no schedule exists.
+        if conference:
+            schedule_choices = get_conference_days(conference)
+            if schedule_choices:
+                self.fields["days_attending"].choices = schedule_choices
+            elif conference.start_date and conference.end_date:
+                day_choices = self._build_day_choices(conference)
+                self.fields["days_attending"].choices = day_choices
 
         # Pre-populate days_attending checkboxes from comma-separated model value
         if self.instance and self.instance.pk and self.instance.days_attending:

@@ -1,4 +1,5 @@
 {% extends "django_program/manage/base.html" %}
+{% load tz %}
 
 {% block title %}Add-ons{% endblock %}
 
@@ -20,6 +21,10 @@
       <th>Price</th>
       <th>Quantity</th>
       <th>Sold</th>
+      <th>Revenue</th>
+      <th>Required Ticket Types</th>
+      <th>Available From</th>
+      <th>Available Until</th>
       <th>Status</th>
       <th>Actions</th>
     </tr>
@@ -31,6 +36,18 @@
       <td>${{ addon.price }}</td>
       <td>{% if addon.total_quantity %}{{ addon.total_quantity }}{% else %}Unlimited{% endif %}</td>
       <td>{{ addon.sold_count }}</td>
+      <td>${{ addon.revenue }}</td>
+      <td>
+        {% with required=addon.requires_ticket_types.all %}
+        {% if required %}
+          {% for tt in required %}{{ tt.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% else %}
+          All ticket types
+        {% endif %}
+        {% endwith %}
+      </td>
+      <td>{% if addon.available_from %}{{ addon.available_from|localtime }}{% else %}--{% endif %}</td>
+      <td>{% if addon.available_until %}{{ addon.available_until|localtime }}{% else %}--{% endif %}</td>
       <td>
         {% if addon.is_active %}
         <span class="badge badge--active">Active</span>

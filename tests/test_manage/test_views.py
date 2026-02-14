@@ -32,7 +32,7 @@ from django_program.manage.views import (
 )
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.programs.models import TravelGrant, TravelGrantMessage
-from django_program.registration.models import AddOn, Order, Payment, TicketType, Voucher
+from django_program.registration.models import AddOn, Order, OrderLineItem, Payment, TicketType, Voucher
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1977,6 +1977,96 @@ class TestTicketTypeViews:
         assert hasattr(tt, "sold_count")
         assert tt.sold_count == 0
 
+    def test_ticket_type_list_revenue_annotation(self, client_logged_in_super, conference, ticket_type, superuser):
+        """The queryset annotates revenue from paid/partially-refunded orders."""
+        order = Order.objects.create(
+            conference=conference,
+            user=superuser,
+            status=Order.Status.PAID,
+            reference="ORD-TT-REV1",
+        )
+        OrderLineItem.objects.create(
+            order=order,
+            description="Early Bird",
+            quantity=2,
+            unit_price=Decimal("99.00"),
+            line_total=Decimal("198.00"),
+            ticket_type=ticket_type,
+        )
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        tt = next(iter(resp.context["ticket_types"]))
+        assert hasattr(tt, "revenue")
+        assert tt.revenue == Decimal("198.00")
+        assert tt.sold_count == 1
+
+    def test_ticket_type_list_remaining_quantity_unlimited(self, client_logged_in_super, conference, ticket_type):
+        """Unlimited ticket types (total_quantity=0) annotate remaining as None."""
+        assert ticket_type.total_quantity == 0
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        tt = next(iter(resp.context["ticket_types"]))
+        assert tt.annotated_remaining is None
+
+    def test_ticket_type_list_remaining_quantity_limited(self, client_logged_in_super, conference, superuser):
+        """Limited ticket types annotate remaining as total_quantity minus reserved."""
+        limited = TicketType.objects.create(
+            conference=conference,
+            name="Limited",
+            slug="limited",
+            price="50.00",
+            total_quantity=100,
+            order=0,
+        )
+        order = Order.objects.create(
+            conference=conference,
+            user=superuser,
+            status=Order.Status.PAID,
+            reference="ORD-REM-1",
+        )
+        OrderLineItem.objects.create(
+            order=order,
+            description="Limited",
+            quantity=3,
+            unit_price=Decimal("50.00"),
+            line_total=Decimal("150.00"),
+            ticket_type=limited,
+        )
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        tt = next(t for t in resp.context["ticket_types"] if t.pk == limited.pk)
+        assert tt.annotated_remaining == 97
+
+    def test_ticket_type_list_remaining_quantity_pending_hold(self, client_logged_in_super, conference, superuser):
+        """Pending orders with active holds count toward reserved quantity."""
+        limited = TicketType.objects.create(
+            conference=conference,
+            name="Held",
+            slug="held",
+            price="50.00",
+            total_quantity=10,
+            order=0,
+        )
+        order = Order.objects.create(
+            conference=conference,
+            user=superuser,
+            status=Order.Status.PENDING,
+            reference="ORD-HOLD-1",
+            hold_expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        OrderLineItem.objects.create(
+            order=order,
+            description="Held",
+            quantity=2,
+            unit_price=Decimal("50.00"),
+            line_total=Decimal("100.00"),
+            ticket_type=limited,
+        )
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        tt = next(t for t in resp.context["ticket_types"] if t.pk == limited.pk)
+        assert tt.annotated_remaining == 8
+
     def test_ticket_type_create_get(self, client_logged_in_super, conference):
         url = reverse("manage:ticket-type-add", kwargs={"conference_slug": conference.slug})
         resp = client_logged_in_super.get(url)
@@ -2233,6 +2323,47 @@ class TestAddOnViews:
         ao = next(iter(resp.context["addons"]))
         assert hasattr(ao, "sold_count")
         assert ao.sold_count == 0
+
+    def test_addon_list_revenue_annotation(self, client_logged_in_super, conference, addon, superuser):
+        """The queryset annotates revenue from paid/partially-refunded orders."""
+        order = Order.objects.create(
+            conference=conference,
+            user=superuser,
+            status=Order.Status.PAID,
+            reference="ORD-AO-REV1",
+        )
+        OrderLineItem.objects.create(
+            order=order,
+            description="T-Shirt",
+            quantity=3,
+            unit_price=Decimal("25.00"),
+            line_total=Decimal("75.00"),
+            addon=addon,
+        )
+        url = reverse("manage:addon-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        ao = next(iter(resp.context["addons"]))
+        assert hasattr(ao, "revenue")
+        assert ao.revenue == Decimal("75.00")
+        assert ao.sold_count == 1
+
+    def test_addon_list_prefetches_requires_ticket_types(self, client_logged_in_super, conference, addon):
+        """The queryset prefetches requires_ticket_types for efficient rendering."""
+        tt = TicketType.objects.create(
+            conference=conference,
+            name="General",
+            slug="general",
+            price="100.00",
+            order=1,
+        )
+        addon.requires_ticket_types.add(tt)
+        url = reverse("manage:addon-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        ao = next(iter(resp.context["addons"]))
+        # The prefetch cache should be populated, avoiding extra queries
+        assert hasattr(ao, "_prefetched_objects_cache")
+        assert "requires_ticket_types" in ao._prefetched_objects_cache
+        assert tt in ao.requires_ticket_types.all()
 
     def test_addon_create_get(self, client_logged_in_super, conference):
         url = reverse("manage:addon-add", kwargs={"conference_slug": conference.slug})

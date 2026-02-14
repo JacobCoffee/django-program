@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from django_program.conference.models import Conference, Section
+from django_program.pretalx.models import Room, ScheduleSlot, Talk
 from django_program.programs.forms import (
     PaymentInfoForm,
     ReceiptForm,
@@ -325,3 +326,38 @@ def test_payment_form_check_no_extra_fields_required():
     """Check method does not require method-specific fields."""
     form = PaymentInfoForm(data={**BASE_PAYMENT_DATA, "payment_method": "check"})
     assert form.is_valid(), form.errors
+
+
+# ---------------------------------------------------------------------------
+# TravelGrantApplicationForm: schedule-derived day choices (line 118)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_days_attending_uses_schedule_choices_when_available(conference: Conference):
+    """When schedule data exists, the form uses schedule-derived day choices."""
+    room = Room.objects.create(conference=conference, pretalx_id=1, name="Hall A")
+    for i in range(3):
+        talk = Talk.objects.create(
+            conference=conference,
+            pretalx_code=f"SCHED{i}",
+            title=f"Scheduled Talk {i}",
+            submission_type="Tutorial",
+        )
+        ScheduleSlot.objects.create(
+            conference=conference,
+            talk=talk,
+            room=Room.objects.create(conference=conference, pretalx_id=100 + i, name=f"Room {i}"),
+            start=datetime.datetime(2027, 5, 14, 9 + i, 0, tzinfo=datetime.UTC),
+            end=datetime.datetime(2027, 5, 14, 10 + i, 0, tzinfo=datetime.UTC),
+            slot_type=ScheduleSlot.SlotType.TALK,
+        )
+
+    form = TravelGrantApplicationForm(conference=conference)
+    choices = form.fields["days_attending"].choices
+
+    # Schedule-derived choices should have ISO date keys and type-labeled values
+    assert len(choices) == 1
+    iso_date, label = choices[0]
+    assert iso_date == "2027-05-14"
+    assert "(Tutorial)" in label

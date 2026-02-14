@@ -746,3 +746,12 @@ def test_activity_organizers_m2m(activity, regular_user):
     activity.organizers.add(regular_user)
     assert regular_user in activity.organizers.all()
     assert activity in regular_user.organized_activities.all()
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_denied_for_anonymous(client: Client, conference, activity):
+    """Unauthenticated requests to the activity dashboard are rejected."""
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = client.get(url)
+    # Should redirect to login or return 403
+    assert response.status_code in (302, 403)
