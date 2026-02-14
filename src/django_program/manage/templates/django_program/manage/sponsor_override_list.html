@@ -1,0 +1,62 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Sponsor Overrides{% endblock %}
+
+{% block page_title %}
+<h1>Sponsor Overrides</h1>
+<p>Local patches applied on top of sponsor data</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:override-list' conference.slug %}" class="btn btn-secondary">Talk Overrides</a>
+<a href="{% url 'manage:sponsor-override-add' conference.slug %}" class="btn btn-primary">Add Override</a>
+{% endblock %}
+
+{% block content %}
+{% if overrides %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Sponsor</th>
+      <th>Level</th>
+      <th>Name Override</th>
+      <th>Active Override</th>
+      <th>Updated</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for override in overrides %}
+    <tr>
+      <td>{{ override.sponsor.name }}</td>
+      <td>{{ override.sponsor.level.name }}</td>
+      <td>{% if override.override_name %}{{ override.override_name }}{% else %}&mdash;{% endif %}</td>
+      <td>
+        {% if override.override_is_active is not None %}
+          {% if override.override_is_active %}
+          <span class="badge badge--active">Active</span>
+          {% else %}
+          <span class="badge badge--inactive">Inactive</span>
+          {% endif %}
+        {% else %}
+        &mdash;
+        {% endif %}
+      </td>
+      <td><span class="mono">{{ override.updated_at|date:"N j, H:i" }}</span></td>
+      <td>
+        <a href="{% url 'manage:sponsor-override-edit' conference.slug override.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>No sponsor overrides configured for this conference.</p>
+  <a href="{% url 'manage:sponsor-override-add' conference.slug %}" class="btn btn-primary">Add Override</a>
+</div>
+{% endif %}
+{% endblock %}

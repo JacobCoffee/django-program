@@ -1,0 +1,108 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}{% if is_create %}Add Speaker Override{% else %}Edit Speaker Override{% endif %}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css" integrity="sha384-D38a4YkfhAHJJNBBA6EAJqXfPUXy+/g1zdveaMms96JDqJgUe/tN8+gxm0x0D1B+" crossorigin="anonymous">
+<style>
+  .ts-wrapper.form-control { padding: 0; border: none; }
+  .ts-control {
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--radius-sm) !important;
+    font-size: 0.9rem !important;
+    font-family: var(--font-sans) !important;
+    padding: 0.5rem 0.75rem !important;
+    min-height: auto !important;
+  }
+  .ts-control:focus-within,
+  .ts-wrapper.focus .ts-control {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1) !important;
+  }
+  .ts-dropdown {
+    font-family: var(--font-sans) !important;
+    font-size: 0.9rem !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--radius-sm) !important;
+    box-shadow: var(--shadow-md) !important;
+  }
+  .ts-dropdown .option { padding: 0.45rem 0.75rem !important; }
+  .ts-dropdown .active {
+    background: var(--color-primary-light) !important;
+    color: var(--color-primary) !important;
+  }
+  .form-group--locked .ts-control {
+    background: var(--color-locked-bg) !important;
+    border-color: var(--color-locked-border) !important;
+    pointer-events: none;
+    opacity: 0.8;
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:speaker-override-list' conference.slug %}">Speaker Overrides</a>
+  <span class="breadcrumb-separator"></span>
+  <span>{% if is_create %}Add{% else %}Edit{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>{% if is_create %}Add Speaker Override{% else %}Edit Speaker Override{% endif %}</h1>
+<p>{% if is_create %}Create a local override for a synced speaker{% else %}Modify override settings{% endif %}</p>
+{% endblock %}
+
+{% block content %}
+<div class="info-banner">
+  Override fields that are left blank will not modify the speaker.
+</div>
+
+<div class="form-container">
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-group{% if field.field.disabled %} form-group--locked{% endif %}">
+      <label for="{{ field.id_for_label }}">
+        {{ field.label }}
+        {% if field.field.disabled %}<span class="lock-icon" title="Locked after creation">&#x1f512;</span>{% endif %}
+      </label>
+      {{ field }}
+      {% if field.help_text %}
+      <span class="helptext">{{ field.help_text }}</span>
+      {% endif %}
+      {% if field.errors %}
+      <ul class="errorlist">
+        {% for error in field.errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{% if is_create %}Create Override{% else %}Save Changes{% endif %}</button>
+      <a href="{% url 'manage:speaker-override-list' conference.slug %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js" integrity="sha384-A4TlP4zHVPP9oVIQ8pTVaV6MhvBkDx1sRpmEUfAlO5e7xpodrdr6uNmUV7alXAWW" crossorigin="anonymous"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var selects = document.querySelectorAll('#id_speaker');
+  selects.forEach(function(el) {
+    if (el.disabled) return;
+    new TomSelect(el, {
+      allowEmptyOption: true,
+      sortField: { field: 'text', direction: 'asc' },
+      placeholder: 'Type to search...',
+    });
+  });
+});
+</script>
+{% endblock %}

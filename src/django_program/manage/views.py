@@ -20,7 +20,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import models, transaction
-from django.db.models import Case, Count, F, Q, QuerySet, Sum, Value, When
+from django.db.models import Case, Count, F, Prefetch, Q, QuerySet, Sum, Value, When
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -50,7 +50,7 @@ from django_program.manage.forms import (
     TravelGrantForm,
     VoucherForm,
 )
-from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
+from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk, TalkOverride
 from django_program.pretalx.sync import PretalxSyncService
 from django_program.programs.models import Activity, ActivitySignup, Receipt, TravelGrant, TravelGrantMessage
 from django_program.registration.models import AddOn, Order, Payment, TicketType, Voucher
@@ -866,7 +866,7 @@ class RoomListView(ManagePermissionMixin, ListView):
         Returns:
             A queryset of Room instances ordered by position.
         """
-        return Room.objects.filter(conference=self.conference).order_by("position", "name")
+        return Room.objects.filter(conference=self.conference).select_related("override").order_by("position", "name")
 
 
 class RoomEditView(ManagePermissionMixin, UpdateView):
@@ -975,7 +975,11 @@ class SpeakerListView(ManagePermissionMixin, ListView):
         Returns:
             A queryset of Speaker instances for this conference.
         """
-        qs = Speaker.objects.filter(conference=self.conference).annotate(talk_count=Count("talks", distinct=True))
+        qs = (
+            Speaker.objects.filter(conference=self.conference)
+            .select_related("override")
+            .annotate(talk_count=Count("talks", distinct=True))
+        )
         query = self.request.GET.get("q", "").strip()
         if query:
             qs = qs.filter(Q(name__icontains=query) | Q(email__icontains=query))
@@ -1003,6 +1007,7 @@ class SpeakerDetailView(ManagePermissionMixin, DetailView):
         """Scope speaker lookup to the current conference and preload talks."""
         return (
             Speaker.objects.filter(conference=self.conference)
+            .select_related("override")
             .prefetch_related("talks")
             .annotate(talk_count=Count("talks", distinct=True))
         )
@@ -1057,7 +1062,7 @@ class TalkListView(ManagePermissionMixin, ListView):
         """
         qs = (
             Talk.objects.filter(conference=self.conference)
-            .select_related("room")
+            .select_related("room", "override")
             .prefetch_related("speakers")
             .order_by("slot_start", "title")
         )
@@ -1107,15 +1112,25 @@ class TalkDetailView(ManagePermissionMixin, DetailView):
         """Scope talk lookup to conference and preload related speaker/room data."""
         return (
             Talk.objects.filter(conference=self.conference)
-            .select_related("room")
-            .prefetch_related("speakers", "schedule_slots")
+            .select_related("room", "override")
+            .prefetch_related(
+                "speakers",
+                Prefetch(
+                    "schedule_slots",
+                    queryset=ScheduleSlot.objects.select_related("room").order_by("start"),
+                ),
+            )
         )
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add active nav and ordered schedule slots for this talk."""
+        """Add active nav, schedule slots, and override info for this talk."""
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "talks"
-        context["talk_slots"] = self.object.schedule_slots.select_related("room").order_by("start")
+        context["talk_slots"] = self.object.schedule_slots.all()
+        try:
+            context["talk_override"] = self.object.override
+        except TalkOverride.DoesNotExist:
+            context["talk_override"] = None
         return context
 
 
@@ -1362,7 +1377,9 @@ class SponsorManageListView(ManagePermissionMixin, ListView):
     def get_queryset(self) -> QuerySet[Sponsor]:
         """Return sponsors for the current conference."""
         return (
-            Sponsor.objects.filter(conference=self.conference).select_related("level").order_by("level__order", "name")
+            Sponsor.objects.filter(conference=self.conference)
+            .select_related("level", "override")
+            .order_by("level__order", "name")
         )
 
 

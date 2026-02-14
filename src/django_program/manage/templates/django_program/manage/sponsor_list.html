@@ -36,8 +36,13 @@
         <span class="badge badge--inactive">Inactive</span>
         {% endif %}
       </td>
-      <td>
+      <td style="white-space: nowrap;">
         <a href="{% url 'manage:sponsor-edit' conference.slug sponsor.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+        {% if sponsor.override %}
+        <a href="{% url 'manage:sponsor-override-edit' conference.slug sponsor.override.pk %}" class="btn btn-sm btn-secondary" title="Edit existing override">Override</a>
+        {% else %}
+        <a href="{% url 'manage:sponsor-override-add' conference.slug %}?sponsor={{ sponsor.pk }}" class="btn btn-sm btn-secondary" title="Create override">+ Override</a>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

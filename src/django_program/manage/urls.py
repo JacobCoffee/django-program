@@ -199,4 +199,6 @@ urlpatterns = [
     path("<slug:conference_slug>/vouchers/bulk/", include("django_program.manage.urls_vouchers")),
     # --- Financial Dashboard ---
     path("<slug:conference_slug>/financial/", include("django_program.manage.urls_financial")),
+    # --- Pretalx Overrides ---
+    path("<slug:conference_slug>/overrides/", include("django_program.manage.urls_overrides")),
 ]

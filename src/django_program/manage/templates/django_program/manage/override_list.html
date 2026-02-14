@@ -1,0 +1,80 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Talk Overrides{% endblock %}
+
+{% block page_title %}
+<h1>Talk Overrides</h1>
+<p>Local patches applied on top of synced Pretalx data</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:type-default-list' conference.slug %}" class="btn btn-secondary">Type Defaults</a>
+<a href="{% url 'manage:override-add' conference.slug %}" class="btn btn-primary">Add Override</a>
+{% endblock %}
+
+{% block content %}
+{% if overrides %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Talk</th>
+      <th>Room</th>
+      <th>State</th>
+      <th>Cancelled</th>
+      <th>Rescheduled</th>
+      <th>Updated</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for override in overrides %}
+    <tr>
+      <td>
+        <a href="{% url 'manage:talk-detail' conference.slug override.talk.pk %}">{{ override.talk.title }}</a>
+      </td>
+      <td>
+        {% if override.override_room %}
+        {{ override.override_room.name }}
+        {% else %}
+        &mdash;
+        {% endif %}
+      </td>
+      <td>
+        {% if override.override_state %}
+        <span class="badge badge--other">{{ override.override_state }}</span>
+        {% else %}
+        &mdash;
+        {% endif %}
+      </td>
+      <td>
+        {% if override.is_cancelled %}
+        <span class="badge badge--warning">Cancelled</span>
+        {% else %}
+        &mdash;
+        {% endif %}
+      </td>
+      <td>
+        {% if override.override_slot_start %}
+        <span class="mono">{{ override.override_slot_start|date:"N j, H:i" }}</span>
+        {% else %}
+        &mdash;
+        {% endif %}
+      </td>
+      <td><span class="mono">{{ override.updated_at|date:"N j, H:i" }}</span></td>
+      <td>
+        <a href="{% url 'manage:override-edit' conference.slug override.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>No talk overrides configured for this conference.</p>
+  <a href="{% url 'manage:override-add' conference.slug %}" class="btn btn-primary">Add Override</a>
+</div>
+{% endif %}
+{% endblock %}

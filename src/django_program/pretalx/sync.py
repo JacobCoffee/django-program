@@ -7,7 +7,8 @@ performance.
 """
 
 import logging
-from datetime import datetime
+import zoneinfo
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
@@ -17,7 +18,7 @@ from django.db.models.functions import Lower
 from django.utils import timezone
 from django.utils.text import slugify
 
-from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
+from django_program.pretalx.models import Room, ScheduleSlot, Speaker, SubmissionTypeDefault, Talk
 from django_program.pretalx.profiles import resolve_pretalx_profile
 from django_program.programs.models import Activity
 from django_program.settings import get_config
@@ -675,6 +676,76 @@ class PretalxSyncService:
                 return room
         return None
 
+    def apply_type_defaults(self) -> int:
+        """Apply SubmissionTypeDefault records to unscheduled talks.
+
+        For each configured submission type default, finds talks of that type
+        that have no room assigned and applies the default room and time slot.
+
+        Returns:
+            The number of talks that were modified by type defaults.
+        """
+        defaults = SubmissionTypeDefault.objects.filter(conference=self.conference).select_related("default_room")
+        if not defaults.exists():
+            return 0
+
+        try:
+            conf_tz = zoneinfo.ZoneInfo(str(self.conference.timezone))
+        except (zoneinfo.ZoneInfoNotFoundError, KeyError):  # fmt: skip
+            logger.warning(
+                "Invalid timezone '%s' for conference %s; falling back to UTC for type defaults.",
+                self.conference.timezone,
+                self.conference.slug,
+            )
+            conf_tz = UTC
+        to_update: list[Talk] = []
+        update_fields: set[str] = set()
+
+        for type_default in defaults:
+            talks = Talk.objects.filter(
+                conference=self.conference,
+                submission_type=type_default.submission_type,
+                room__isnull=True,
+            )
+
+            for talk in talks:
+                changed = False
+
+                if type_default.default_room is not None:
+                    talk.room = type_default.default_room
+                    update_fields.add("room")
+                    changed = True
+
+                if type_default.default_date and type_default.default_start_time and talk.slot_start is None:
+                    talk.slot_start = datetime.combine(
+                        type_default.default_date,
+                        type_default.default_start_time,
+                        tzinfo=conf_tz,
+                    )
+                    update_fields.add("slot_start")
+                    changed = True
+
+                if type_default.default_date and type_default.default_end_time and talk.slot_end is None:
+                    talk.slot_end = datetime.combine(
+                        type_default.default_date,
+                        type_default.default_end_time,
+                        tzinfo=conf_tz,
+                    )
+                    update_fields.add("slot_end")
+                    changed = True
+
+                if changed:
+                    to_update.append(talk)
+
+        if to_update and update_fields:
+            Talk.objects.bulk_update(to_update, fields=list(update_fields), batch_size=500)
+            logger.info(
+                "Applied type defaults to %d talks for %s",
+                len(to_update),
+                self.conference.slug,
+            )
+        return len(to_update)
+
     def sync_all(self, *, allow_large_deletions: bool = False) -> dict[str, int]:
         """Run all sync operations in dependency order.
 
@@ -682,6 +753,8 @@ class PretalxSyncService:
             A mapping of entity type to the number synced.  The
             ``schedule_slots`` key contains only the synced count;
             ``unscheduled_talks`` is added when any talks lack a slot.
+            ``type_defaults_applied`` is added when type defaults modify
+            any talks.
         """
         schedule_count, unscheduled = self.sync_schedule(allow_large_deletions=allow_large_deletions)
         result: dict[str, int] = {
@@ -692,6 +765,11 @@ class PretalxSyncService:
         }
         if unscheduled:
             result["unscheduled_talks"] = unscheduled
+
+        type_defaults_applied = self.apply_type_defaults()
+        if type_defaults_applied:
+            result["type_defaults_applied"] = type_defaults_applied
+
         return result
 
 

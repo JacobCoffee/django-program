@@ -2,7 +2,16 @@
 
 from django.contrib import admin
 
-from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
+from django_program.pretalx.models import (
+    Room,
+    RoomOverride,
+    ScheduleSlot,
+    Speaker,
+    SpeakerOverride,
+    SubmissionTypeDefault,
+    Talk,
+    TalkOverride,
+)
 
 
 @admin.register(Room)
@@ -17,12 +26,7 @@ class RoomAdmin(admin.ModelAdmin):
 
 @admin.register(Speaker)
 class SpeakerAdmin(admin.ModelAdmin):
-    """Admin interface for managing speakers synced from Pretalx.
-
-    Speaker records are primarily created and updated by the Pretalx sync
-    process. The ``pretalx_code`` and sync timestamps are read-only to
-    prevent accidental edits that would break the sync link.
-    """
+    """Admin interface for managing speakers synced from Pretalx."""
 
     list_display = ("name", "conference", "pretalx_code", "email", "user", "synced_at")
     list_filter = ("conference",)
@@ -33,11 +37,7 @@ class SpeakerAdmin(admin.ModelAdmin):
 
 @admin.register(Talk)
 class TalkAdmin(admin.ModelAdmin):
-    """Admin interface for managing talks synced from Pretalx.
-
-    Talks are synced from the Pretalx submissions API. Filtering by submission
-    type, track, and state allows quick navigation of large schedules.
-    """
+    """Admin interface for managing talks synced from Pretalx."""
 
     list_display = ("title", "conference", "submission_type", "track", "state", "room", "slot_start")
     list_filter = ("conference", "submission_type", "track", "state")
@@ -49,12 +49,7 @@ class TalkAdmin(admin.ModelAdmin):
 
 @admin.register(ScheduleSlot)
 class ScheduleSlotAdmin(admin.ModelAdmin):
-    """Admin interface for managing schedule slots.
-
-    Slots represent the full conference timetable including talks, breaks,
-    and social events. The ``display_title`` column shows the linked talk
-    title when available, falling back to the slot's own title.
-    """
+    """Admin interface for managing schedule slots."""
 
     list_display = ("display_title", "conference", "room", "start", "end", "slot_type")
     list_filter = ("conference", "slot_type")
@@ -66,3 +61,53 @@ class ScheduleSlotAdmin(admin.ModelAdmin):
     def display_title(self, obj: ScheduleSlot) -> str:
         """Return the talk title when linked, otherwise the slot title."""
         return obj.display_title
+
+
+@admin.register(TalkOverride)
+class TalkOverrideAdmin(admin.ModelAdmin):
+    """Admin interface for managing talk overrides."""
+
+    list_display = ("talk", "conference", "override_room", "override_state", "is_cancelled", "updated_at")
+    list_filter = ("conference", "is_cancelled")
+    search_fields = ("talk__title", "note")
+    raw_id_fields = ("talk", "override_room", "created_by")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(SpeakerOverride)
+class SpeakerOverrideAdmin(admin.ModelAdmin):
+    """Admin interface for managing speaker overrides."""
+
+    list_display = ("speaker", "conference", "override_name", "override_email", "updated_at")
+    list_filter = ("conference",)
+    search_fields = ("speaker__name", "override_name", "note")
+    raw_id_fields = ("speaker", "created_by")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(RoomOverride)
+class RoomOverrideAdmin(admin.ModelAdmin):
+    """Admin interface for managing room overrides."""
+
+    list_display = ("room", "conference", "override_name", "override_capacity", "updated_at")
+    list_filter = ("conference",)
+    search_fields = ("room__name", "override_name", "note")
+    raw_id_fields = ("room", "created_by")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(SubmissionTypeDefault)
+class SubmissionTypeDefaultAdmin(admin.ModelAdmin):
+    """Admin interface for submission type defaults."""
+
+    list_display = (
+        "submission_type",
+        "conference",
+        "default_room",
+        "default_date",
+        "default_start_time",
+        "default_end_time",
+    )
+    list_filter = ("conference",)
+    search_fields = ("submission_type",)
+    raw_id_fields = ("default_room",)

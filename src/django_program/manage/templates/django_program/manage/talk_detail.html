@@ -18,6 +18,11 @@
 {% endblock %}
 
 {% block page_actions %}
+{% if talk_override %}
+<a href="{% url 'manage:override-edit' conference.slug talk_override.pk %}" class="btn btn-secondary">Edit Override</a>
+{% else %}
+<a href="{% url 'manage:override-add' conference.slug %}?talk={{ talk.pk }}" class="btn btn-secondary">+ Override</a>
+{% endif %}
 <a href="{% url 'manage:talk-edit' conference.slug talk.pk %}" class="btn btn-secondary">Edit</a>
 {% endblock %}
 
@@ -73,6 +78,55 @@
     {% endif %}
   </div>
 </div>
+
+{% if talk_override %}
+<div class="card card--static" style="margin-bottom: 1.25rem; border-color: var(--color-warning-border);">
+  <div class="card-body">
+    <h2 class="section-heading">Active Override</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem 1rem;">
+      {% if talk_override.override_room %}
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Room Override</div>
+        <div>{{ talk_override.override_room.name }}</div>
+      </div>
+      {% endif %}
+      {% if talk_override.override_title %}
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Title Override</div>
+        <div>{{ talk_override.override_title }}</div>
+      </div>
+      {% endif %}
+      {% if talk_override.override_state %}
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">State Override</div>
+        <div><span class="badge badge--other">{{ talk_override.override_state }}</span></div>
+      </div>
+      {% endif %}
+      {% if talk_override.is_cancelled %}
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Cancelled</div>
+        <div><span class="badge badge--warning">Yes</span></div>
+      </div>
+      {% endif %}
+      {% if talk_override.override_slot_start %}
+      <div>
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Start Override</div>
+        <div><span class="mono">{{ talk_override.override_slot_start|date:"N j, H:i" }}</span></div>
+      </div>
+      {% endif %}
+      {% if talk_override.note %}
+      <div style="grid-column: 1 / -1;">
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);">Note</div>
+        <div>{{ talk_override.note }}</div>
+      </div>
+      {% endif %}
+    </div>
+    <div style="margin-top: 0.75rem;">
+      <a href="{% url 'manage:override-edit' conference.slug talk_override.pk %}" class="btn btn-sm btn-secondary">Edit Override</a>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% if talk.abstract %}
 <div class="card card--static" style="margin-bottom: 1.25rem;">
