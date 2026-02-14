@@ -1,4 +1,4 @@
-"""Speaker, Talk, Room, and ScheduleSlot models synced from Pretalx."""
+"""Speaker, Talk, Room, ScheduleSlot, and override models for Pretalx data."""
 
 from django.conf import settings
 from django.db import models
@@ -188,3 +188,173 @@ class ScheduleSlot(models.Model):
         if self.talk:
             return self.talk.title
         return self.title
+
+
+class TalkOverride(models.Model):
+    """Local override applied on top of synced Pretalx talk data.
+
+    Allows conference organizers to patch individual fields of a synced talk
+    without modifying the upstream Pretalx record.  Overrides are applied
+    after each sync to ensure local corrections persist.  Fields left blank
+    (or ``None``) are not applied, preserving the synced value.
+    """
+
+    talk = models.OneToOneField(
+        Talk,
+        on_delete=models.CASCADE,
+        related_name="override",
+    )
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="talk_overrides",
+    )
+    override_room = models.ForeignKey(
+        Room,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="talk_overrides",
+        help_text="Override the room assignment for this talk.",
+    )
+    override_title = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Override the talk title.",
+    )
+    override_state = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        help_text="Override the talk state (e.g. confirmed, withdrawn).",
+    )
+    override_slot_start = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Override the scheduled start time.",
+    )
+    override_slot_end = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Override the scheduled end time.",
+    )
+    override_abstract = models.TextField(
+        blank=True,
+        default="",
+        help_text="Override the talk abstract.",
+    )
+    is_cancelled = models.BooleanField(
+        default=False,
+        help_text="Mark this talk as cancelled. Overrides the state to 'cancelled'.",
+    )
+    note = models.TextField(
+        blank=True,
+        default="",
+        help_text="Internal note explaining the reason for this override.",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_talk_overrides",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self) -> str:
+        return f"Override for {self.talk}"
+
+    def apply(self) -> list[str]:
+        """Apply non-empty override fields onto the linked talk.
+
+        Returns:
+            A list of field names that were changed on the talk.
+        """
+        talk: Talk = self.talk  # type: ignore[assignment]
+        changed: list[str] = []
+
+        if self.is_cancelled:
+            if talk.state != "cancelled":
+                talk.state = "cancelled"  # type: ignore[assignment]
+                changed.append("state")
+        elif self.override_state and talk.state != self.override_state:
+            talk.state = self.override_state  # type: ignore[assignment]
+            changed.append("state")
+
+        if self.override_title and talk.title != self.override_title:
+            talk.title = self.override_title  # type: ignore[assignment]
+            changed.append("title")
+
+        if self.override_abstract and talk.abstract != self.override_abstract:
+            talk.abstract = self.override_abstract  # type: ignore[assignment]
+            changed.append("abstract")
+
+        if self.override_room is not None and talk.room_id != self.override_room_id:
+            talk.room = self.override_room  # type: ignore[assignment]
+            changed.append("room")
+
+        if self.override_slot_start is not None and talk.slot_start != self.override_slot_start:
+            talk.slot_start = self.override_slot_start  # type: ignore[assignment]
+            changed.append("slot_start")
+
+        if self.override_slot_end is not None and talk.slot_end != self.override_slot_end:
+            talk.slot_end = self.override_slot_end  # type: ignore[assignment]
+            changed.append("slot_end")
+
+        return changed
+
+
+class SubmissionTypeDefault(models.Model):
+    """Default room and time-slot assignment for a Pretalx submission type.
+
+    When talks of a given ``submission_type`` (e.g. "Poster") have no room or
+    schedule assigned by Pretalx, these defaults are applied automatically
+    after each sync.
+    """
+
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="submission_type_defaults",
+    )
+    submission_type = models.CharField(
+        max_length=200,
+        help_text="The Pretalx submission type name to match (e.g. 'Poster', 'Tutorial').",
+    )
+    default_room = models.ForeignKey(
+        Room,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="submission_type_defaults",
+        help_text="Default room for talks of this type.",
+    )
+    default_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Default date for talks of this type.",
+    )
+    default_start_time = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Default start time for talks of this type.",
+    )
+    default_end_time = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Default end time for talks of this type.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["submission_type"]
+        unique_together = [("conference", "submission_type")]
+
+    def __str__(self) -> str:
+        return f"Defaults for '{self.submission_type}'"

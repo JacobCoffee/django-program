@@ -1,0 +1,52 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Submission Type Defaults{% endblock %}
+
+{% block page_title %}
+<h1>Submission Type Defaults</h1>
+<p>Auto-assign rooms and times to unscheduled talks by submission type</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:override-list' conference.slug %}" class="btn btn-secondary">Talk Overrides</a>
+<a href="{% url 'manage:type-default-add' conference.slug %}" class="btn btn-primary">Add Default</a>
+{% endblock %}
+
+{% block content %}
+{% if type_defaults %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Submission Type</th>
+      <th>Default Room</th>
+      <th>Date</th>
+      <th>Start Time</th>
+      <th>End Time</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for td in type_defaults %}
+    <tr>
+      <td>{{ td.submission_type }}</td>
+      <td>{% if td.default_room %}{{ td.default_room.name }}{% else %}&mdash;{% endif %}</td>
+      <td>{% if td.default_date %}{{ td.default_date|date:"N j, Y" }}{% else %}&mdash;{% endif %}</td>
+      <td>{% if td.default_start_time %}<span class="mono">{{ td.default_start_time|time:"H:i" }}</span>{% else %}&mdash;{% endif %}</td>
+      <td>{% if td.default_end_time %}<span class="mono">{{ td.default_end_time|time:"H:i" }}</span>{% else %}&mdash;{% endif %}</td>
+      <td>
+        <a href="{% url 'manage:type-default-edit' conference.slug td.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>No submission type defaults configured for this conference.</p>
+  <a href="{% url 'manage:type-default-add' conference.slug %}" class="btn btn-primary">Add Default</a>
+</div>
+{% endif %}
+{% endblock %}
