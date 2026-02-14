@@ -1,0 +1,123 @@
+name: Publish pretalx-client
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  check-tag:
+    name: Check Tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should-publish: ${{ steps.check.outputs.match }}
+    steps:
+      - name: Check tag matches pretalx-client pattern
+        id: check
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ "${TAG}" =~ ^pretalx-client/v[0-9] ]]; then
+            echo "match=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "match=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+  build:
+    name: Build
+    needs: [check-tag]
+    if: needs.check-tag.outputs.should-publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          version: "0.10.2"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Build package
+        run: uv build --package pretalx-client
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: dist
+          path: dist/*
+
+  sign:
+    name: Sign
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: dist
+          path: dist
+
+      - name: Sign with sigstore
+        uses: sigstore/gh-action-sigstore-python@f514d46b907ebcd5bedc05145c03b69c1edd8b46 # v3.0.0
+        with:
+          inputs: dist/*
+
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: dist-signed
+          path: dist/*
+
+  upload-release-assets:
+    name: Upload Release Assets
+    needs: [sign]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: dist-signed
+          path: dist
+
+      - name: Upload assets to GitHub release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.3.2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: dist/*
+
+  publish:
+    name: Publish to PyPI
+    needs: [sign]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    environment:
+      name: pypi-pretalx-client
+      url: https://pypi.org/project/pretalx-client/
+    steps:
+      - name: Download signed artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: dist-signed
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b54571ab1b3804cb1b126cda # v1.14.0
+        with:
+          attestations: true
