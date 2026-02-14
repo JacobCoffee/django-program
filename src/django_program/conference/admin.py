@@ -3,7 +3,7 @@
 from django import forms
 from django.contrib import admin
 
-from django_program.conference.models import Conference, Section
+from django_program.conference.models import Conference, FeatureFlags, Section
 
 SECRET_PLACEHOLDER = "\u2022" * 12
 
@@ -148,3 +148,49 @@ class SectionAdmin(admin.ModelAdmin):
     list_filter = ("conference",)
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(FeatureFlags)
+class FeatureFlagsAdmin(admin.ModelAdmin):
+    """Admin interface for per-conference feature flag overrides.
+
+    Allows toggling individual features on or off per conference.
+    Leaving a field blank (``None``) uses the default from
+    ``DJANGO_PROGRAM["features"]`` in settings.
+    """
+
+    list_display = (
+        "conference",
+        "registration_enabled",
+        "sponsors_enabled",
+        "travel_grants_enabled",
+        "programs_enabled",
+        "public_ui_enabled",
+        "updated_at",
+    )
+    list_filter = ("conference",)
+    fieldsets = (
+        ("Conference", {"fields": ("conference",)}),
+        (
+            "Module Toggles",
+            {
+                "fields": (
+                    "registration_enabled",
+                    "sponsors_enabled",
+                    "travel_grants_enabled",
+                    "programs_enabled",
+                    "pretalx_sync_enabled",
+                ),
+            },
+        ),
+        (
+            "UI Toggles",
+            {
+                "fields": (
+                    "public_ui_enabled",
+                    "manage_ui_enabled",
+                    "all_ui_enabled",
+                ),
+            },
+        ),
+    )
