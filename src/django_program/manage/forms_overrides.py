@@ -1,6 +1,7 @@
 """Model forms for Pretalx overrides and submission type defaults."""
 
 from django import forms
+from django.core.exceptions import ValidationError
 
 from django_program.pretalx.models import (
     Room,
@@ -217,6 +218,17 @@ class SponsorOverrideForm(forms.ModelForm):
         if is_edit:
             self.fields["sponsor"].disabled = True
 
+    def clean_override_is_active(self) -> bool | None:
+        """Convert Select widget string values to Python None/True/False."""
+        value = self.data.get("override_is_active", "")
+        if value == "" or value is None:
+            return None
+        if value == "True" or value is True:
+            return True
+        if value == "False" or value is False:
+            return False
+        return None
+
 
 class SubmissionTypeDefaultForm(forms.ModelForm):
     """Form for creating or editing submission type default assignments."""
@@ -241,3 +253,33 @@ class SubmissionTypeDefaultForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if conference is not None:
             self.fields["default_room"].queryset = Room.objects.filter(conference=conference)
+
+    def clean(self) -> dict[str, object]:
+        """Validate time field consistency.
+
+        Ensures that:
+        - ``default_date`` is required when either time field is set (times
+          without a date are silently ignored by ``apply_type_defaults``).
+        - ``default_start_time`` and ``default_end_time`` must be provided as
+          a pair or not at all (partial time ranges are invalid).
+        """
+        cleaned = super().clean()
+        start_time = cleaned.get("default_start_time")
+        end_time = cleaned.get("default_end_time")
+        has_date = cleaned.get("default_date") is not None
+
+        if (start_time or end_time) and not has_date:
+            raise ValidationError(
+                {"default_date": "A date is required when start or end time is set."},
+            )
+
+        if bool(start_time) != bool(end_time):
+            msg = "Both start and end time are required when either is set."
+            errors: dict[str, str] = {}
+            if not start_time:
+                errors["default_start_time"] = msg
+            if not end_time:
+                errors["default_end_time"] = msg
+            raise ValidationError(errors)
+
+        return cleaned

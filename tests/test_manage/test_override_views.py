@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from django_program.conference.models import Conference
+from django_program.manage.forms_overrides import SponsorOverrideForm, SubmissionTypeDefaultForm
 from django_program.pretalx.models import (
     Room,
     RoomOverride,
@@ -831,3 +832,209 @@ class TestOverrideURLResolution:
     def test_type_default_edit_url(self):
         url = reverse("manage:type-default-edit", kwargs={"conference_slug": "test-conf", "pk": 1})
         assert url == "/manage/test-conf/overrides/type-defaults/1/edit/"
+
+
+# ===========================================================================
+# SubmissionTypeDefaultForm Validation
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestSubmissionTypeDefaultFormValidation:
+    """Validate that SubmissionTypeDefaultForm.clean() enforces time/date consistency."""
+
+    def test_valid_with_all_time_fields(self, conference, room):
+        form = SubmissionTypeDefaultForm(
+            data={
+                "submission_type": "Tutorial",
+                "default_room": room.pk,
+                "default_date": "2027-05-01",
+                "default_start_time": "09:00",
+                "default_end_time": "17:00",
+            },
+            conference=conference,
+        )
+        assert form.is_valid(), form.errors
+
+    def test_valid_with_no_time_fields(self, conference, room):
+        form = SubmissionTypeDefaultForm(
+            data={
+                "submission_type": "Tutorial",
+                "default_room": room.pk,
+                "default_date": "",
+                "default_start_time": "",
+                "default_end_time": "",
+            },
+            conference=conference,
+        )
+        assert form.is_valid(), form.errors
+
+    def test_valid_with_date_only(self, conference, room):
+        form = SubmissionTypeDefaultForm(
+            data={
+                "submission_type": "Tutorial",
+                "default_room": room.pk,
+                "default_date": "2027-05-01",
+                "default_start_time": "",
+                "default_end_time": "",
+            },
+            conference=conference,
+        )
+        assert form.is_valid(), form.errors
+
+    def test_rejects_start_time_without_date(self, conference, room):
+        form = SubmissionTypeDefaultForm(
+            data={
+                "submission_type": "Tutorial",
+                "default_room": room.pk,
+                "default_date": "",
+                "default_start_time": "09:00",
+                "default_end_time": "17:00",
+            },
+            conference=conference,
+        )
+        assert not form.is_valid()
+        assert "default_date" in form.errors
+
+    def test_rejects_end_time_without_date(self, conference, room):
+        form = SubmissionTypeDefaultForm(
+            data={
+                "submission_type": "Tutorial",
+                "default_room": room.pk,
+                "default_date": "",
+                "default_start_time": "",
+                "default_end_time": "17:00",
+            },
+            conference=conference,
+        )
+        assert not form.is_valid()
+        assert "default_date" in form.errors
+
+    def test_rejects_start_time_without_end_time(self, conference, room):
+        form = SubmissionTypeDefaultForm(
+            data={
+                "submission_type": "Tutorial",
+                "default_room": room.pk,
+                "default_date": "2027-05-01",
+                "default_start_time": "09:00",
+                "default_end_time": "",
+            },
+            conference=conference,
+        )
+        assert not form.is_valid()
+        assert "default_end_time" in form.errors
+
+    def test_rejects_end_time_without_start_time(self, conference, room):
+        form = SubmissionTypeDefaultForm(
+            data={
+                "submission_type": "Tutorial",
+                "default_room": room.pk,
+                "default_date": "2027-05-01",
+                "default_start_time": "",
+                "default_end_time": "17:00",
+            },
+            conference=conference,
+        )
+        assert not form.is_valid()
+        assert "default_start_time" in form.errors
+
+    def test_post_rejects_times_without_date_via_view(self, authed_client, conference, room):
+        url = reverse("manage:type-default-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.post(
+            url,
+            {
+                "submission_type": "Tutorial",
+                "default_room": room.pk,
+                "default_date": "",
+                "default_start_time": "09:00",
+                "default_end_time": "17:00",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.context["form"].errors
+
+
+# ===========================================================================
+# SponsorOverrideForm.clean_override_is_active
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestSponsorOverrideFormIsActive:
+    """Validate that override_is_active converts string widget values correctly."""
+
+    def test_empty_string_becomes_none(self, conference, sponsor):
+        form = SponsorOverrideForm(
+            data={
+                "sponsor": sponsor.pk,
+                "override_name": "",
+                "override_description": "",
+                "override_website_url": "",
+                "override_logo_url": "",
+                "override_contact_name": "",
+                "override_contact_email": "",
+                "override_is_active": "",
+                "override_level": "",
+                "note": "",
+            },
+            conference=conference,
+        )
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["override_is_active"] is None
+
+    def test_true_string_becomes_true(self, conference, sponsor):
+        form = SponsorOverrideForm(
+            data={
+                "sponsor": sponsor.pk,
+                "override_name": "",
+                "override_description": "",
+                "override_website_url": "",
+                "override_logo_url": "",
+                "override_contact_name": "",
+                "override_contact_email": "",
+                "override_is_active": "True",
+                "override_level": "",
+                "note": "",
+            },
+            conference=conference,
+        )
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["override_is_active"] is True
+
+    def test_false_string_becomes_false(self, conference, sponsor):
+        form = SponsorOverrideForm(
+            data={
+                "sponsor": sponsor.pk,
+                "override_name": "",
+                "override_description": "",
+                "override_website_url": "",
+                "override_logo_url": "",
+                "override_contact_name": "",
+                "override_contact_email": "",
+                "override_is_active": "False",
+                "override_level": "",
+                "note": "",
+            },
+            conference=conference,
+        )
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["override_is_active"] is False
+
+    def test_unexpected_value_becomes_none(self, conference, sponsor):
+        form = SponsorOverrideForm(
+            data={
+                "sponsor": sponsor.pk,
+                "override_name": "",
+                "override_description": "",
+                "override_website_url": "",
+                "override_logo_url": "",
+                "override_contact_name": "",
+                "override_contact_email": "",
+                "override_is_active": "maybe",
+                "override_level": "",
+                "note": "",
+            },
+            conference=conference,
+        )
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["override_is_active"] is None

@@ -275,7 +275,8 @@ class SponsorOverride(AbstractOverride):
     )
 
     def __str__(self) -> str:
-        return f"Override for {self.sponsor}"
+        level_name = self.sponsor.level.name if self.sponsor.level_id else "Unknown"
+        return f"Override: {self.sponsor.name} ({level_name})"
 
     @property
     def is_empty(self) -> bool:

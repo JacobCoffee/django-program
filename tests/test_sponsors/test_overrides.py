@@ -57,7 +57,7 @@ class TestSponsorOverrideStr:
         level = _make_level(conf)
         sponsor = _make_sponsor(conf, level, "Acme Corp")
         override = SponsorOverride.objects.create(sponsor=sponsor, conference=conf)
-        assert str(override) == "Override for Acme Corp (Gold)"
+        assert str(override) == "Override: Acme Corp (Gold)"
 
 
 # ===========================================================================
