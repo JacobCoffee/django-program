@@ -344,26 +344,15 @@ class ScheduleSlot(models.Model):
 class AbstractOverride(models.Model):
     """Shared base for all override models.
 
-    Provides common metadata fields (note, created_by, timestamps) and
-    the conference FK with auto-set-from-parent logic.
+    Provides common metadata fields (note, timestamps) and
+    auto-set-from-parent logic.  Concrete subclasses define their own
+    ``conference`` and ``created_by`` ForeignKeys with explicit related names.
     """
 
-    conference = models.ForeignKey(
-        "program_conference.Conference",
-        on_delete=models.CASCADE,
-        related_name="%(class)ss",
-    )
     note = models.TextField(
         blank=True,
         default="",
         help_text="Internal note explaining the reason for this override.",
-    )
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="created_%(class)ss",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -413,6 +402,18 @@ class TalkOverride(AbstractOverride):
 
     _parent_field = "talk"
 
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="talk_overrides",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_talk_overrides",
+    )
     talk = models.OneToOneField(
         Talk,
         on_delete=models.CASCADE,
@@ -488,6 +489,18 @@ class SpeakerOverride(AbstractOverride):
 
     _parent_field = "speaker"
 
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="speaker_overrides",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_speaker_overrides",
+    )
     speaker = models.OneToOneField(
         Speaker,
         on_delete=models.CASCADE,
@@ -538,6 +551,18 @@ class RoomOverride(AbstractOverride):
 
     _parent_field = "room"
 
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="room_overrides",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_room_overrides",
+    )
     room = models.OneToOneField(
         Room,
         on_delete=models.CASCADE,

@@ -20,7 +20,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import models, transaction
-from django.db.models import Case, Count, F, Q, QuerySet, Sum, Value, When
+from django.db.models import Case, Count, F, Prefetch, Q, QuerySet, Sum, Value, When
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -1112,18 +1112,25 @@ class TalkDetailView(ManagePermissionMixin, DetailView):
         """Scope talk lookup to conference and preload related speaker/room data."""
         return (
             Talk.objects.filter(conference=self.conference)
-            .select_related("room")
-            .prefetch_related("speakers", "schedule_slots")
+            .select_related("room", "override")
+            .prefetch_related(
+                "speakers",
+                Prefetch(
+                    "schedule_slots",
+                    queryset=ScheduleSlot.objects.select_related("room").order_by("start"),
+                ),
+            )
         )
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Add active nav, schedule slots, and override info for this talk."""
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "talks"
-        context["talk_slots"] = self.object.schedule_slots.select_related("room").order_by("start")
-        # Check if a TalkOverride already exists for this talk
-        override = TalkOverride.objects.filter(talk=self.object).first()
-        context["talk_override"] = override
+        context["talk_slots"] = self.object.schedule_slots.all()
+        try:
+            context["talk_override"] = self.object.override
+        except TalkOverride.DoesNotExist:
+            context["talk_override"] = None
         return context
 
 
