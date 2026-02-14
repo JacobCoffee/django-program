@@ -1,0 +1,52 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Speaker Overrides{% endblock %}
+
+{% block page_title %}
+<h1>Speaker Overrides</h1>
+<p>Local patches applied on top of synced speaker data</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:override-list' conference.slug %}" class="btn btn-secondary">Talk Overrides</a>
+<a href="{% url 'manage:speaker-override-add' conference.slug %}" class="btn btn-primary">Add Override</a>
+{% endblock %}
+
+{% block content %}
+{% if overrides %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Speaker</th>
+      <th>Name Override</th>
+      <th>Email Override</th>
+      <th>Updated</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for override in overrides %}
+    <tr>
+      <td>
+        <a href="{% url 'manage:speaker-detail' conference.slug override.speaker.pk %}">{{ override.speaker.name }}</a>
+      </td>
+      <td>{% if override.override_name %}{{ override.override_name }}{% else %}&mdash;{% endif %}</td>
+      <td>{% if override.override_email %}{{ override.override_email }}{% else %}&mdash;{% endif %}</td>
+      <td><span class="mono">{{ override.updated_at|date:"N j, H:i" }}</span></td>
+      <td>
+        <a href="{% url 'manage:speaker-override-edit' conference.slug override.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>No speaker overrides configured for this conference.</p>
+  <a href="{% url 'manage:speaker-override-add' conference.slug %}" class="btn btn-primary">Add Override</a>
+</div>
+{% endif %}
+{% endblock %}

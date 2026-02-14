@@ -75,8 +75,13 @@
         <span class="badge badge--warning">Unscheduled</span>
         {% endif %}
       </td>
-      <td>
+      <td style="white-space: nowrap;">
         <a href="{% url 'manage:talk-edit' conference.slug talk.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+        {% if talk.override %}
+        <a href="{% url 'manage:override-edit' conference.slug talk.override.pk %}" class="btn btn-sm btn-secondary" title="Edit existing override">Override</a>
+        {% else %}
+        <a href="{% url 'manage:override-add' conference.slug %}?talk={{ talk.pk }}" class="btn btn-sm btn-secondary" title="Create override">+ Override</a>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

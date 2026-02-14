@@ -36,8 +36,13 @@
         <span class="badge badge--other">Manual</span>
         {% endif %}
       </td>
-      <td>
+      <td style="white-space: nowrap;">
         <a href="{% url 'manage:room-edit' conference.slug room.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+        {% if room.override %}
+        <a href="{% url 'manage:room-override-edit' conference.slug room.override.pk %}" class="btn btn-sm btn-secondary" title="Edit existing override">Override</a>
+        {% else %}
+        <a href="{% url 'manage:room-override-add' conference.slug %}?room={{ room.pk }}" class="btn btn-sm btn-secondary" title="Create override">+ Override</a>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

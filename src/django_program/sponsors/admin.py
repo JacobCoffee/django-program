@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from django_program.sponsors.models import Sponsor, SponsorBenefit, SponsorLevel
+from django_program.sponsors.models import Sponsor, SponsorBenefit, SponsorLevel, SponsorOverride
 
 
 class SponsorBenefitInline(admin.TabularInline):
@@ -30,3 +30,14 @@ class SponsorAdmin(admin.ModelAdmin):
     list_filter = ("conference", "level", "is_active")
     search_fields = ("name", "slug", "contact_name", "contact_email")
     inlines = (SponsorBenefitInline,)
+
+
+@admin.register(SponsorOverride)
+class SponsorOverrideAdmin(admin.ModelAdmin):
+    """Admin interface for managing sponsor overrides."""
+
+    list_display = ("sponsor", "conference", "override_name", "override_is_active", "updated_at")
+    list_filter = ("conference",)
+    search_fields = ("sponsor__name", "override_name", "note")
+    raw_id_fields = ("sponsor", "override_level", "created_by")
+    readonly_fields = ("created_at", "updated_at")

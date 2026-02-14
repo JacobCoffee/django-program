@@ -1,0 +1,50 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Room Overrides{% endblock %}
+
+{% block page_title %}
+<h1>Room Overrides</h1>
+<p>Local patches applied on top of synced room data</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:override-list' conference.slug %}" class="btn btn-secondary">Talk Overrides</a>
+<a href="{% url 'manage:room-override-add' conference.slug %}" class="btn btn-primary">Add Override</a>
+{% endblock %}
+
+{% block content %}
+{% if overrides %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Room</th>
+      <th>Name Override</th>
+      <th>Capacity Override</th>
+      <th>Updated</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for override in overrides %}
+    <tr>
+      <td>{{ override.room.name }}</td>
+      <td>{% if override.override_name %}{{ override.override_name }}{% else %}&mdash;{% endif %}</td>
+      <td>{% if override.override_capacity is not None %}{{ override.override_capacity }}{% else %}&mdash;{% endif %}</td>
+      <td><span class="mono">{{ override.updated_at|date:"N j, H:i" }}</span></td>
+      <td>
+        <a href="{% url 'manage:room-override-edit' conference.slug override.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>No room overrides configured for this conference.</p>
+  <a href="{% url 'manage:room-override-add' conference.slug %}" class="btn btn-primary">Add Override</a>
+</div>
+{% endif %}
+{% endblock %}

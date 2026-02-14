@@ -1,5 +1,6 @@
 """Sponsor level, sponsor, and benefit models for django-program."""
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
@@ -107,6 +108,213 @@ class Sponsor(models.Model):
         if self.level_id and self.conference_id and self.level.conference_id != self.conference_id:
             msg = "Sponsor level must belong to the same conference as the sponsor."
             raise ValidationError({"level": msg})
+
+    @property
+    def effective_name(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_name:
+                return o.override_name
+        except SponsorOverride.DoesNotExist:
+            pass
+        return self.name
+
+    @property
+    def effective_description(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_description:
+                return o.override_description
+        except SponsorOverride.DoesNotExist:
+            pass
+        return self.description
+
+    @property
+    def effective_website_url(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_website_url:
+                return o.override_website_url
+        except SponsorOverride.DoesNotExist:
+            pass
+        return self.website_url
+
+    @property
+    def effective_logo_url(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_logo_url:
+                return o.override_logo_url
+        except SponsorOverride.DoesNotExist:
+            pass
+        return self.logo_url
+
+    @property
+    def effective_contact_name(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_contact_name:
+                return o.override_contact_name
+        except SponsorOverride.DoesNotExist:
+            pass
+        return self.contact_name
+
+    @property
+    def effective_contact_email(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_contact_email:
+                return o.override_contact_email
+        except SponsorOverride.DoesNotExist:
+            pass
+        return self.contact_email
+
+    @property
+    def effective_is_active(self) -> bool:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_is_active is not None:
+                return o.override_is_active
+        except SponsorOverride.DoesNotExist:
+            pass
+        return self.is_active
+
+    @property
+    def effective_level(self) -> SponsorLevel:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_level_id:
+                return o.override_level
+        except SponsorOverride.DoesNotExist:
+            pass
+        return self.level
+
+
+class SponsorOverride(models.Model):
+    """Local override applied on top of sponsor data.
+
+    Allows conference organizers to patch individual fields of a sponsor
+    without modifying the original record.
+    """
+
+    sponsor = models.OneToOneField(
+        Sponsor,
+        on_delete=models.CASCADE,
+        related_name="override",
+    )
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="sponsor_overrides",
+    )
+    override_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Override the sponsor name.",
+    )
+    override_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Override the sponsor description.",
+    )
+    override_website_url = models.URLField(
+        blank=True,
+        default="",
+        help_text="Override the sponsor website URL.",
+    )
+    override_logo_url = models.URLField(
+        blank=True,
+        default="",
+        help_text="Override the sponsor logo URL.",
+    )
+    override_contact_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Override the sponsor contact name.",
+    )
+    override_contact_email = models.EmailField(
+        blank=True,
+        default="",
+        help_text="Override the sponsor contact email.",
+    )
+    override_is_active = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Override the sponsor active status. Leave blank for no override.",
+    )
+    override_level = models.ForeignKey(
+        SponsorLevel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sponsor_overrides",
+        help_text="Override the sponsor level.",
+    )
+    note = models.TextField(
+        blank=True,
+        default="",
+        help_text="Internal note explaining the reason for this override.",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_sponsor_overrides",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self) -> str:
+        return f"Override for {self.sponsor}"
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        """Auto-set conference from the linked sponsor when not explicitly provided."""
+        if self.sponsor_id and not self.conference_id:
+            self.conference_id = (
+                Sponsor.objects.filter(pk=self.sponsor_id).values_list("conference_id", flat=True).first()
+            )
+        super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        """Validate that the linked sponsor belongs to the same conference."""
+        super().clean()
+        if self.sponsor_id and self.conference_id:
+            sponsor_conference_id = (
+                Sponsor.objects.filter(pk=self.sponsor_id).values_list("conference_id", flat=True).first()
+            )
+            if sponsor_conference_id is not None and sponsor_conference_id != self.conference_id:
+                raise ValidationError(
+                    {"sponsor": "The selected sponsor does not belong to this conference."},
+                )
+
+    @property
+    def is_empty(self) -> bool:
+        """Return True when no override fields carry a value."""
+        return (
+            not self.override_name
+            and not self.override_description
+            and not self.override_website_url
+            and not self.override_logo_url
+            and not self.override_contact_name
+            and not self.override_contact_email
+            and self.override_is_active is None
+            and not self.override_level_id
+        )
 
 
 class SponsorBenefit(models.Model):

@@ -1,4 +1,4 @@
-"""Tests for override management views (TalkOverride and SubmissionTypeDefault CRUD)."""
+"""Tests for override management views (all override types and SubmissionTypeDefault CRUD)."""
 
 from datetime import date, timedelta
 
@@ -9,7 +9,16 @@ from django.urls import reverse
 from django.utils import timezone
 
 from django_program.conference.models import Conference
-from django_program.pretalx.models import Room, SubmissionTypeDefault, Talk, TalkOverride
+from django_program.pretalx.models import (
+    Room,
+    RoomOverride,
+    Speaker,
+    SpeakerOverride,
+    SubmissionTypeDefault,
+    Talk,
+    TalkOverride,
+)
+from django_program.sponsors.models import Sponsor, SponsorLevel, SponsorOverride
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -60,12 +69,75 @@ def talk(conference, room):
 
 
 @pytest.fixture
+def speaker(conference):
+    return Speaker.objects.create(
+        conference=conference,
+        pretalx_code="SPK1",
+        name="Alice Speaker",
+        email="alice@test.com",
+    )
+
+
+@pytest.fixture
+def sponsor_level(conference):
+    return SponsorLevel.objects.create(
+        conference=conference,
+        name="Gold",
+        slug="gold",
+        cost=5000,
+    )
+
+
+@pytest.fixture
+def sponsor(conference, sponsor_level):
+    return Sponsor.objects.create(
+        conference=conference,
+        level=sponsor_level,
+        name="Acme Corp",
+        slug="acme-corp",
+    )
+
+
+@pytest.fixture
 def talk_override(talk, conference, superuser):
     return TalkOverride.objects.create(
         talk=talk,
         conference=conference,
         override_title="Overridden Title",
         note="Test override",
+        created_by=superuser,
+    )
+
+
+@pytest.fixture
+def speaker_override(speaker, conference, superuser):
+    return SpeakerOverride.objects.create(
+        speaker=speaker,
+        conference=conference,
+        override_name="Bob Speaker",
+        note="Test speaker override",
+        created_by=superuser,
+    )
+
+
+@pytest.fixture
+def room_override(room, conference, superuser):
+    return RoomOverride.objects.create(
+        room=room,
+        conference=conference,
+        override_name="Grand Hall",
+        note="Test room override",
+        created_by=superuser,
+    )
+
+
+@pytest.fixture
+def sponsor_override(sponsor, conference, superuser):
+    return SponsorOverride.objects.create(
+        sponsor=sponsor,
+        conference=conference,
+        override_name="Acme Inc",
+        note="Test sponsor override",
         created_by=superuser,
     )
 
@@ -110,7 +182,8 @@ class TestTalkOverrideListView:
         resp = authed_client.get(url)
         assert resp.status_code == 200
         assert "overrides" in resp.context
-        assert resp.context["active_nav"] == "talks"
+        assert resp.context["active_nav"] == "overrides"
+        assert resp.context["active_override_tab"] == "talks"
         overrides = list(resp.context["overrides"])
         assert len(overrides) == 1
 
@@ -143,7 +216,14 @@ class TestTalkOverrideCreateView:
         resp = authed_client.get(url)
         assert resp.status_code == 200
         assert resp.context["is_create"] is True
-        assert resp.context["active_nav"] == "talks"
+        assert resp.context["active_nav"] == "overrides"
+
+    def test_get_create_form_with_talk_prepopulated(self, authed_client, conference, talk):
+        url = reverse("manage:override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url, {"talk": talk.pk})
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is True
+        assert resp.context["form"].initial.get("talk") == str(talk.pk)
 
     def test_post_creates_override(self, authed_client, conference, talk, superuser):
         url = reverse("manage:override-add", kwargs={"conference_slug": conference.slug})
@@ -186,23 +266,17 @@ class TestTalkOverrideEditView:
     def test_get_edit_form(self, authed_client, conference, talk_override):
         url = reverse(
             "manage:override-edit",
-            kwargs={
-                "conference_slug": conference.slug,
-                "pk": talk_override.pk,
-            },
+            kwargs={"conference_slug": conference.slug, "pk": talk_override.pk},
         )
         resp = authed_client.get(url)
         assert resp.status_code == 200
         assert resp.context["is_create"] is False
-        assert resp.context["active_nav"] == "talks"
+        assert resp.context["active_nav"] == "overrides"
 
     def test_post_updates_override(self, authed_client, conference, talk, talk_override):
         url = reverse(
             "manage:override-edit",
-            kwargs={
-                "conference_slug": conference.slug,
-                "pk": talk_override.pk,
-            },
+            kwargs={"conference_slug": conference.slug, "pk": talk_override.pk},
         )
         resp = authed_client.post(
             url,
@@ -222,16 +296,362 @@ class TestTalkOverrideEditView:
         talk_override.refresh_from_db()
         assert talk_override.override_title == "Updated Title"
 
+    def test_edit_empty_deletes_override(self, authed_client, conference, talk, talk_override):
+        url = reverse(
+            "manage:override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": talk_override.pk},
+        )
+        resp = authed_client.post(
+            url,
+            {
+                "talk": talk.pk,
+                "override_title": "",
+                "override_state": "",
+                "override_abstract": "",
+                "override_room": "",
+                "override_slot_start": "",
+                "override_slot_end": "",
+                "is_cancelled": False,
+                "note": "",
+            },
+        )
+        assert resp.status_code == 302
+        assert not TalkOverride.objects.filter(pk=talk_override.pk).exists()
+
     def test_edit_nonexistent_returns_404(self, authed_client, conference):
         url = reverse(
             "manage:override-edit",
-            kwargs={
-                "conference_slug": conference.slug,
-                "pk": 99999,
-            },
+            kwargs={"conference_slug": conference.slug, "pk": 99999},
         )
         resp = authed_client.get(url)
         assert resp.status_code == 404
+
+
+# ===========================================================================
+# SpeakerOverride Views
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestSpeakerOverrideListView:
+    def test_list_loads(self, authed_client, conference, speaker_override):
+        url = reverse("manage:speaker-override-list", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_override_tab"] == "speakers"
+        assert len(list(resp.context["overrides"])) == 1
+
+    def test_anonymous_redirect(self, anon_client, conference):
+        url = reverse("manage:speaker-override-list", kwargs={"conference_slug": conference.slug})
+        resp = anon_client.get(url)
+        assert resp.status_code == 302
+
+
+@pytest.mark.django_db
+class TestSpeakerOverrideCreateView:
+    def test_get_create_form(self, authed_client, conference, speaker):
+        url = reverse("manage:speaker-override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url)
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is True
+
+    def test_get_create_form_with_speaker_prepopulated(self, authed_client, conference, speaker):
+        url = reverse("manage:speaker-override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url, {"speaker": speaker.pk})
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is True
+        assert resp.context["form"].initial.get("speaker") == str(speaker.pk)
+
+    def test_post_creates_override(self, authed_client, conference, speaker, superuser):
+        url = reverse("manage:speaker-override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.post(
+            url,
+            {
+                "speaker": speaker.pk,
+                "override_name": "New Name",
+                "override_biography": "",
+                "override_avatar_url": "",
+                "override_email": "",
+                "note": "test",
+            },
+        )
+        assert resp.status_code == 302
+        override = SpeakerOverride.objects.get(speaker=speaker)
+        assert override.override_name == "New Name"
+        assert override.created_by == superuser
+
+
+@pytest.mark.django_db
+class TestSpeakerOverrideEditView:
+    def test_get_edit_form(self, authed_client, conference, speaker_override):
+        url = reverse(
+            "manage:speaker-override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": speaker_override.pk},
+        )
+        resp = authed_client.get(url)
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is False
+        assert resp.context["active_override_tab"] == "speakers"
+
+    def test_post_updates(self, authed_client, conference, speaker, speaker_override):
+        url = reverse(
+            "manage:speaker-override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": speaker_override.pk},
+        )
+        resp = authed_client.post(
+            url,
+            {
+                "speaker": speaker.pk,
+                "override_name": "Updated Name",
+                "override_biography": "",
+                "override_avatar_url": "",
+                "override_email": "",
+                "note": "",
+            },
+        )
+        assert resp.status_code == 302
+        speaker_override.refresh_from_db()
+        assert speaker_override.override_name == "Updated Name"
+
+    def test_edit_empty_deletes(self, authed_client, conference, speaker, speaker_override):
+        url = reverse(
+            "manage:speaker-override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": speaker_override.pk},
+        )
+        resp = authed_client.post(
+            url,
+            {
+                "speaker": speaker.pk,
+                "override_name": "",
+                "override_biography": "",
+                "override_avatar_url": "",
+                "override_email": "",
+                "note": "",
+            },
+        )
+        assert resp.status_code == 302
+        assert not SpeakerOverride.objects.filter(pk=speaker_override.pk).exists()
+
+
+# ===========================================================================
+# RoomOverride Views
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestRoomOverrideListView:
+    def test_list_loads(self, authed_client, conference, room_override):
+        url = reverse("manage:room-override-list", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_override_tab"] == "rooms"
+        assert len(list(resp.context["overrides"])) == 1
+
+    def test_anonymous_redirect(self, anon_client, conference):
+        url = reverse("manage:room-override-list", kwargs={"conference_slug": conference.slug})
+        resp = anon_client.get(url)
+        assert resp.status_code == 302
+
+
+@pytest.mark.django_db
+class TestRoomOverrideCreateView:
+    def test_get_create_form(self, authed_client, conference, room):
+        url = reverse("manage:room-override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url)
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is True
+
+    def test_get_create_form_with_room_prepopulated(self, authed_client, conference, room):
+        url = reverse("manage:room-override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url, {"room": room.pk})
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is True
+        assert resp.context["form"].initial.get("room") == str(room.pk)
+
+    def test_post_creates_override(self, authed_client, conference, room, superuser):
+        url = reverse("manage:room-override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.post(
+            url,
+            {
+                "room": room.pk,
+                "override_name": "New Room Name",
+                "override_description": "",
+                "override_capacity": "",
+                "note": "test",
+            },
+        )
+        assert resp.status_code == 302
+        override = RoomOverride.objects.get(room=room)
+        assert override.override_name == "New Room Name"
+        assert override.created_by == superuser
+
+
+@pytest.mark.django_db
+class TestRoomOverrideEditView:
+    def test_get_edit_form(self, authed_client, conference, room_override):
+        url = reverse(
+            "manage:room-override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": room_override.pk},
+        )
+        resp = authed_client.get(url)
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is False
+        assert resp.context["active_override_tab"] == "rooms"
+
+    def test_post_updates(self, authed_client, conference, room, room_override):
+        url = reverse(
+            "manage:room-override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": room_override.pk},
+        )
+        resp = authed_client.post(
+            url,
+            {
+                "room": room.pk,
+                "override_name": "Updated Room",
+                "override_description": "",
+                "override_capacity": "",
+                "note": "",
+            },
+        )
+        assert resp.status_code == 302
+        room_override.refresh_from_db()
+        assert room_override.override_name == "Updated Room"
+
+    def test_edit_empty_deletes(self, authed_client, conference, room, room_override):
+        url = reverse(
+            "manage:room-override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": room_override.pk},
+        )
+        resp = authed_client.post(
+            url,
+            {
+                "room": room.pk,
+                "override_name": "",
+                "override_description": "",
+                "override_capacity": "",
+                "note": "",
+            },
+        )
+        assert resp.status_code == 302
+        assert not RoomOverride.objects.filter(pk=room_override.pk).exists()
+
+
+# ===========================================================================
+# SponsorOverride Views
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestSponsorOverrideListView:
+    def test_list_loads(self, authed_client, conference, sponsor_override):
+        url = reverse("manage:sponsor-override-list", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_override_tab"] == "sponsors"
+        assert len(list(resp.context["overrides"])) == 1
+
+    def test_anonymous_redirect(self, anon_client, conference):
+        url = reverse("manage:sponsor-override-list", kwargs={"conference_slug": conference.slug})
+        resp = anon_client.get(url)
+        assert resp.status_code == 302
+
+
+@pytest.mark.django_db
+class TestSponsorOverrideCreateView:
+    def test_get_create_form(self, authed_client, conference, sponsor):
+        url = reverse("manage:sponsor-override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url)
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is True
+
+    def test_get_create_form_with_sponsor_prepopulated(self, authed_client, conference, sponsor):
+        url = reverse("manage:sponsor-override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.get(url, {"sponsor": sponsor.pk})
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is True
+        assert resp.context["form"].initial.get("sponsor") == str(sponsor.pk)
+
+    def test_post_creates_override(self, authed_client, conference, sponsor, superuser):
+        url = reverse("manage:sponsor-override-add", kwargs={"conference_slug": conference.slug})
+        resp = authed_client.post(
+            url,
+            {
+                "sponsor": sponsor.pk,
+                "override_name": "Acme Inc",
+                "override_description": "",
+                "override_website_url": "",
+                "override_logo_url": "",
+                "override_contact_name": "",
+                "override_contact_email": "",
+                "override_is_active": "",
+                "override_level": "",
+                "note": "test",
+            },
+        )
+        assert resp.status_code == 302
+        override = SponsorOverride.objects.get(sponsor=sponsor)
+        assert override.override_name == "Acme Inc"
+        assert override.created_by == superuser
+
+
+@pytest.mark.django_db
+class TestSponsorOverrideEditView:
+    def test_get_edit_form(self, authed_client, conference, sponsor_override):
+        url = reverse(
+            "manage:sponsor-override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": sponsor_override.pk},
+        )
+        resp = authed_client.get(url)
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is False
+        assert resp.context["active_override_tab"] == "sponsors"
+
+    def test_post_updates(self, authed_client, conference, sponsor, sponsor_override):
+        url = reverse(
+            "manage:sponsor-override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": sponsor_override.pk},
+        )
+        resp = authed_client.post(
+            url,
+            {
+                "sponsor": sponsor.pk,
+                "override_name": "Updated Corp",
+                "override_description": "",
+                "override_website_url": "",
+                "override_logo_url": "",
+                "override_contact_name": "",
+                "override_contact_email": "",
+                "override_is_active": "",
+                "override_level": "",
+                "note": "",
+            },
+        )
+        assert resp.status_code == 302
+        sponsor_override.refresh_from_db()
+        assert sponsor_override.override_name == "Updated Corp"
+
+    def test_edit_empty_deletes(self, authed_client, conference, sponsor, sponsor_override):
+        url = reverse(
+            "manage:sponsor-override-edit",
+            kwargs={"conference_slug": conference.slug, "pk": sponsor_override.pk},
+        )
+        resp = authed_client.post(
+            url,
+            {
+                "sponsor": sponsor.pk,
+                "override_name": "",
+                "override_description": "",
+                "override_website_url": "",
+                "override_logo_url": "",
+                "override_contact_name": "",
+                "override_contact_email": "",
+                "override_is_active": "",
+                "override_level": "",
+                "note": "",
+            },
+        )
+        assert resp.status_code == 302
+        assert not SponsorOverride.objects.filter(pk=sponsor_override.pk).exists()
 
 
 # ===========================================================================
@@ -246,7 +666,7 @@ class TestSubmissionTypeDefaultListView:
         resp = authed_client.get(url)
         assert resp.status_code == 200
         assert "type_defaults" in resp.context
-        assert resp.context["active_nav"] == "talks"
+        assert resp.context["active_nav"] == "overrides"
         defaults = list(resp.context["type_defaults"])
         assert len(defaults) == 1
 
@@ -273,7 +693,7 @@ class TestSubmissionTypeDefaultCreateView:
         resp = authed_client.get(url)
         assert resp.status_code == 200
         assert resp.context["is_create"] is True
-        assert resp.context["active_nav"] == "talks"
+        assert resp.context["active_nav"] == "overrides"
 
     def test_post_creates_default(self, authed_client, conference, room):
         url = reverse("manage:type-default-add", kwargs={"conference_slug": conference.slug})
@@ -311,23 +731,17 @@ class TestSubmissionTypeDefaultEditView:
     def test_get_edit_form(self, authed_client, conference, type_default):
         url = reverse(
             "manage:type-default-edit",
-            kwargs={
-                "conference_slug": conference.slug,
-                "pk": type_default.pk,
-            },
+            kwargs={"conference_slug": conference.slug, "pk": type_default.pk},
         )
         resp = authed_client.get(url)
         assert resp.status_code == 200
         assert resp.context["is_create"] is False
-        assert resp.context["active_nav"] == "talks"
+        assert resp.context["active_nav"] == "overrides"
 
     def test_post_updates_default(self, authed_client, conference, type_default, room):
         url = reverse(
             "manage:type-default-edit",
-            kwargs={
-                "conference_slug": conference.slug,
-                "pk": type_default.pk,
-            },
+            kwargs={"conference_slug": conference.slug, "pk": type_default.pk},
         )
         resp = authed_client.post(
             url,
@@ -346,10 +760,7 @@ class TestSubmissionTypeDefaultEditView:
     def test_edit_nonexistent_returns_404(self, authed_client, conference):
         url = reverse(
             "manage:type-default-edit",
-            kwargs={
-                "conference_slug": conference.slug,
-                "pk": 99999,
-            },
+            kwargs={"conference_slug": conference.slug, "pk": 99999},
         )
         resp = authed_client.get(url)
         assert resp.status_code == 404
@@ -372,6 +783,42 @@ class TestOverrideURLResolution:
     def test_override_edit_url(self):
         url = reverse("manage:override-edit", kwargs={"conference_slug": "test-conf", "pk": 1})
         assert url == "/manage/test-conf/overrides/talks/1/edit/"
+
+    def test_speaker_override_list_url(self):
+        url = reverse("manage:speaker-override-list", kwargs={"conference_slug": "test-conf"})
+        assert url == "/manage/test-conf/overrides/speakers/"
+
+    def test_speaker_override_add_url(self):
+        url = reverse("manage:speaker-override-add", kwargs={"conference_slug": "test-conf"})
+        assert url == "/manage/test-conf/overrides/speakers/add/"
+
+    def test_speaker_override_edit_url(self):
+        url = reverse("manage:speaker-override-edit", kwargs={"conference_slug": "test-conf", "pk": 1})
+        assert url == "/manage/test-conf/overrides/speakers/1/edit/"
+
+    def test_room_override_list_url(self):
+        url = reverse("manage:room-override-list", kwargs={"conference_slug": "test-conf"})
+        assert url == "/manage/test-conf/overrides/rooms/"
+
+    def test_room_override_add_url(self):
+        url = reverse("manage:room-override-add", kwargs={"conference_slug": "test-conf"})
+        assert url == "/manage/test-conf/overrides/rooms/add/"
+
+    def test_room_override_edit_url(self):
+        url = reverse("manage:room-override-edit", kwargs={"conference_slug": "test-conf", "pk": 1})
+        assert url == "/manage/test-conf/overrides/rooms/1/edit/"
+
+    def test_sponsor_override_list_url(self):
+        url = reverse("manage:sponsor-override-list", kwargs={"conference_slug": "test-conf"})
+        assert url == "/manage/test-conf/overrides/sponsors/"
+
+    def test_sponsor_override_add_url(self):
+        url = reverse("manage:sponsor-override-add", kwargs={"conference_slug": "test-conf"})
+        assert url == "/manage/test-conf/overrides/sponsors/add/"
+
+    def test_sponsor_override_edit_url(self):
+        url = reverse("manage:sponsor-override-edit", kwargs={"conference_slug": "test-conf", "pk": 1})
+        assert url == "/manage/test-conf/overrides/sponsors/1/edit/"
 
     def test_type_default_list_url(self):
         url = reverse("manage:type-default-list", kwargs={"conference_slug": "test-conf"})

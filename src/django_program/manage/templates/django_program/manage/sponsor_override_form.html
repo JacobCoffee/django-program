@@ -1,6 +1,6 @@
 {% extends "django_program/manage/base.html" %}
 
-{% block title %}{% if is_create %}Add Talk Override{% else %}Edit Talk Override{% endif %}{% endblock %}
+{% block title %}{% if is_create %}Add Sponsor Override{% else %}Edit Sponsor Override{% endif %}{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css">
@@ -26,25 +26,10 @@
     border-radius: var(--radius-sm) !important;
     box-shadow: var(--shadow-md) !important;
   }
-  .ts-dropdown .option {
-    padding: 0.45rem 0.75rem !important;
-  }
+  .ts-dropdown .option { padding: 0.45rem 0.75rem !important; }
   .ts-dropdown .active {
     background: var(--color-primary-light) !important;
     color: var(--color-primary) !important;
-  }
-  .ts-dropdown .option .talk-type {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    margin-left: 0.4rem;
-  }
-  .ts-dropdown .option .talk-state {
-    font-size: 0.72rem;
-    padding: 0.1rem 0.4rem;
-    border-radius: 999px;
-    margin-left: 0.3rem;
-    background: var(--color-bg);
-    color: var(--color-text-muted);
   }
   .form-group--locked .ts-control {
     background: var(--color-locked-bg) !important;
@@ -59,21 +44,20 @@
 <nav class="breadcrumb" aria-label="Breadcrumb">
   <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
   <span class="breadcrumb-separator"></span>
-  <a href="{% url 'manage:override-list' conference.slug %}">Talk Overrides</a>
+  <a href="{% url 'manage:sponsor-override-list' conference.slug %}">Sponsor Overrides</a>
   <span class="breadcrumb-separator"></span>
   <span>{% if is_create %}Add{% else %}Edit{% endif %}</span>
 </nav>
 {% endblock %}
 
 {% block page_title %}
-<h1>{% if is_create %}Add Talk Override{% else %}Edit Talk Override{% endif %}</h1>
-<p>{% if is_create %}Create a local override for a synced talk{% else %}Modify override settings{% endif %}</p>
+<h1>{% if is_create %}Add Sponsor Override{% else %}Edit Sponsor Override{% endif %}</h1>
+<p>{% if is_create %}Create a local override for a sponsor{% else %}Modify override settings{% endif %}</p>
 {% endblock %}
 
 {% block content %}
 <div class="info-banner">
-  Override fields that are left blank will not modify the talk.
-  Only fields with values will be patched onto the synced data after each sync.
+  Override fields that are left blank will not modify the sponsor.
 </div>
 
 <div class="form-container">
@@ -100,7 +84,7 @@
     {% endfor %}
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">{% if is_create %}Create Override{% else %}Save Changes{% endif %}</button>
-      <a href="{% url 'manage:override-list' conference.slug %}" class="btn btn-secondary">Cancel</a>
+      <a href="{% url 'manage:sponsor-override-list' conference.slug %}" class="btn btn-secondary">Cancel</a>
     </div>
   </form>
 </div>
@@ -110,10 +94,9 @@
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Initialize searchable selects on talk and room dropdowns
-  var selects = document.querySelectorAll('#id_talk, #id_override_room');
+  var selects = document.querySelectorAll('#id_sponsor, #id_override_level');
   selects.forEach(function(el) {
-    if (el.disabled) return;  // skip locked fields
+    if (el.disabled) return;
     new TomSelect(el, {
       allowEmptyOption: true,
       sortField: { field: 'text', direction: 'asc' },

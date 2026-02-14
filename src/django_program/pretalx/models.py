@@ -1,5 +1,10 @@
 """Speaker, Talk, Room, ScheduleSlot, and override models for Pretalx data."""
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -39,6 +44,39 @@ class Room(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    @property
+    def effective_name(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_name:
+                return o.override_name
+        except RoomOverride.DoesNotExist:
+            pass
+        return self.name
+
+    @property
+    def effective_description(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_description:
+                return o.override_description
+        except RoomOverride.DoesNotExist:
+            pass
+        return self.description
+
+    @property
+    def effective_capacity(self) -> int | None:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_capacity is not None:
+                return o.override_capacity
+        except RoomOverride.DoesNotExist:
+            pass
+        return self.capacity
+
 
 class Speaker(models.Model):
     """A speaker profile synced from the Pretalx API.
@@ -75,6 +113,50 @@ class Speaker(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def effective_name(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_name:
+                return o.override_name
+        except SpeakerOverride.DoesNotExist:
+            pass
+        return self.name
+
+    @property
+    def effective_biography(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_biography:
+                return o.override_biography
+        except SpeakerOverride.DoesNotExist:
+            pass
+        return self.biography
+
+    @property
+    def effective_avatar_url(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_avatar_url:
+                return o.override_avatar_url
+        except SpeakerOverride.DoesNotExist:
+            pass
+        return self.avatar_url
+
+    @property
+    def effective_email(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_email:
+                return o.override_email
+        except SpeakerOverride.DoesNotExist:
+            pass
+        return self.email
 
 
 class Talk(models.Model):
@@ -123,6 +205,74 @@ class Talk(models.Model):
 
     def __str__(self) -> str:
         return self.title
+
+    @property
+    def effective_title(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_title:
+                return o.override_title
+        except TalkOverride.DoesNotExist:
+            pass
+        return self.title
+
+    @property
+    def effective_state(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.is_cancelled:
+                return "cancelled"
+            if o.override_state:
+                return o.override_state
+        except TalkOverride.DoesNotExist:
+            pass
+        return self.state
+
+    @property
+    def effective_abstract(self) -> str:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_abstract:
+                return o.override_abstract
+        except TalkOverride.DoesNotExist:
+            pass
+        return self.abstract
+
+    @property
+    def effective_room(self) -> Room | None:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_room_id:
+                return o.override_room
+        except TalkOverride.DoesNotExist:
+            pass
+        return self.room
+
+    @property
+    def effective_slot_start(self) -> datetime | None:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_slot_start is not None:
+                return o.override_slot_start
+        except TalkOverride.DoesNotExist:
+            pass
+        return self.slot_start
+
+    @property
+    def effective_slot_end(self) -> datetime | None:
+        """Return the overridden value if set, otherwise the synced value."""
+        try:
+            o = self.override
+            if o.override_slot_end is not None:
+                return o.override_slot_end
+        except TalkOverride.DoesNotExist:
+            pass
+        return self.slot_end
 
 
 class ScheduleSlot(models.Model):
@@ -191,24 +341,82 @@ class ScheduleSlot(models.Model):
         return self.title
 
 
-class TalkOverride(models.Model):
+class AbstractOverride(models.Model):
+    """Shared base for all override models.
+
+    Provides common metadata fields (note, created_by, timestamps) and
+    the conference FK with auto-set-from-parent logic.
+    """
+
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="%(class)ss",
+    )
+    note = models.TextField(
+        blank=True,
+        default="",
+        help_text="Internal note explaining the reason for this override.",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_%(class)ss",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+        ordering = ["-updated_at"]
+
+    # Subclasses must define ``_parent_field`` (e.g. "talk", "speaker").
+    _parent_field: str = ""
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        """Auto-set conference from the linked parent when not explicitly provided."""
+        parent_id = getattr(self, f"{self._parent_field}_id", None)
+        if parent_id and not self.conference_id:
+            self.conference_id = self._get_parent_conference_id()
+        super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        """Validate that the linked parent belongs to the same conference."""
+        super().clean()
+        parent_id = getattr(self, f"{self._parent_field}_id", None)
+        if parent_id and self.conference_id:
+            parent_conf_id = self._get_parent_conference_id()
+            if parent_conf_id is not None and parent_conf_id != self.conference_id:
+                raise ValidationError(
+                    {self._parent_field: f"The selected {self._parent_field} does not belong to this conference."},
+                )
+
+    def _get_parent_conference_id(self) -> int | None:
+        """Look up the conference_id from the parent entity."""
+        parent_id = getattr(self, f"{self._parent_field}_id", None)
+        if parent_id is None:
+            return None
+        parent_model = type(self)._meta.get_field(self._parent_field).related_model  # noqa: SLF001
+        return parent_model.objects.filter(pk=parent_id).values_list("conference_id", flat=True).first()
+
+
+class TalkOverride(AbstractOverride):
     """Local override applied on top of synced Pretalx talk data.
 
     Allows conference organizers to patch individual fields of a synced talk
-    without modifying the upstream Pretalx record.  Overrides are applied
-    after each sync to ensure local corrections persist.  Fields left blank
-    (or ``None``) are not applied, preserving the synced value.
+    without modifying the upstream Pretalx record.  Overrides are resolved
+    at the view/template layer via ``effective_*`` properties on Talk.
+    Fields left blank (or ``None``) are not applied, preserving the synced value.
     """
+
+    _parent_field = "talk"
 
     talk = models.OneToOneField(
         Talk,
         on_delete=models.CASCADE,
         related_name="override",
-    )
-    conference = models.ForeignKey(
-        "program_conference.Conference",
-        on_delete=models.CASCADE,
-        related_name="talk_overrides",
     )
     override_room = models.ForeignKey(
         Room,
@@ -249,81 +457,116 @@ class TalkOverride(models.Model):
         default=False,
         help_text="Mark this talk as cancelled. Overrides the state to 'cancelled'.",
     )
-    note = models.TextField(
-        blank=True,
-        default="",
-        help_text="Internal note explaining the reason for this override.",
-    )
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="created_talk_overrides",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-updated_at"]
 
     def __str__(self) -> str:
         return f"Override for {self.talk}"
 
-    def save(self, *args: object, **kwargs: object) -> None:
-        """Auto-set conference from the linked talk when not explicitly provided."""
-        if self.talk_id and not self.conference_id:
-            self.conference_id = Talk.objects.filter(pk=self.talk_id).values_list("conference_id", flat=True).first()
-        super().save(*args, **kwargs)
+    @property
+    def is_empty(self) -> bool:
+        """Return True when no override fields carry a value.
 
-    def clean(self) -> None:
-        """Validate that the linked talk belongs to the same conference."""
-        super().clean()
-        if self.talk_id and self.conference_id:
-            talk_conference_id = Talk.objects.filter(pk=self.talk_id).values_list("conference_id", flat=True).first()
-            if talk_conference_id is not None and talk_conference_id != self.conference_id:
-                raise ValidationError(
-                    {"talk": "The selected talk does not belong to this conference."},
-                )
-
-    def apply(self) -> list[str]:
-        """Apply non-empty override fields onto the linked talk.
-
-        Returns:
-            A list of field names that were changed on the talk.
+        An override with only a note (but no actual field overrides) is
+        considered empty and should be cleaned up.
         """
-        talk: Talk = self.talk  # type: ignore[assignment]
-        changed: list[str] = []
+        return (
+            not self.override_room_id
+            and not self.override_title
+            and not self.override_state
+            and self.override_slot_start is None
+            and self.override_slot_end is None
+            and not self.override_abstract
+            and not self.is_cancelled
+        )
 
-        if self.is_cancelled:
-            if talk.state != "cancelled":
-                talk.state = "cancelled"  # type: ignore[assignment]
-                changed.append("state")
-        elif self.override_state and talk.state != self.override_state:
-            talk.state = self.override_state  # type: ignore[assignment]
-            changed.append("state")
 
-        if self.override_title and talk.title != self.override_title:
-            talk.title = self.override_title  # type: ignore[assignment]
-            changed.append("title")
+class SpeakerOverride(AbstractOverride):
+    """Local override applied on top of synced Pretalx speaker data.
 
-        if self.override_abstract and talk.abstract != self.override_abstract:
-            talk.abstract = self.override_abstract  # type: ignore[assignment]
-            changed.append("abstract")
+    Allows conference organizers to patch individual fields of a synced speaker
+    without modifying the upstream Pretalx record.
+    """
 
-        if self.override_room is not None and talk.room_id != self.override_room_id:
-            talk.room = self.override_room  # type: ignore[assignment]
-            changed.append("room")
+    _parent_field = "speaker"
 
-        if self.override_slot_start is not None and talk.slot_start != self.override_slot_start:
-            talk.slot_start = self.override_slot_start  # type: ignore[assignment]
-            changed.append("slot_start")
+    speaker = models.OneToOneField(
+        Speaker,
+        on_delete=models.CASCADE,
+        related_name="override",
+    )
+    override_name = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        help_text="Override the speaker's display name.",
+    )
+    override_biography = models.TextField(
+        blank=True,
+        default="",
+        help_text="Override the speaker biography.",
+    )
+    override_avatar_url = models.URLField(
+        blank=True,
+        default="",
+        help_text="Override the speaker avatar URL.",
+    )
+    override_email = models.EmailField(
+        blank=True,
+        default="",
+        help_text="Override the speaker contact email.",
+    )
 
-        if self.override_slot_end is not None and talk.slot_end != self.override_slot_end:
-            talk.slot_end = self.override_slot_end  # type: ignore[assignment]
-            changed.append("slot_end")
+    def __str__(self) -> str:
+        return f"Override for {self.speaker}"
 
-        return changed
+    @property
+    def is_empty(self) -> bool:
+        """Return True when no override fields carry a value."""
+        return (
+            not self.override_name
+            and not self.override_biography
+            and not self.override_avatar_url
+            and not self.override_email
+        )
+
+
+class RoomOverride(AbstractOverride):
+    """Local override applied on top of synced Pretalx room data.
+
+    Allows conference organizers to patch individual fields of a synced room
+    without modifying the upstream Pretalx record.
+    """
+
+    _parent_field = "room"
+
+    room = models.OneToOneField(
+        Room,
+        on_delete=models.CASCADE,
+        related_name="override",
+    )
+    override_name = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        help_text="Override the room name.",
+    )
+    override_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Override the room description.",
+    )
+    override_capacity = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Override the room capacity.",
+    )
+
+    def __str__(self) -> str:
+        return f"Override for {self.room}"
+
+    @property
+    def is_empty(self) -> bool:
+        """Return True when no override fields carry a value."""
+        return not self.override_name and not self.override_description and self.override_capacity is None
 
 
 class SubmissionTypeDefault(models.Model):

@@ -1,4 +1,4 @@
-"""Tests for TalkOverride and SubmissionTypeDefault models and sync integration."""
+"""Tests for override models, effective properties, and sync integration."""
 
 import zoneinfo
 from datetime import UTC, date, datetime, time
@@ -8,7 +8,15 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from django_program.conference.models import Conference
-from django_program.pretalx.models import Room, SubmissionTypeDefault, Talk, TalkOverride
+from django_program.pretalx.models import (
+    Room,
+    RoomOverride,
+    Speaker,
+    SpeakerOverride,
+    SubmissionTypeDefault,
+    Talk,
+    TalkOverride,
+)
 from django_program.pretalx.sync import PretalxSyncService
 
 # ---------------------------------------------------------------------------
@@ -117,95 +125,301 @@ class TestTalkOverrideSave:
 
 
 # ===========================================================================
-# TalkOverride.apply()
+# TalkOverride.is_empty
 # ===========================================================================
 
 
 @pytest.mark.django_db
-class TestTalkOverrideApply:
-    def test_apply_overrides_title(self):
-        conf = _make_conference(slug="apply-title")
-        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="Original")
-        override = TalkOverride.objects.create(talk=talk, conference=conf, override_title="New Title")
-        changed = override.apply()
-        assert "title" in changed
-        assert talk.title == "New Title"
-
-    def test_apply_does_not_change_matching_title(self):
-        conf = _make_conference(slug="apply-same")
-        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="Same")
-        override = TalkOverride.objects.create(talk=talk, conference=conf, override_title="Same")
-        changed = override.apply()
-        assert "title" not in changed
-
-    def test_apply_overrides_state(self):
-        conf = _make_conference(slug="apply-state")
-        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", state="confirmed")
-        override = TalkOverride.objects.create(talk=talk, conference=conf, override_state="withdrawn")
-        changed = override.apply()
-        assert "state" in changed
-        assert talk.state == "withdrawn"
-
-    def test_apply_is_cancelled_sets_state(self):
-        conf = _make_conference(slug="apply-cancel")
-        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", state="confirmed")
-        override = TalkOverride.objects.create(talk=talk, conference=conf, is_cancelled=True)
-        changed = override.apply()
-        assert "state" in changed
-        assert talk.state == "cancelled"
-
-    def test_apply_is_cancelled_no_op_when_already_cancelled(self):
-        conf = _make_conference(slug="apply-cancel-noop")
-        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", state="cancelled")
-        override = TalkOverride.objects.create(talk=talk, conference=conf, is_cancelled=True)
-        changed = override.apply()
-        assert "state" not in changed
-
-    def test_apply_overrides_abstract(self):
-        conf = _make_conference(slug="apply-abstract")
-        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", abstract="old")
-        override = TalkOverride.objects.create(talk=talk, conference=conf, override_abstract="new abstract")
-        changed = override.apply()
-        assert "abstract" in changed
-        assert talk.abstract == "new abstract"
-
-    def test_apply_overrides_room(self):
-        conf = _make_conference(slug="apply-room")
-        room = Room.objects.create(conference=conf, pretalx_id=1, name="Hall A")
+class TestTalkOverrideIsEmpty:
+    def test_empty_override(self):
+        conf = _make_conference(slug="empty-ov")
         talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T")
-        override = TalkOverride.objects.create(talk=talk, conference=conf, override_room=room)
-        changed = override.apply()
-        assert "room" in changed
-        assert talk.room == room
+        override = TalkOverride.objects.create(talk=talk, conference=conf)
+        assert override.is_empty is True
 
-    def test_apply_overrides_slot_times(self):
-        conf = _make_conference(slug="apply-slot")
+    def test_non_empty_override(self):
+        conf = _make_conference(slug="notempty-ov")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T")
+        override = TalkOverride.objects.create(talk=talk, conference=conf, override_title="New")
+        assert override.is_empty is False
+
+
+# ===========================================================================
+# Talk effective_* properties
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestTalkEffectiveProperties:
+    def test_effective_title_no_override(self):
+        conf = _make_conference(slug="eff-title-none")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="Original")
+        assert talk.effective_title == "Original"
+
+    def test_effective_title_with_override(self):
+        conf = _make_conference(slug="eff-title-ov")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="Original")
+        TalkOverride.objects.create(talk=talk, conference=conf, override_title="Overridden")
+        assert talk.effective_title == "Overridden"
+
+    def test_effective_title_blank_override_falls_back(self):
+        conf = _make_conference(slug="eff-title-blank")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="Original")
+        TalkOverride.objects.create(talk=talk, conference=conf, override_title="")
+        assert talk.effective_title == "Original"
+
+    def test_effective_state_cancelled(self):
+        conf = _make_conference(slug="eff-state-cancel")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", state="confirmed")
+        TalkOverride.objects.create(talk=talk, conference=conf, is_cancelled=True)
+        assert talk.effective_state == "cancelled"
+
+    def test_effective_state_override(self):
+        conf = _make_conference(slug="eff-state-ov")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", state="confirmed")
+        TalkOverride.objects.create(talk=talk, conference=conf, override_state="withdrawn")
+        assert talk.effective_state == "withdrawn"
+
+    def test_effective_state_no_override(self):
+        conf = _make_conference(slug="eff-state-none")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", state="confirmed")
+        assert talk.effective_state == "confirmed"
+
+    def test_effective_room_override(self):
+        conf = _make_conference(slug="eff-room")
+        room_a = Room.objects.create(conference=conf, pretalx_id=1, name="Room A")
+        room_b = Room.objects.create(conference=conf, pretalx_id=2, name="Room B")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", room=room_a)
+        TalkOverride.objects.create(talk=talk, conference=conf, override_room=room_b)
+        assert talk.effective_room == room_b
+
+    def test_effective_room_no_override(self):
+        conf = _make_conference(slug="eff-room-none")
+        room_a = Room.objects.create(conference=conf, pretalx_id=1, name="Room A")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", room=room_a)
+        assert talk.effective_room == room_a
+
+    def test_effective_abstract_override(self):
+        conf = _make_conference(slug="eff-abstract")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", abstract="old")
+        TalkOverride.objects.create(talk=talk, conference=conf, override_abstract="new abstract")
+        assert talk.effective_abstract == "new abstract"
+
+    def test_effective_abstract_no_override(self):
+        conf = _make_conference(slug="eff-abstract-none")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T", abstract="old")
+        assert talk.effective_abstract == "old"
+
+    def test_effective_slot_start_override(self):
+        conf = _make_conference(slug="eff-slot")
         talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T")
         start = datetime(2027, 5, 1, 9, 0, tzinfo=UTC)
-        end = datetime(2027, 5, 1, 10, 0, tzinfo=UTC)
-        override = TalkOverride.objects.create(
-            talk=talk,
-            conference=conf,
-            override_slot_start=start,
-            override_slot_end=end,
-        )
-        changed = override.apply()
-        assert "slot_start" in changed
-        assert "slot_end" in changed
-        assert talk.slot_start == start
-        assert talk.slot_end == end
+        TalkOverride.objects.create(talk=talk, conference=conf, override_slot_start=start)
+        assert talk.effective_slot_start == start
 
-    def test_apply_empty_override_changes_nothing(self):
-        conf = _make_conference(slug="apply-empty")
-        talk = Talk.objects.create(
-            conference=conf,
-            pretalx_code="T1",
-            title="T",
-            state="confirmed",
+    def test_effective_slot_start_no_override(self):
+        conf = _make_conference(slug="eff-slot-start-none")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T")
+        start = datetime(2027, 5, 1, 9, 0, tzinfo=UTC)
+        talk.slot_start = start
+        talk.save()
+        assert talk.effective_slot_start == start
+
+    def test_effective_slot_end_with_override(self):
+        conf = _make_conference(slug="eff-slot-end")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T")
+        end = datetime(2027, 5, 1, 10, 0, tzinfo=UTC)
+        TalkOverride.objects.create(talk=talk, conference=conf, override_slot_end=end)
+        assert talk.effective_slot_end == end
+
+    def test_effective_slot_end_no_override(self):
+        conf = _make_conference(slug="eff-slot-end-none")
+        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T")
+        end = datetime(2027, 5, 1, 10, 0, tzinfo=UTC)
+        talk.slot_end = end
+        talk.save()
+        assert talk.effective_slot_end == end
+
+
+# ===========================================================================
+# SpeakerOverride
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestSpeakerOverride:
+    def test_str(self):
+        conf = _make_conference(slug="spk-str")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice")
+        override = SpeakerOverride.objects.create(speaker=speaker, conference=conf)
+        assert str(override) == "Override for Alice"
+
+    def test_save_auto_sets_conference(self):
+        conf = _make_conference(slug="spk-save")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice")
+        override = SpeakerOverride(speaker=speaker)
+        override.save()
+        assert override.conference_id == conf.pk
+
+    def test_clean_rejects_mismatched_conference(self):
+        conf_a = _make_conference(slug="spk-clean-a", pretalx_slug="ev-a")
+        conf_b = _make_conference(slug="spk-clean-b", pretalx_slug="ev-b")
+        speaker = Speaker.objects.create(conference=conf_a, pretalx_code="S1", name="Alice")
+        override = SpeakerOverride(speaker=speaker, conference=conf_b)
+        with pytest.raises(ValidationError, match="does not belong to this conference"):
+            override.clean()
+
+    def test_is_empty_true(self):
+        conf = _make_conference(slug="spk-empty")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice")
+        override = SpeakerOverride.objects.create(speaker=speaker, conference=conf)
+        assert override.is_empty is True
+
+    def test_is_empty_false(self):
+        conf = _make_conference(slug="spk-notempty")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice")
+        override = SpeakerOverride.objects.create(speaker=speaker, conference=conf, override_name="Bob")
+        assert override.is_empty is False
+
+
+# ===========================================================================
+# Speaker effective_* properties
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestSpeakerEffectiveProperties:
+    def test_effective_name_no_override(self):
+        conf = _make_conference(slug="spk-eff-none")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice")
+        assert speaker.effective_name == "Alice"
+
+    def test_effective_name_with_override(self):
+        conf = _make_conference(slug="spk-eff-ov")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice")
+        SpeakerOverride.objects.create(speaker=speaker, conference=conf, override_name="Bob")
+        assert speaker.effective_name == "Bob"
+
+    def test_effective_biography_with_override(self):
+        conf = _make_conference(slug="spk-eff-bio")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice", biography="old bio")
+        SpeakerOverride.objects.create(speaker=speaker, conference=conf, override_biography="new bio")
+        assert speaker.effective_biography == "new bio"
+
+    def test_effective_biography_no_override(self):
+        conf = _make_conference(slug="spk-eff-bio-none")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice", biography="old bio")
+        assert speaker.effective_biography == "old bio"
+
+    def test_effective_avatar_url_with_override(self):
+        conf = _make_conference(slug="spk-eff-avatar")
+        speaker = Speaker.objects.create(
+            conference=conf, pretalx_code="S1", name="Alice", avatar_url="https://old.com/avatar.jpg"
         )
-        override = TalkOverride.objects.create(talk=talk, conference=conf)
-        changed = override.apply()
-        assert changed == []
+        SpeakerOverride.objects.create(
+            speaker=speaker, conference=conf, override_avatar_url="https://new.com/avatar.jpg"
+        )
+        assert speaker.effective_avatar_url == "https://new.com/avatar.jpg"
+
+    def test_effective_avatar_url_no_override(self):
+        conf = _make_conference(slug="spk-eff-avatar-none")
+        speaker = Speaker.objects.create(
+            conference=conf, pretalx_code="S1", name="Alice", avatar_url="https://old.com/avatar.jpg"
+        )
+        assert speaker.effective_avatar_url == "https://old.com/avatar.jpg"
+
+    def test_effective_email_with_override(self):
+        conf = _make_conference(slug="spk-eff-email")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice", email="old@test.com")
+        SpeakerOverride.objects.create(speaker=speaker, conference=conf, override_email="new@test.com")
+        assert speaker.effective_email == "new@test.com"
+
+    def test_effective_email_no_override(self):
+        conf = _make_conference(slug="spk-eff-email-none")
+        speaker = Speaker.objects.create(conference=conf, pretalx_code="S1", name="Alice", email="old@test.com")
+        assert speaker.effective_email == "old@test.com"
+
+
+# ===========================================================================
+# RoomOverride
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestRoomOverride:
+    def test_str(self):
+        conf = _make_conference(slug="rm-str")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Main Hall")
+        override = RoomOverride.objects.create(room=room, conference=conf)
+        assert str(override) == "Override for Main Hall"
+
+    def test_save_auto_sets_conference(self):
+        conf = _make_conference(slug="rm-save")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Main Hall")
+        override = RoomOverride(room=room)
+        override.save()
+        assert override.conference_id == conf.pk
+
+    def test_clean_rejects_mismatched_conference(self):
+        conf_a = _make_conference(slug="rm-clean-a", pretalx_slug="ev-a")
+        conf_b = _make_conference(slug="rm-clean-b", pretalx_slug="ev-b")
+        room = Room.objects.create(conference=conf_a, pretalx_id=1, name="Room A")
+        override = RoomOverride(room=room, conference=conf_b)
+        with pytest.raises(ValidationError, match="does not belong to this conference"):
+            override.clean()
+
+    def test_is_empty_true(self):
+        conf = _make_conference(slug="rm-empty")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Room A")
+        override = RoomOverride.objects.create(room=room, conference=conf)
+        assert override.is_empty is True
+
+    def test_is_empty_false(self):
+        conf = _make_conference(slug="rm-notempty")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Room A")
+        override = RoomOverride.objects.create(room=room, conference=conf, override_name="Room B")
+        assert override.is_empty is False
+
+
+# ===========================================================================
+# Room effective_* properties
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestRoomEffectiveProperties:
+    def test_effective_name_no_override(self):
+        conf = _make_conference(slug="rm-eff-none")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Room A")
+        assert room.effective_name == "Room A"
+
+    def test_effective_name_with_override(self):
+        conf = _make_conference(slug="rm-eff-ov")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Room A")
+        RoomOverride.objects.create(room=room, conference=conf, override_name="Room B")
+        assert room.effective_name == "Room B"
+
+    def test_effective_capacity_with_override(self):
+        conf = _make_conference(slug="rm-eff-cap")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Room A", capacity=100)
+        RoomOverride.objects.create(room=room, conference=conf, override_capacity=200)
+        assert room.effective_capacity == 200
+
+    def test_effective_capacity_no_override(self):
+        conf = _make_conference(slug="rm-eff-cap-none")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Room A", capacity=100)
+        assert room.effective_capacity == 100
+
+    def test_effective_description_with_override(self):
+        conf = _make_conference(slug="rm-eff-desc")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Room A", description="old")
+        RoomOverride.objects.create(room=room, conference=conf, override_description="new desc")
+        assert room.effective_description == "new desc"
+
+    def test_effective_description_no_override(self):
+        conf = _make_conference(slug="rm-eff-desc-none")
+        room = Room.objects.create(conference=conf, pretalx_id=1, name="Room A", description="old")
+        assert room.effective_description == "old"
 
 
 # ===========================================================================
@@ -219,60 +433,6 @@ class TestSubmissionTypeDefaultStr:
         conf = _make_conference(slug="std-str")
         std = SubmissionTypeDefault.objects.create(conference=conf, submission_type="Poster")
         assert str(std) == "Defaults for 'Poster'"
-
-
-# ===========================================================================
-# apply_overrides() in sync service
-# ===========================================================================
-
-
-@pytest.mark.django_db
-class TestApplyOverrides:
-    def test_apply_overrides_updates_talk(self, settings):
-        conf = _make_conference(slug="sync-override")
-        service = _make_service(conf, settings)
-        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="Original", state="confirmed")
-        TalkOverride.objects.create(
-            talk=talk,
-            conference=conf,
-            override_title="Patched",
-            override_state="withdrawn",
-        )
-
-        count = service.apply_overrides()
-
-        assert count == 1
-        talk.refresh_from_db()
-        assert talk.title == "Patched"
-        assert talk.state == "withdrawn"
-
-    def test_apply_overrides_skips_unchanged(self, settings):
-        conf = _make_conference(slug="sync-override-noop")
-        service = _make_service(conf, settings)
-        talk = Talk.objects.create(conference=conf, pretalx_code="T1", title="T")
-        TalkOverride.objects.create(talk=talk, conference=conf)
-
-        count = service.apply_overrides()
-        assert count == 0
-
-    def test_apply_overrides_filters_by_talk_conference(self, settings):
-        """Overrides where talk.conference differs from override.conference are excluded."""
-        conf_a = _make_conference(slug="sync-ov-a", pretalx_slug="ev-a")
-        conf_b = _make_conference(slug="sync-ov-b", pretalx_slug="ev-b")
-        talk = Talk.objects.create(conference=conf_a, pretalx_code="T1", title="T")
-        # Create override with mismatched conferences
-        TalkOverride.objects.create(
-            talk=talk,
-            conference=conf_b,
-            override_title="Should Not Apply",
-        )
-
-        service = _make_service(conf_b, settings)
-        count = service.apply_overrides()
-        assert count == 0
-
-        talk.refresh_from_db()
-        assert talk.title == "T"
 
 
 # ===========================================================================
@@ -408,27 +568,28 @@ class TestApplyTypeDefaults:
 
 
 # ===========================================================================
-# sync_all includes overrides and type defaults
+# AbstractOverride._get_parent_conference_id
 # ===========================================================================
 
 
 @pytest.mark.django_db
-class TestSyncAllIncludesOverrides:
-    def test_sync_all_applies_overrides_and_type_defaults(self, settings):
-        conf = _make_conference(slug="sync-all-ov")
-        service = _make_service(conf, settings)
+class TestAbstractOverrideGetParentConferenceId:
+    def test_get_parent_conference_id_returns_none_when_no_parent(self):
+        conf = _make_conference(slug="parent-none")
+        override = TalkOverride(conference=conf)
+        assert override._get_parent_conference_id() is None
 
-        talk = Talk.objects.create(
-            conference=conf,
-            pretalx_code="T1",
-            title="Original",
-            state="confirmed",
-        )
-        TalkOverride.objects.create(
-            talk=talk,
-            conference=conf,
-            override_title="Patched",
-        )
+
+# ===========================================================================
+# sync_all includes type defaults (overrides no longer applied in sync)
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestSyncAllIncludesTypeDefaults:
+    def test_sync_all_applies_type_defaults(self, settings):
+        conf = _make_conference(slug="sync-all-td")
+        service = _make_service(conf, settings)
 
         unscheduled = Talk.objects.create(
             conference=conf,
@@ -451,11 +612,8 @@ class TestSyncAllIncludesOverrides:
 
         result = service.sync_all()
 
-        assert result["overrides_applied"] == 1
         assert result["type_defaults_applied"] == 1
-
-        talk.refresh_from_db()
-        assert talk.title == "Patched"
+        assert "overrides_applied" not in result
 
         unscheduled.refresh_from_db()
         assert unscheduled.room == room

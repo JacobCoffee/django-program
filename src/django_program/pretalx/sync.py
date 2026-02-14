@@ -18,7 +18,7 @@ from django.db.models.functions import Lower
 from django.utils import timezone
 from django.utils.text import slugify
 
-from django_program.pretalx.models import Room, ScheduleSlot, Speaker, SubmissionTypeDefault, Talk, TalkOverride
+from django_program.pretalx.models import Room, ScheduleSlot, Speaker, SubmissionTypeDefault, Talk
 from django_program.pretalx.profiles import resolve_pretalx_profile
 from django_program.programs.models import Activity
 from django_program.settings import get_config
@@ -676,38 +676,6 @@ class PretalxSyncService:
                 return room
         return None
 
-    def apply_overrides(self) -> int:
-        """Apply all TalkOverride records for this conference onto their talks.
-
-        Iterates through every override and patches the linked talk fields.
-        Only saves talks that actually changed.
-
-        Returns:
-            The number of talks that were modified by overrides.
-        """
-        overrides = TalkOverride.objects.filter(
-            conference=self.conference,
-            talk__conference=self.conference,
-        ).select_related("talk", "override_room")
-        to_update: list[Talk] = []
-        all_fields: set[str] = set()
-
-        for override in overrides:
-            changed_fields = override.apply()
-            if changed_fields:
-                to_update.append(override.talk)
-                all_fields.update(changed_fields)
-
-        if to_update and all_fields:
-            Talk.objects.bulk_update(to_update, fields=list(all_fields), batch_size=500)
-            logger.info(
-                "Applied %d talk overrides for %s (fields: %s)",
-                len(to_update),
-                self.conference.slug,
-                ", ".join(sorted(all_fields)),
-            )
-        return len(to_update)
-
     def apply_type_defaults(self) -> int:
         """Apply SubmissionTypeDefault records to unscheduled talks.
 
@@ -777,8 +745,8 @@ class PretalxSyncService:
             A mapping of entity type to the number synced.  The
             ``schedule_slots`` key contains only the synced count;
             ``unscheduled_talks`` is added when any talks lack a slot.
-            ``overrides_applied`` and ``type_defaults_applied`` are added
-            when overrides or type defaults modify any talks.
+            ``type_defaults_applied`` is added when type defaults modify
+            any talks.
         """
         schedule_count, unscheduled = self.sync_schedule(allow_large_deletions=allow_large_deletions)
         result: dict[str, int] = {
@@ -789,10 +757,6 @@ class PretalxSyncService:
         }
         if unscheduled:
             result["unscheduled_talks"] = unscheduled
-
-        overrides_applied = self.apply_overrides()
-        if overrides_applied:
-            result["overrides_applied"] = overrides_applied
 
         type_defaults_applied = self.apply_type_defaults()
         if type_defaults_applied:
