@@ -329,11 +329,12 @@ class TestFeatureRequiredMixinWithConference:
 class TestProgramFeaturesContextProcessor:
     """Tests for the ``program_features`` context processor."""
 
-    def test_returns_features_config(self) -> None:
+    def test_returns_resolved_dict(self) -> None:
         request = HttpRequest()
         context = program_features(request)
         assert "program_features" in context
-        assert isinstance(context["program_features"], FeaturesConfig)
+        assert isinstance(context["program_features"], dict)
+        assert context["program_features"]["registration_enabled"] is True
 
     def test_reflects_current_settings(self) -> None:
         with override_settings(
@@ -341,8 +342,18 @@ class TestProgramFeaturesContextProcessor:
         ):
             request = HttpRequest()
             context = program_features(request)
-            assert context["program_features"].sponsors_enabled is False
-            assert context["program_features"].registration_enabled is True
+            assert context["program_features"]["sponsors_enabled"] is False
+            assert context["program_features"]["registration_enabled"] is True
+
+    def test_all_ui_disabled_reflected_in_context(self) -> None:
+        with override_settings(
+            DJANGO_PROGRAM={"features": {"all_ui_enabled": False}},
+        ):
+            request = HttpRequest()
+            context = program_features(request)
+            assert context["program_features"]["public_ui_enabled"] is False
+            assert context["program_features"]["manage_ui_enabled"] is False
+            assert context["program_features"]["registration_enabled"] is True
 
 
 @pytest.mark.django_db
@@ -364,10 +375,11 @@ class TestProgramFeaturesContextProcessorWithConference:
         assert context["program_features"]["registration_enabled"] is False
         assert context["program_features"]["sponsors_enabled"] is True
 
-    def test_returns_features_config_without_conference(self) -> None:
+    def test_returns_resolved_dict_without_conference(self) -> None:
         request = HttpRequest()
         context = program_features(request)
-        assert isinstance(context["program_features"], FeaturesConfig)
+        assert isinstance(context["program_features"], dict)
+        assert context["program_features"]["registration_enabled"] is True
 
 
 # ---------------------------------------------------------------------------

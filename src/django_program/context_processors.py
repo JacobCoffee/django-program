@@ -1,13 +1,8 @@
 """Django context processors for django-program."""
 
-from typing import TYPE_CHECKING
+from django.http import HttpRequest  # noqa: TC002 -- used in runtime annotation (PEP 649)
 
 from django_program.features import is_feature_enabled
-from django_program.settings import FeaturesConfig, get_config
-
-if TYPE_CHECKING:
-    from django.http import HttpRequest
-
 
 # Feature names that correspond to FeaturesConfig boolean attributes.
 _FEATURE_NAMES = (
@@ -22,13 +17,13 @@ _FEATURE_NAMES = (
 )
 
 
-def program_features(request: HttpRequest) -> dict[str, FeaturesConfig | dict[str, bool]]:
-    """Expose feature toggle flags to templates.
+def program_features(request: HttpRequest) -> dict[str, dict[str, bool]]:
+    """Expose resolved feature toggle flags to templates.
 
+    Each flag is resolved through :func:`~django_program.features.is_feature_enabled`
+    so that master-switch overrides (e.g. ``all_ui_enabled``) are applied.
     When the request carries a ``conference`` attribute (set by middleware
-    or the view), the context processor resolves per-conference DB
-    overrides via :func:`~django_program.features.is_feature_enabled`.
-    Otherwise it returns the static ``FeaturesConfig`` from settings.
+    or the view), per-conference DB overrides are included in the resolution.
 
     Add ``"django_program.context_processors.program_features"`` to the
     ``context_processors`` list in your ``TEMPLATES`` setting.
@@ -40,9 +35,5 @@ def program_features(request: HttpRequest) -> dict[str, FeaturesConfig | dict[st
         {% endif %}
     """
     conference = getattr(request, "conference", None)
-
-    if conference is not None:
-        resolved = {f"{name}_enabled": is_feature_enabled(name, conference=conference) for name in _FEATURE_NAMES}
-        return {"program_features": resolved}
-
-    return {"program_features": get_config().features}
+    resolved = {f"{name}_enabled": is_feature_enabled(name, conference=conference) for name in _FEATURE_NAMES}
+    return {"program_features": resolved}

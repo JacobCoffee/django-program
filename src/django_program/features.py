@@ -140,7 +140,7 @@ class FeatureRequiredMixin:
         """
         return None
 
-    def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
+    def dispatch(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponse:
         """Check the feature toggle before dispatching the view."""
         if self.required_feature:
             require_feature(self.required_feature, conference=self.get_conference())

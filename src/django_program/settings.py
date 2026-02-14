@@ -56,7 +56,11 @@ class PSFSponsorConfig:
 
 @dataclass(frozen=True, slots=True)
 class FeaturesConfig:
-    """Feature toggles for enabling/disabling django-program modules.
+    """Feature toggles for enabling/disabling django-program modules and UIs.
+
+    Module toggles control backend functionality (registration, sponsors, etc.)
+    while UI toggles control the public-facing and management interfaces.
+    The ``all_ui_enabled`` flag acts as a master switch for all UI toggles.
 
     All features are enabled by default. Set to ``False`` in
     ``DJANGO_PROGRAM['features']`` to disable.
