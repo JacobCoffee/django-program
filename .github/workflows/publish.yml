@@ -65,17 +65,19 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - name: Set up uv
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          version: "0.10.2"
+
       - name: Download dist artifact
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: dist
           path: dist
 
-      - name: Install sigstore
-        run: pip install sigstore
-
       - name: Sign with sigstore
-        run: sigstore sign dist/*
+        run: uvx sigstore sign dist/*
 
       - name: Upload signed artifacts
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
