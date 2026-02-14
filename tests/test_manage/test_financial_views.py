@@ -528,6 +528,50 @@ class TestFinancialDashboardRecentOrders:
 
 
 @pytest.mark.django_db
+class TestFinancialDashboardSidebarNavigation:
+    """Sidebar contains a link to the financial dashboard."""
+
+    def test_sidebar_has_financial_link(self, client_logged_in_super, conference):
+        resp = client_logged_in_super.get(_dashboard_url(conference))
+        content = resp.content.decode()
+        expected_url = reverse("manage:financial-dashboard", kwargs={"conference_slug": conference.slug})
+        assert expected_url in content
+        assert "Financial" in content
+
+    def test_active_nav_set_to_financial(self, client_logged_in_super, conference):
+        resp = client_logged_in_super.get(_dashboard_url(conference))
+        assert resp.context["active_nav"] == "financial"
+
+
+@pytest.mark.django_db
+class TestFinancialDashboardPaymentMethodsZeroFill:
+    """payments_by_method has entries for all methods, even with no data."""
+
+    def test_unused_methods_have_zero_count(self, client_logged_in_super, conference, superuser):
+        order = Order.objects.create(
+            conference=conference,
+            user=superuser,
+            status=Order.Status.PAID,
+            total=Decimal("50.00"),
+            subtotal=Decimal("50.00"),
+            reference="ORD-ZERO",
+        )
+        Payment.objects.create(
+            order=order,
+            method=Payment.Method.STRIPE,
+            status=Payment.Status.SUCCEEDED,
+            amount=Decimal("50.00"),
+        )
+        resp = client_logged_in_super.get(_dashboard_url(conference))
+        methods = resp.context["payments_by_method"]
+        for method_value, _label in Payment.Method.choices:
+            assert method_value in methods
+        assert methods["comp"]["count"] == 0
+        assert methods["comp"]["total_amount"] == Decimal("0.00")
+        assert methods["manual"]["count"] == 0
+
+
+@pytest.mark.django_db
 class TestFinancialDashboardURLResolution:
     """URL pattern resolves correctly."""
 

@@ -123,18 +123,18 @@ class FinancialDashboardView(ManagePermissionMixin, TemplateView):
             "abandoned": abandoned_cart_count,
         }
 
-        # --- Payments by method ---
+        # --- Payments by method (single aggregated query) ---
         payments_qs = Payment.objects.filter(order__conference=conference)
-        payments_by_method: dict[str, dict[str, object]] = {}
-        for method_value, method_label in Payment.Method.choices:
-            method_agg = payments_qs.filter(method=method_value).aggregate(
-                count=Count("id"),
-                total_amount=Sum("amount"),
-            )
-            payments_by_method[method_value] = {
-                "label": str(method_label),
-                "count": method_agg["count"] or 0,
-                "total_amount": method_agg["total_amount"] or _ZERO,
+        method_labels: dict[str, str] = {v: str(label) for v, label in Payment.Method.choices}
+        payments_by_method: dict[str, dict[str, object]] = {
+            method_value: {"label": method_labels[method_value], "count": 0, "total_amount": _ZERO}
+            for method_value in method_labels
+        }
+        for row in payments_qs.values("method").annotate(count=Count("id"), total_amount=Sum("amount")):
+            payments_by_method[row["method"]] = {
+                "label": method_labels[row["method"]],
+                "count": row["count"],
+                "total_amount": row["total_amount"] or _ZERO,
             }
         context["payments_by_method"] = payments_by_method
 
