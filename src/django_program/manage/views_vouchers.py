@@ -68,6 +68,7 @@ class VoucherBulkGenerateView(ManagePermissionMixin, FormView):
         except (RuntimeError, IntegrityError):  # fmt: skip
             logger.exception("Voucher bulk generation failed")
             messages.error(self.request, "Failed to generate voucher codes. Please try again.")
+            return self.form_invalid(form)
 
         return super().form_valid(form)
 
