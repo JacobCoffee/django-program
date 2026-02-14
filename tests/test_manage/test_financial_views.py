@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, Permission, User
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
@@ -32,6 +32,43 @@ def superuser(db):
 @pytest.fixture
 def regular_user(db):
     return User.objects.create_user(username="regular", password="password", email="regular@test.com")
+
+
+@pytest.fixture
+def finance_user(db):
+    """A user belonging to the 'Program: Finance & Accounting' group with its standard permissions."""
+    user = User.objects.create_user(username="finance", password="password", email="finance@test.com")
+    group, _created = Group.objects.get_or_create(name="Program: Finance & Accounting")
+    # Assign the permissions that setup_groups defines for this group.
+    perm_specs = [
+        ("program_conference", "view_conference"),
+        ("program_registration", "view_order"),
+        ("program_registration", "change_order"),
+        ("program_registration", "view_orderlineitem"),
+        ("program_registration", "view_payment"),
+        ("program_registration", "add_payment"),
+        ("program_registration", "change_payment"),
+        ("program_registration", "view_credit"),
+        ("program_registration", "add_credit"),
+        ("program_registration", "change_credit"),
+        ("program_registration", "view_voucher"),
+        ("program_registration", "view_tickettype"),
+        ("program_registration", "view_addon"),
+    ]
+    perms = Permission.objects.filter(
+        content_type__app_label__in={app for app, _ in perm_specs},
+    )
+    matched = [p for p in perms if (p.content_type.app_label, p.codename) in perm_specs]
+    group.permissions.set(matched)
+    user.groups.add(group)
+    return user
+
+
+@pytest.fixture
+def client_logged_in_finance(finance_user):
+    c = Client()
+    c.login(username="finance", password="password")
+    return c
 
 
 @pytest.fixture
@@ -85,6 +122,10 @@ class TestFinancialDashboardPermissions:
 
     def test_superuser_has_access(self, client_logged_in_super, conference):
         resp = client_logged_in_super.get(_dashboard_url(conference))
+        assert resp.status_code == 200
+
+    def test_finance_group_member_has_access(self, client_logged_in_finance, conference):
+        resp = client_logged_in_finance.get(_dashboard_url(conference))
         assert resp.status_code == 200
 
 
