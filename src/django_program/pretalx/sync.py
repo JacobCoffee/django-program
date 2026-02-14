@@ -7,6 +7,7 @@ performance.
 """
 
 import logging
+import zoneinfo
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -684,7 +685,10 @@ class PretalxSyncService:
         Returns:
             The number of talks that were modified by overrides.
         """
-        overrides = TalkOverride.objects.filter(conference=self.conference).select_related("talk", "override_room")
+        overrides = TalkOverride.objects.filter(
+            conference=self.conference,
+            talk__conference=self.conference,
+        ).select_related("talk", "override_room")
         to_update: list[Talk] = []
         all_fields: set[str] = set()
 
@@ -717,6 +721,7 @@ class PretalxSyncService:
         if not defaults.exists():
             return 0
 
+        conf_tz = zoneinfo.ZoneInfo(str(self.conference.timezone))
         to_update: list[Talk] = []
         update_fields: set[str] = set()
 
@@ -739,7 +744,7 @@ class PretalxSyncService:
                     talk.slot_start = datetime.combine(
                         type_default.default_date,
                         type_default.default_start_time,
-                        tzinfo=timezone.get_current_timezone(),
+                        tzinfo=conf_tz,
                     )
                     update_fields.add("slot_start")
                     changed = True
@@ -748,7 +753,7 @@ class PretalxSyncService:
                     talk.slot_end = datetime.combine(
                         type_default.default_date,
                         type_default.default_end_time,
-                        tzinfo=timezone.get_current_timezone(),
+                        tzinfo=conf_tz,
                     )
                     update_fields.add("slot_end")
                     changed = True

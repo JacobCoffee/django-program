@@ -1,6 +1,7 @@
 """Speaker, Talk, Room, ScheduleSlot, and override models for Pretalx data."""
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -268,6 +269,22 @@ class TalkOverride(models.Model):
 
     def __str__(self) -> str:
         return f"Override for {self.talk}"
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        """Auto-set conference from the linked talk when not explicitly provided."""
+        if self.talk_id and not self.conference_id:
+            self.conference_id = Talk.objects.filter(pk=self.talk_id).values_list("conference_id", flat=True).first()
+        super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        """Validate that the linked talk belongs to the same conference."""
+        super().clean()
+        if self.talk_id and self.conference_id:
+            talk_conference_id = Talk.objects.filter(pk=self.talk_id).values_list("conference_id", flat=True).first()
+            if talk_conference_id is not None and talk_conference_id != self.conference_id:
+                raise ValidationError(
+                    {"talk": "The selected talk does not belong to this conference."},
+                )
 
     def apply(self) -> list[str]:
         """Apply non-empty override fields onto the linked talk.
