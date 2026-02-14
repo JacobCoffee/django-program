@@ -2419,7 +2419,10 @@ class TicketTypeListView(ManagePermissionMixin, ListView):
         """Return ticket types for the current conference.
 
         Annotates each ticket type with ``sold_count`` and ``revenue`` from
-        orders in paid or partially refunded status.
+        orders in paid or partially refunded status.  The ``revenue`` value
+        represents **gross** revenue (total line amounts before any refunds
+        are subtracted).  Partially refunded orders contribute their full
+        original line totals.
 
         Returns:
             A queryset of TicketType instances ordered by display order.
@@ -2512,8 +2515,11 @@ class AddOnListView(ManagePermissionMixin, ListView):
         """Return add-ons for the current conference.
 
         Annotates each add-on with ``sold_count`` and ``revenue`` from
-        orders in paid or partially refunded status.  Prefetches the
-        ``requires_ticket_types`` relation for efficient template rendering.
+        orders in paid or partially refunded status.  The ``revenue`` value
+        represents **gross** revenue (total line amounts before any refunds
+        are subtracted).  Partially refunded orders contribute their full
+        original line totals.  Prefetches the ``requires_ticket_types``
+        relation for efficient template rendering.
 
         Returns:
             A queryset of AddOn instances ordered by display order.

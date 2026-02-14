@@ -43,7 +43,7 @@ def get_conference_days(conference: Conference) -> list[tuple[str, str]]:
     result: list[tuple[str, str]] = []
     for day in sorted(day_type_counts):
         counts = day_type_counts[day]
-        date_label = day.strftime("%a, %b %-d")
+        date_label = day.strftime("%A, %B %-d")
 
         if counts:
             total = sum(counts.values())
