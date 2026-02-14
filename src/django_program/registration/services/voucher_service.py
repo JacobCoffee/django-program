@@ -137,6 +137,9 @@ def generate_voucher_codes(config: VoucherBulkConfig) -> list[Voucher]:
 
     with transaction.atomic():
         created = Voucher.objects.bulk_create(vouchers_to_create)
+        # Re-fetch to guarantee PKs are populated on all database backends
+        created_codes = [v.code for v in created]
+        created = list(Voucher.objects.filter(conference=config.conference, code__in=created_codes))
 
         if config.applicable_ticket_types is not None and config.applicable_ticket_types.exists():
             ticket_type_ids = list(config.applicable_ticket_types.values_list("pk", flat=True))

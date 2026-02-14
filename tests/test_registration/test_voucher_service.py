@@ -222,8 +222,8 @@ class TestGenerateVoucherCodes:
         all_codes = list(Voucher.objects.filter(conference=conference).values_list("code", flat=True))
         assert len(set(all_codes)) == 4  # 1 existing + 3 new
 
-    def test_prefix_filter_optimization(self, conference):
-        """Verify the existing code query filters by prefix when one is given."""
+    def test_generated_codes_use_specified_prefix(self, conference):
+        """Verify generated codes start with the configured prefix."""
         Voucher.objects.create(
             conference=conference,
             code="OTHER-12345678",
