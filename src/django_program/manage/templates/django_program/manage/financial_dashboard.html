@@ -1,0 +1,263 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Financial Overview{% endblock %}
+
+{% block page_title %}
+<h1>Financial Overview</h1>
+<p>Revenue, orders, payments, and ticket sales for {{ conference.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:order-list' conference.slug %}" class="btn btn-secondary btn-sm">View All Orders</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Summary cards -->
+<div class="top-stats" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
+  <div class="stat-card">
+    <div class="stat-card-value">${{ revenue.net }}</div>
+    <div class="stat-card-label">Net Revenue</div>
+    {% if revenue.refunded %}
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.total }} gross</div>
+    {% endif %}
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ total_orders }}</div>
+    <div class="stat-card-label">Total Orders</div>
+    {% if orders_by_status.paid %}
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-success); font-weight: 500;">{{ orders_by_status.paid }} paid</div>
+    {% endif %}
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ carts_by_status.active }}</div>
+    <div class="stat-card-label">Active Carts</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ revenue.credits_outstanding }}</div>
+    <div class="stat-card-label">Credits Outstanding</div>
+    {% if revenue.credits_applied %}
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.credits_applied }} applied</div>
+    {% endif %}
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+  <!-- Orders by Status -->
+  <div>
+    <h2 class="section-heading" style="margin-top: 0;">Orders by Status</h2>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th style="text-align: right;">Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for status, count in orders_by_status.items %}
+        <tr>
+          <td>
+            {% if status == "paid" %}
+            <span class="badge badge--active">Paid</span>
+            {% elif status == "pending" %}
+            <span class="badge badge--warning">Pending</span>
+            {% elif status == "refunded" %}
+            <span class="badge badge--other">Refunded</span>
+            {% elif status == "partially_refunded" %}
+            <span class="badge badge--warning">Partial Refund</span>
+            {% elif status == "cancelled" %}
+            <span class="badge badge--inactive">Cancelled</span>
+            {% else %}
+            <span class="badge badge--other">{{ status }}</span>
+            {% endif %}
+          </td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Carts by Status -->
+  <div>
+    <h2 class="section-heading" style="margin-top: 0;">Carts by Status</h2>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th style="text-align: right;">Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge--active">Active</span></td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ carts_by_status.active }}</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge--synced">Checked Out</span></td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ carts_by_status.checked_out }}</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge--other">Expired</span></td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ carts_by_status.expired }}</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge--inactive">Abandoned</span></td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ carts_by_status.abandoned }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Payments by Method -->
+<h2 class="section-heading">Payments by Method</h2>
+{% if total_payments %}
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th style="text-align: right;">Count</th>
+      <th style="text-align: right;">Total Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for method, data in payments_by_method.items %}
+    <tr>
+      <td>{{ data.label }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ data.count }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ data.total_amount }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state" style="margin-bottom: 2rem;">
+  <p>No payments recorded.</p>
+</div>
+{% endif %}
+
+<!-- Ticket Type Sales -->
+<h2 class="section-heading">Ticket Type Sales</h2>
+{% if ticket_sales %}
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Ticket Type</th>
+      <th style="text-align: right;">Price</th>
+      <th style="text-align: right;">Sold</th>
+      <th style="text-align: right;">Remaining</th>
+      <th style="text-align: right;">Revenue</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for ticket in ticket_sales %}
+    <tr>
+      <td>{{ ticket.name }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ ticket.price }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ ticket.sold_count }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">
+        {% if ticket.total_quantity == 0 %}
+        &infin;
+        {% else %}
+        {{ ticket.remaining_quantity|default:"--" }}
+        {% endif %}
+      </td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ ticket.ticket_revenue|default:"0.00" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state" style="margin-bottom: 2rem;">
+  <p>No ticket types configured for this conference.</p>
+</div>
+{% endif %}
+
+<!-- Recent Orders -->
+<h2 class="section-heading">Recent Orders</h2>
+{% if recent_orders %}
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Reference</th>
+      <th>User</th>
+      <th>Status</th>
+      <th style="text-align: right;">Total</th>
+      <th>Date</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for order in recent_orders %}
+    <tr>
+      <td><a href="{% url 'manage:order-detail' conference.slug order.pk %}" class="mono">{{ order.reference }}</a></td>
+      <td>{{ order.user.email|default:order.user.username }}</td>
+      <td>
+        {% if order.status == "paid" %}
+        <span class="badge badge--active">Paid</span>
+        {% elif order.status == "pending" %}
+        <span class="badge badge--warning">Pending</span>
+        {% elif order.status == "refunded" %}
+        <span class="badge badge--other">Refunded</span>
+        {% elif order.status == "partially_refunded" %}
+        <span class="badge badge--warning">Partial Refund</span>
+        {% elif order.status == "cancelled" %}
+        <span class="badge badge--inactive">Cancelled</span>
+        {% endif %}
+      </td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ order.total }}</td>
+      <td>{{ order.created_at|date:"M j, Y" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state" style="margin-bottom: 2rem;">
+  <p>No orders yet for this conference.</p>
+</div>
+{% endif %}
+
+<!-- Active Carts -->
+<h2 class="section-heading">Active Carts</h2>
+{% if active_carts %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>User</th>
+      <th style="text-align: right;">Items</th>
+      <th>Created</th>
+      <th>Expires</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cart in active_carts %}
+    <tr>
+      <td>{{ cart.user.email|default:cart.user.username }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ cart.item_count }}</td>
+      <td>{{ cart.created_at|date:"M j, Y g:i A" }}</td>
+      <td>
+        {% if cart.expires_at %}
+        {{ cart.expires_at|date:"M j, Y g:i A" }}
+        {% else %}
+        <span style="color: var(--color-text-muted);">No expiry</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No active carts at this time.</p>
+</div>
+{% endif %}
+
+<style>
+  @media (max-width: 900px) {
+    .top-stats { grid-template-columns: repeat(2, 1fr) !important; }
+  }
+  @media (max-width: 520px) {
+    .top-stats { grid-template-columns: 1fr !important; }
+  }
+</style>
+{% endblock %}

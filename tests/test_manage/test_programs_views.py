@@ -545,6 +545,15 @@ def test_disbursed_grant_shows_info_on_review(authed_client: Client, conference,
 
 
 @pytest.mark.django_db
+def test_activity_dashboard_unauthenticated_redirects(conference, activity):
+    c = Client()
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = c.get(url)
+    assert response.status_code == 302
+    assert "login" in response.url
+
+
+@pytest.mark.django_db
 def test_activity_dashboard_get(authed_client: Client, conference, activity, regular_user):
     ActivitySignup.objects.create(activity=activity, user=regular_user, status=ActivitySignup.SignupStatus.CONFIRMED)
     url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
