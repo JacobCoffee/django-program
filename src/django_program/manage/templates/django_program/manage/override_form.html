@@ -73,7 +73,7 @@
 {% block content %}
 <div class="info-banner">
   Override fields that are left blank will not modify the talk.
-  Only fields with values will be patched onto the synced data after each sync.
+  When displaying or exporting talks, override values take precedence over the synced data; if an override field is blank, the original synced value is used.
 </div>
 
 <div class="form-container">
