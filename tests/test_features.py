@@ -181,6 +181,17 @@ class TestIsFeatureEnabledWithConference:
         ):
             assert is_feature_enabled("public_ui", conference=conference) is False
 
+    def test_falls_back_to_settings_when_feature_flags_row_missing(self, conference) -> None:
+        FeatureFlags.objects.filter(conference=conference).delete()
+        # Refresh to clear cached reverse relation
+        conference.refresh_from_db()
+        assert is_feature_enabled("registration", conference=conference) is True
+
+    def test_db_override_absent_falls_back_for_ui_feature(self, conference) -> None:
+        FeatureFlags.objects.filter(conference=conference).delete()
+        conference.refresh_from_db()
+        assert is_feature_enabled("public_ui", conference=conference) is True
+
     def test_unknown_feature_raises_with_conference(self, conference) -> None:
         with pytest.raises(ValueError, match="Unknown feature"):
             is_feature_enabled("bogus", conference=conference)
