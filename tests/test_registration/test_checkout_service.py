@@ -1160,4 +1160,4 @@ class TestGlobalCapacityCheckoutIntegration:
         )
         add_addon(cart, addon, qty=1)
         items = list(cart.items.select_related("ticket_type", "addon"))
-        _revalidate_global_capacity(items)
+        _revalidate_global_capacity(items, capped_conference)

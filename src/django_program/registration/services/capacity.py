@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
+from django_program.conference.models import Conference
 from django_program.registration.models import Order, OrderLineItem
 
 
@@ -59,10 +60,15 @@ def get_global_remaining(conference: object) -> int | None:
 def validate_global_capacity(conference: object, desired_total: int) -> None:
     """Raise ``ValidationError`` if ``desired_total`` would exceed global capacity.
 
+    Acquires a row-level lock on the conference via ``select_for_update()`` to
+    prevent race conditions when multiple concurrent requests validate capacity
+    at the same time. The caller **must** already be inside a
+    ``transaction.atomic`` block.
+
     Args:
         conference: The conference to validate against.
-        desired_total: The total ticket count the caller wants to reach
-            (existing sold + new quantity).
+        desired_total: The total number of ticket items in the cart
+            (across all ticket types, excluding add-ons).
 
     Raises:
         ValidationError: If the desired total exceeds the conference's
@@ -70,6 +76,7 @@ def validate_global_capacity(conference: object, desired_total: int) -> None:
     """
     if conference.total_capacity == 0:
         return
+    Conference.objects.select_for_update().filter(pk=conference.pk).first()
     remaining = get_global_remaining(conference)
     if remaining is not None and desired_total > remaining:
         raise ValidationError(
