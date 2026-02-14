@@ -34,6 +34,7 @@ from django_program.registration.services.checkout import (
     CheckoutService,
     _expire_stale_pending_orders,
     _increment_voucher_usage,
+    _revalidate_global_capacity,
 )
 from django_program.registration.signals import order_paid
 
@@ -1141,3 +1142,22 @@ class TestGlobalCapacityCheckoutIntegration:
         # Now user tries to check out 2 more (total would be 4 > cap 3)
         with pytest.raises(ValidationError, match="tickets remaining for this conference"):
             CheckoutService.checkout(cart)
+
+    def test_revalidate_global_capacity_skips_addon_only_items(self, capped_conference):
+        """When all cart items are add-ons (no ticket_type_id), skip capacity check."""
+        addon = AddOn.objects.create(
+            conference=capped_conference,
+            name="Swag",
+            slug="swag-cap",
+            price=Decimal("15.00"),
+            is_active=True,
+        )
+        cart = Cart.objects.create(
+            user=User.objects.create_user(username="addon-only", password="testpass123"),
+            conference=capped_conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        add_addon(cart, addon, qty=1)
+        items = list(cart.items.select_related("ticket_type", "addon"))
+        _revalidate_global_capacity(items)

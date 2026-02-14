@@ -710,6 +710,14 @@ def test_activity_promote_non_waitlisted_404(authed_client: Client, conference, 
     assert response.status_code == 404
 
 
+@pytest.mark.django_db
+def test_activity_dashboard_redirects_unauthenticated_user(client: Client, conference, activity):
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = client.get(url)
+    assert response.status_code == 302
+    assert "/accounts/login/" in response.url
+
+
 # ---- Activity organizers M2M ----
 
 
