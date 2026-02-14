@@ -605,6 +605,14 @@ def test_activity_dashboard_denied_for_non_organizer(client: Client, conference,
     assert response.status_code == 403
 
 
+@pytest.mark.django_db
+def test_activity_dashboard_anonymous_redirects_to_login(client: Client, conference, activity):
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = client.get(url)
+    assert response.status_code == 302
+    assert "/accounts/login/" in response.url or "login" in response.url
+
+
 # ---- Activity Dashboard CSV Export ----
 
 
