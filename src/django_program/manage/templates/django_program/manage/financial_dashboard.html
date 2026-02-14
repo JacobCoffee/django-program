@@ -34,7 +34,7 @@
     <div class="stat-card-label">Active Carts</div>
   </div>
   <div class="stat-card">
-    <div class="stat-card-value">${{ revenue.credits_issued }}</div>
+    <div class="stat-card-value">${{ revenue.credits_outstanding }}</div>
     <div class="stat-card-label">Credits Outstanding</div>
     {% if revenue.credits_applied %}
     <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.credits_applied }} applied</div>
@@ -112,6 +112,7 @@
 
 <!-- Payments by Method -->
 <h2 class="section-heading">Payments by Method</h2>
+{% if total_payments %}
 <table class="data-table" style="margin-bottom: 2rem;">
   <thead>
     <tr>
@@ -127,13 +128,14 @@
       <td style="text-align: right; font-family: var(--font-mono);">{{ data.count }}</td>
       <td style="text-align: right; font-family: var(--font-mono);">${{ data.total_amount }}</td>
     </tr>
-    {% empty %}
-    <tr>
-      <td colspan="3" style="text-align: center; color: var(--color-text-muted);">No payments recorded.</td>
-    </tr>
     {% endfor %}
   </tbody>
 </table>
+{% else %}
+<div class="empty-state" style="margin-bottom: 2rem;">
+  <p>No payments recorded.</p>
+</div>
+{% endif %}
 
 <!-- Ticket Type Sales -->
 <h2 class="section-heading">Ticket Type Sales</h2>

@@ -7,7 +7,8 @@ conference.
 
 from decimal import Decimal
 
-from django.db.models import Count, Q, QuerySet, Sum
+from django.db.models import Count, Q, QuerySet, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.views.generic import TemplateView
 
@@ -54,25 +55,36 @@ class FinancialDashboardView(ManagePermissionMixin, TemplateView):
         ).aggregate(
             total_revenue=Sum("total"),
         )
-        refunded_agg = Order.objects.filter(
+
+        # Comment 1: compute refunds from Credit records tied to source orders
+        # rather than summing Order.total for REFUNDED orders (which overstates
+        # partial refunds).
+        refund_agg = Credit.objects.filter(
             conference=conference,
-            status__in=[Order.Status.REFUNDED, Order.Status.PARTIALLY_REFUNDED],
+            source_order__isnull=False,
         ).aggregate(
-            total_refunded=Sum("total"),
+            total_refunded=Sum("amount"),
         )
 
         total_revenue = revenue_agg["total_revenue"] or _ZERO
-        total_refunded = refunded_agg["total_refunded"] or _ZERO
+        total_refunded = refund_agg["total_refunded"] or _ZERO
         net_revenue = total_revenue - total_refunded
 
+        # Comment 4 & 6: "Credits Outstanding" should reflect the remaining
+        # spendable balance, not the total ever issued.
         credits_agg = Credit.objects.filter(conference=conference).aggregate(
             total_issued=Sum("amount"),
+            total_outstanding=Sum(
+                "remaining_amount",
+                filter=Q(status=Credit.Status.AVAILABLE),
+            ),
             total_applied=Sum(
                 "amount",
                 filter=Q(status=Credit.Status.APPLIED),
             ),
         )
         total_credits_issued = credits_agg["total_issued"] or _ZERO
+        total_credits_outstanding = credits_agg["total_outstanding"] or _ZERO
         total_credits_applied = credits_agg["total_applied"] or _ZERO
 
         context["revenue"] = {
@@ -80,15 +92,17 @@ class FinancialDashboardView(ManagePermissionMixin, TemplateView):
             "refunded": total_refunded,
             "net": net_revenue,
             "credits_issued": total_credits_issued,
+            "credits_outstanding": total_credits_outstanding,
             "credits_applied": total_credits_applied,
         }
 
-        # --- Orders by status ---
+        # --- Orders by status (Comment 7: single aggregated query) ---
         order_qs = Order.objects.filter(conference=conference)
-        orders_by_status: dict[str, int] = {}
-        for status_value, _label in Order.Status.choices:
-            orders_by_status[status_value] = order_qs.filter(status=status_value).count()
-        total_orders = order_qs.count()
+        order_status_rows = order_qs.values("status").annotate(count=Count("id"))
+        orders_by_status: dict[str, int] = {status_value: 0 for status_value, _label in Order.Status.choices}
+        for row in order_status_rows:
+            orders_by_status[row["status"]] = row["count"]
+        total_orders = sum(orders_by_status.values())
         context["orders_by_status"] = orders_by_status
         context["total_orders"] = total_orders
 
@@ -124,24 +138,30 @@ class FinancialDashboardView(ManagePermissionMixin, TemplateView):
             }
         context["payments_by_method"] = payments_by_method
 
-        # --- Payments by status ---
-        payments_by_status: dict[str, int] = {}
-        for status_value, _label in Payment.Status.choices:
-            payments_by_status[status_value] = payments_qs.filter(status=status_value).count()
+        # --- Payments by status (Comment 2: single aggregated query) ---
+        payment_status_rows = payments_qs.values("status").annotate(count=Count("id"))
+        payments_by_status: dict[str, int] = {status_value: 0 for status_value, _label in Payment.Status.choices}
+        for row in payment_status_rows:
+            payments_by_status[row["status"]] = row["count"]
+        total_payments = sum(payments_by_status.values())
         context["payments_by_status"] = payments_by_status
+        context["total_payments"] = total_payments
 
-        # --- Ticket sales ---
+        # --- Ticket sales (Comment 3: Sum of quantity, include PARTIALLY_REFUNDED) ---
         paid_order_ids = Order.objects.filter(
             conference=conference,
-            status=Order.Status.PAID,
+            status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED],
         ).values_list("id", flat=True)
 
         ticket_sales: QuerySet[TicketType] = (
             TicketType.objects.filter(conference=conference)
             .annotate(
-                sold_count=Count(
-                    "order_line_items",
-                    filter=Q(order_line_items__order_id__in=paid_order_ids),
+                sold_count=Coalesce(
+                    Sum(
+                        "order_line_items__quantity",
+                        filter=Q(order_line_items__order_id__in=paid_order_ids),
+                    ),
+                    Value(0),
                 ),
                 ticket_revenue=Sum(
                     "order_line_items__line_total",
