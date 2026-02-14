@@ -1,6 +1,14 @@
 # pretalx-client
 
+[![PyPI](https://img.shields.io/pypi/v/pretalx-client)](https://pypi.org/project/pretalx-client/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://jacobcoffee.github.io/django-program/pretalx-client/)
+
 Standalone Python client for the [Pretalx](https://pretalx.com) REST API.
+
+| Link | |
+|------|---|
+| PyPI | https://pypi.org/project/pretalx-client/ |
+| Docs | https://jacobcoffee.github.io/django-program/pretalx-client/ |
 
 ## Installation
 

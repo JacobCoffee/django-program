@@ -1,6 +1,19 @@
-An attempt to modernize the conference workflow.
+# django-program
 
-Inspirations
+[![PyPI](https://img.shields.io/pypi/v/django-program)](https://pypi.org/project/django-program/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://jacobcoffee.github.io/django-program/)
+[![CI](https://github.com/JacobCoffee/django-program/actions/workflows/ci.yml/badge.svg)](https://github.com/JacobCoffee/django-program/actions/workflows/ci.yml)
+
+Modern conference management for Django — registration, ticketing, Pretalx schedule sync, sponsors, and program activities.
+
+| Link | |
+|------|---|
+| PyPI | https://pypi.org/project/django-program/ |
+| Docs | https://jacobcoffee.github.io/django-program/ |
+| pretalx-client PyPI | https://pypi.org/project/pretalx-client/ |
+| pretalx-client Docs | https://jacobcoffee.github.io/django-program/pretalx-client/ |
+
+Inspirations:
 - [Symposion](https://github.com/pinax/symposion)
 - [Registrasion](https://github.com/chrisjrn/registrasion)
 
