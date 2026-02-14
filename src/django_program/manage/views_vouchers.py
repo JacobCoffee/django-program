@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
+from django.db import IntegrityError
 from django.urls import reverse
 from django.views.generic import FormView
 
@@ -64,7 +65,7 @@ class VoucherBulkGenerateView(ManagePermissionMixin, FormView):
                 self.request,
                 f"Successfully generated {len(created)} voucher codes with prefix '{data['prefix']}'.",
             )
-        except RuntimeError:
+        except (RuntimeError, IntegrityError):  # fmt: skip
             logger.exception("Voucher bulk generation failed")
             messages.error(self.request, "Failed to generate voucher codes. Please try again.")
 

@@ -5,6 +5,7 @@ random voucher codes within a single database transaction.
 """
 
 import secrets
+import string
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -20,6 +21,10 @@ if TYPE_CHECKING:
 
     from django_program.conference.models import Conference
     from django_program.registration.models import AddOn, TicketType
+
+_CODE_ALPHABET = string.ascii_uppercase + string.digits
+_CODE_LENGTH = 8
+_MAX_COUNT = 500
 
 
 @dataclass
@@ -60,7 +65,7 @@ def _generate_unique_code(prefix: str, existing_codes: set[str]) -> str:
     """Generate a single voucher code that does not collide with existing ones.
 
     Produces codes in the format ``{prefix}{8_random_chars}`` where the random
-    portion is derived from ``secrets.token_urlsafe(6)`` (8 URL-safe characters).
+    portion uses uppercase alphanumeric characters (A-Z, 0-9) for readability.
     Retries up to 100 times if a collision is detected.
 
     Args:
@@ -74,7 +79,8 @@ def _generate_unique_code(prefix: str, existing_codes: set[str]) -> str:
         RuntimeError: If a unique code cannot be generated after 100 attempts.
     """
     for _ in range(100):
-        code = f"{prefix}{secrets.token_urlsafe(6)}"
+        random_part = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(_CODE_LENGTH))
+        code = f"{prefix}{random_part}"
         if code not in existing_codes:
             return code
     msg = f"Failed to generate a unique voucher code with prefix '{prefix}' after 100 attempts"
@@ -87,7 +93,8 @@ def generate_voucher_codes(config: VoucherBulkConfig) -> list[Voucher]:
     Creates ``config.count`` vouchers with cryptographically random codes,
     all sharing the same configuration (type, discount, validity window, etc.).
     The vouchers are inserted in a single ``bulk_create`` call wrapped in a
-    transaction for atomicity.
+    transaction for atomicity. M2M relations are set via a single
+    ``bulk_create`` on the through tables to avoid N+1 queries.
 
     Args:
         config: Bulk generation configuration specifying the conference, prefix,
@@ -97,11 +104,19 @@ def generate_voucher_codes(config: VoucherBulkConfig) -> list[Voucher]:
         List of newly created ``Voucher`` instances.
 
     Raises:
+        ValueError: If ``config.count`` is less than 1 or greater than 500.
         RuntimeError: If unique code generation fails after retries.
         IntegrityError: If a code collision occurs at the database level despite
             the in-memory uniqueness check (race condition safeguard).
     """
-    existing_codes: set[str] = set(Voucher.objects.filter(conference=config.conference).values_list("code", flat=True))
+    if config.count < 1 or config.count > _MAX_COUNT:
+        msg = f"count must be between 1 and {_MAX_COUNT}, got {config.count}"
+        raise ValueError(msg)
+
+    qs = Voucher.objects.filter(conference=config.conference)
+    if config.prefix:
+        qs = qs.filter(code__startswith=config.prefix)
+    existing_codes: set[str] = set(qs.values_list("code", flat=True))
 
     vouchers_to_create: list[Voucher] = []
     for _ in range(config.count):
@@ -125,12 +140,20 @@ def generate_voucher_codes(config: VoucherBulkConfig) -> list[Voucher]:
 
         if config.applicable_ticket_types is not None and config.applicable_ticket_types.exists():
             ticket_type_ids = list(config.applicable_ticket_types.values_list("pk", flat=True))
-            for voucher in created:
-                voucher.applicable_ticket_types.set(ticket_type_ids)
+            ThroughModel = Voucher.applicable_ticket_types.through  # noqa: N806
+            through_objects = [
+                ThroughModel(voucher_id=voucher.pk, tickettype_id=tt_id)
+                for voucher in created
+                for tt_id in ticket_type_ids
+            ]
+            ThroughModel.objects.bulk_create(through_objects)
 
         if config.applicable_addons is not None and config.applicable_addons.exists():
             addon_ids = list(config.applicable_addons.values_list("pk", flat=True))
-            for voucher in created:
-                voucher.applicable_addons.set(addon_ids)
+            ThroughModel = Voucher.applicable_addons.through  # noqa: N806
+            through_objects = [
+                ThroughModel(voucher_id=voucher.pk, addon_id=addon_id) for voucher in created for addon_id in addon_ids
+            ]
+            ThroughModel.objects.bulk_create(through_objects)
 
     return created
