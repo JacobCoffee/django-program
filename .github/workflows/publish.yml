@@ -1,13 +1,33 @@
 name: Publish
 
 on:
-  push:
-    tags:
-      - "v[0-9]*"
+  release:
+    types: [published]
 
 jobs:
+  check-tag:
+    name: Check Tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should-publish: ${{ steps.check.outputs.match }}
+    steps:
+      - name: Check tag matches django-program pattern
+        id: check
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ "${TAG}" =~ ^v[0-9] ]]; then
+            echo "match=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "match=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   build:
     name: Build
+    needs: [check-tag]
+    if: needs.check-tag.outputs.should-publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -62,8 +82,8 @@ jobs:
           name: dist-signed
           path: dist/*
 
-  release:
-    name: GitHub Release
+  upload-release-assets:
+    name: Upload Release Assets
     needs: [sign]
     runs-on: ubuntu-latest
     permissions:
@@ -75,11 +95,10 @@ jobs:
           name: dist-signed
           path: dist
 
-      - name: Create draft GitHub release
+      - name: Upload assets to GitHub release
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.3.2
         with:
-          draft: true
-          generate_release_notes: true
+          tag_name: ${{ github.event.release.tag_name }}
           files: dist/*
 
   publish:
