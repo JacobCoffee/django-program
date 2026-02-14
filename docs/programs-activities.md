@@ -67,7 +67,7 @@ State transitions are enforced by property guards on the model (`is_editable`, `
 
 ### Receipts and payment info
 
-After accepting a grant, the recipient uploads expense receipts through `ReceiptUploadView`:
+After accepting a grant, the recipient uploads expense receipts through `ReceiptUploadView`. Both receipt uploads and payment info submission require the grant to be in `ACCEPTED` status **and** have a non-zero `approved_amount` set by a reviewer. Until a reviewer sets the approved amount, the receipt and payment sections are locked.
 
 - **Receipt types**: `AIRFARE` and `LODGING`.
 - **File validation**: PDF, JPG, JPEG, or PNG, max 10 MB.

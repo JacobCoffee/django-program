@@ -2,11 +2,12 @@
 
 The management dashboard is the organizer-facing interface for administering a conference. It lives under the `/manage/` URL prefix (configured in your project's `urls.py`) and requires authentication. All conference-scoped pages sit under `/manage/<conference-slug>/`.
 
-Access is restricted to users who meet at least one of these criteria:
+Access to the standard management views is restricted to users who meet at least one of these criteria:
 
 - Django superuser
 - Holds the `program_conference.change_conference` permission
-- Belongs to a designated permission group (the financial dashboard additionally accepts the "Program: Finance & Accounting" group)
+
+The financial overview dashboard at `/manage/<conference-slug>/financial/` additionally allows access to users who belong to the "Program: Finance & Accounting" group.
 
 The sidebar organizes features into sections: **Content** (sections, rooms, speakers, talks, schedule, overrides), **Registration** (financial overview, orders, ticket types, add-ons, vouchers), **Sponsors** (levels, sponsors), and **Programs** (activities, travel grants).
 
