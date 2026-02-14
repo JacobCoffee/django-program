@@ -34,7 +34,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
 
       - name: Generate changelog
-        uses: orhun/git-cliff-action@14bb12647b0c60374018bc3b4e01349e6e0a5340 # v4.4.2
+        uses: orhun/git-cliff-action@e16f179f0be49ecdfe63753837f20b9531642772 # v4.7.0
         with:
           config: pyproject.toml
           args: --output docs/changelog.md
