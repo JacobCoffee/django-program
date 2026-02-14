@@ -23,6 +23,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView
 
+from django_program.features import FeatureRequiredMixin
 from django_program.pretalx.views import ConferenceMixin
 from django_program.registration.forms import CartItemForm, CheckoutForm, VoucherApplyForm
 from django_program.registration.models import (
@@ -97,13 +98,14 @@ def _cart_totals(cart: Cart) -> tuple[Decimal, Decimal, Decimal]:
     return subtotal, discount, total
 
 
-class TicketSelectView(ConferenceMixin, ListView):
+class TicketSelectView(ConferenceMixin, FeatureRequiredMixin, ListView):
     """Lists available ticket types for a conference.
 
     Shows ticket types that are active and do not require a voucher,
     ordered by display order and name.
     """
 
+    required_feature = ("registration", "public_ui")
     template_name = "django_program/registration/ticket_select.html"
     context_object_name = "ticket_types"
 
@@ -126,13 +128,14 @@ class TicketSelectView(ConferenceMixin, ListView):
         return context
 
 
-class CartView(LoginRequiredMixin, ConferenceMixin, View):
+class CartView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """Shopping cart view for adding/removing items and applying vouchers.
 
     Handles multiple POST actions distinguished by a hidden ``action``
     field: ``add_item``, ``remove_item``, and ``apply_voucher``.
     """
 
+    required_feature = ("registration", "public_ui")
     template_name = "django_program/registration/cart.html"
 
     def _get_or_create_cart(self, request: HttpRequest) -> Cart:
@@ -482,7 +485,7 @@ class CartView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("registration:cart", args=[self.conference.slug]))
 
 
-class CheckoutView(LoginRequiredMixin, ConferenceMixin, View):
+class CheckoutView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """Checkout view for creating an order from the current cart.
 
     Collects billing information, creates Order and OrderLineItem records
@@ -490,6 +493,7 @@ class CheckoutView(LoginRequiredMixin, ConferenceMixin, View):
     to the order confirmation page.
     """
 
+    required_feature = ("registration", "public_ui")
     template_name = "django_program/registration/checkout.html"
 
     def _get_open_cart(self, request: HttpRequest) -> Cart | None:
@@ -661,13 +665,14 @@ class CheckoutView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("registration:order-confirmation", args=[self.conference.slug, order.reference]))
 
 
-class OrderConfirmationView(LoginRequiredMixin, ConferenceMixin, DetailView):
+class OrderConfirmationView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, DetailView):
     """Confirmation page shown immediately after checkout.
 
     Displays the order summary and line items for the just-completed
     checkout.
     """
 
+    required_feature = ("registration", "public_ui")
     template_name = "django_program/registration/order_confirmation.html"
     context_object_name = "order"
 
@@ -702,12 +707,13 @@ class OrderConfirmationView(LoginRequiredMixin, ConferenceMixin, DetailView):
         return context
 
 
-class OrderDetailView(LoginRequiredMixin, ConferenceMixin, DetailView):
+class OrderDetailView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, DetailView):
     """Detail view for any order owned by the current user.
 
     Displays order information, line items, and payment history.
     """
 
+    required_feature = ("registration", "public_ui")
     template_name = "django_program/registration/order_detail.html"
     context_object_name = "order"
 

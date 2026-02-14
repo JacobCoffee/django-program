@@ -115,65 +115,70 @@ class TestIsFeatureEnabledWithConference:
             end_date="2026-07-05",
         )
 
-    def test_no_feature_flags_row_uses_settings_default(self, conference) -> None:
-        assert is_feature_enabled("registration", conference=conference) is True
-
     def test_all_none_fields_use_settings_defaults(self, conference) -> None:
-        FeatureFlags.objects.create(conference=conference)
         for feature in ALL_MODULE_FEATURES:
             assert is_feature_enabled(feature, conference=conference) is True
 
     def test_explicit_false_overrides_settings_true(self, conference) -> None:
-        FeatureFlags.objects.create(conference=conference, registration_enabled=False)
+        flags = conference.feature_flags
+        flags.registration_enabled = False
+        flags.save()
         assert is_feature_enabled("registration", conference=conference) is False
 
     def test_explicit_true_overrides_settings_false(self, conference) -> None:
         with override_settings(
             DJANGO_PROGRAM={"features": {"sponsors_enabled": False}},
         ):
-            FeatureFlags.objects.create(conference=conference, sponsors_enabled=True)
+            flags = conference.feature_flags
+            flags.sponsors_enabled = True
+            flags.save()
             assert is_feature_enabled("sponsors", conference=conference) is True
 
     @pytest.mark.parametrize("feature", ALL_MODULE_FEATURES)
     def test_none_field_falls_back_to_settings(self, conference, feature) -> None:
-        FeatureFlags.objects.create(conference=conference)
         with override_settings(
             DJANGO_PROGRAM={"features": {f"{feature}_enabled": False}},
         ):
             assert is_feature_enabled(feature, conference=conference) is False
 
     def test_db_all_ui_false_blocks_public_ui(self, conference) -> None:
-        FeatureFlags.objects.create(conference=conference, all_ui_enabled=False)
+        flags = conference.feature_flags
+        flags.all_ui_enabled = False
+        flags.save()
         assert is_feature_enabled("public_ui", conference=conference) is False
 
     def test_db_all_ui_false_blocks_manage_ui(self, conference) -> None:
-        FeatureFlags.objects.create(conference=conference, all_ui_enabled=False)
+        flags = conference.feature_flags
+        flags.all_ui_enabled = False
+        flags.save()
         assert is_feature_enabled("manage_ui", conference=conference) is False
 
     def test_db_all_ui_true_overrides_settings_all_ui_false(self, conference) -> None:
         with override_settings(
             DJANGO_PROGRAM={"features": {"all_ui_enabled": False}},
         ):
-            FeatureFlags.objects.create(conference=conference, all_ui_enabled=True)
+            flags = conference.feature_flags
+            flags.all_ui_enabled = True
+            flags.save()
             assert is_feature_enabled("public_ui", conference=conference) is True
 
     def test_db_public_ui_false_with_all_ui_true(self, conference) -> None:
-        FeatureFlags.objects.create(
-            conference=conference,
-            all_ui_enabled=True,
-            public_ui_enabled=False,
-        )
+        flags = conference.feature_flags
+        flags.all_ui_enabled = True
+        flags.public_ui_enabled = False
+        flags.save()
         assert is_feature_enabled("public_ui", conference=conference) is False
 
     def test_db_all_ui_false_does_not_affect_modules(self, conference) -> None:
-        FeatureFlags.objects.create(conference=conference, all_ui_enabled=False)
+        flags = conference.feature_flags
+        flags.all_ui_enabled = False
+        flags.save()
         assert is_feature_enabled("registration", conference=conference) is True
 
     def test_settings_all_ui_false_no_db_override_blocks_ui(self, conference) -> None:
         with override_settings(
             DJANGO_PROGRAM={"features": {"all_ui_enabled": False}},
         ):
-            FeatureFlags.objects.create(conference=conference)
             assert is_feature_enabled("public_ui", conference=conference) is False
 
     def test_unknown_feature_raises_with_conference(self, conference) -> None:
@@ -225,11 +230,15 @@ class TestRequireFeatureWithConference:
         with override_settings(
             DJANGO_PROGRAM={"features": {"registration_enabled": False}},
         ):
-            FeatureFlags.objects.create(conference=conference, registration_enabled=True)
+            flags = conference.feature_flags
+            flags.registration_enabled = True
+            flags.save()
             require_feature("registration", conference=conference)
 
     def test_raises_http404_when_db_override_false(self, conference) -> None:
-        FeatureFlags.objects.create(conference=conference, registration_enabled=False)
+        flags = conference.feature_flags
+        flags.registration_enabled = False
+        flags.save()
         with pytest.raises(Http404, match="registration"):
             require_feature("registration", conference=conference)
 
@@ -250,6 +259,15 @@ class _StubView(FeatureRequiredMixin, View):
 
 class _NoFeatureView(FeatureRequiredMixin, View):
     """View with no required feature set."""
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        return HttpResponse("OK")
+
+
+class _MultiFeatureView(FeatureRequiredMixin, View):
+    """View requiring multiple features."""
+
+    required_feature = ("registration", "public_ui")
 
     def get(self, request: HttpRequest) -> HttpResponse:
         return HttpResponse("OK")
@@ -298,6 +316,36 @@ class TestFeatureRequiredMixin:
         mixin = FeatureRequiredMixin()
         assert mixin.get_conference() is None
 
+    def test_get_conference_returns_self_conference_attr(self) -> None:
+        mixin = FeatureRequiredMixin()
+        sentinel = object()
+        mixin.conference = sentinel  # type: ignore[attr-defined]
+        assert mixin.get_conference() is sentinel
+
+    def test_multi_feature_dispatches_when_all_enabled(self) -> None:
+        view = _MultiFeatureView.as_view()
+        response = view(self._make_request())
+        assert response.status_code == 200
+
+    def test_multi_feature_returns_404_when_first_disabled(self) -> None:
+        with override_settings(
+            DJANGO_PROGRAM={"features": {"registration_enabled": False}},
+        ):
+            view = _MultiFeatureView.as_view()
+            with pytest.raises(Http404):
+                view(self._make_request())
+
+    def test_multi_feature_returns_404_when_second_disabled(self) -> None:
+        with override_settings(
+            DJANGO_PROGRAM={"features": {"public_ui_enabled": False}},
+        ):
+            view = _MultiFeatureView.as_view()
+            with pytest.raises(Http404):
+                view(self._make_request())
+
+    def test_required_feature_accepts_tuple(self) -> None:
+        assert _MultiFeatureView.required_feature == ("registration", "public_ui")
+
 
 @pytest.mark.django_db
 class TestFeatureRequiredMixinWithConference:
@@ -315,7 +363,9 @@ class TestFeatureRequiredMixinWithConference:
             start_date="2026-07-01",
             end_date="2026-07-05",
         )
-        FeatureFlags.objects.create(conference=conference, registration_enabled=False)
+        flags = conference.feature_flags
+        flags.registration_enabled = False
+        flags.save()
         view = _ConferenceView.as_view(_conference=conference)
         with pytest.raises(Http404):
             view(self._make_request())
@@ -367,7 +417,9 @@ class TestProgramFeaturesContextProcessorWithConference:
             start_date="2026-07-01",
             end_date="2026-07-05",
         )
-        FeatureFlags.objects.create(conference=conference, registration_enabled=False)
+        flags = conference.feature_flags
+        flags.registration_enabled = False
+        flags.save()
         request = HttpRequest()
         request.conference = conference  # type: ignore[attr-defined]
         context = program_features(request)
@@ -401,11 +453,11 @@ class TestFeatureFlagsModel:
         )
 
     def test_str_representation(self, conference) -> None:
-        flags = FeatureFlags.objects.create(conference=conference)
+        flags = conference.feature_flags
         assert str(flags) == f"Feature flags for {conference}"
 
     def test_all_fields_default_to_none(self, conference) -> None:
-        flags = FeatureFlags.objects.create(conference=conference)
+        flags = conference.feature_flags
         assert flags.registration_enabled is None
         assert flags.sponsors_enabled is None
         assert flags.travel_grants_enabled is None
@@ -416,21 +468,21 @@ class TestFeatureFlagsModel:
         assert flags.all_ui_enabled is None
 
     def test_one_to_one_constraint(self, conference) -> None:
-        FeatureFlags.objects.create(conference=conference)
+        assert FeatureFlags.objects.filter(conference=conference).exists()
         with pytest.raises(IntegrityError):
             FeatureFlags.objects.create(conference=conference)
 
     def test_cascade_delete(self, conference) -> None:
-        FeatureFlags.objects.create(conference=conference)
+        assert FeatureFlags.objects.filter(conference=conference).exists()
         conference.delete()
         assert FeatureFlags.objects.count() == 0
 
     def test_updated_at_auto_set(self, conference) -> None:
-        flags = FeatureFlags.objects.create(conference=conference)
+        flags = conference.feature_flags
         assert flags.updated_at is not None
 
     def test_reverse_relation(self, conference) -> None:
-        flags = FeatureFlags.objects.create(conference=conference)
+        flags = FeatureFlags.objects.get(conference=conference)
         assert conference.feature_flags == flags
 
     def test_verbose_name(self) -> None:
@@ -439,16 +491,69 @@ class TestFeatureFlagsModel:
 
 
 # ---------------------------------------------------------------------------
-# Admin registration
+# Admin inline
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestFeatureFlagsAdmin:
-    """Tests for ``FeatureFlagsAdmin`` registration."""
+    """Tests for ``FeatureFlagsInline`` on ``ConferenceAdmin``."""
 
-    def test_admin_registered(self) -> None:
+    def test_registered_standalone(self) -> None:
         assert FeatureFlags in admin_site._registry
+
+    def test_inline_on_conference_admin(self) -> None:
+        from django_program.conference.admin import ConferenceAdmin  # noqa: PLC0415
+
+        inline_classes = [i.model for i in ConferenceAdmin.inlines]
+        assert FeatureFlags in inline_classes
+
+    def test_inline_max_num_is_one(self) -> None:
+        from django_program.conference.admin import FeatureFlagsInline  # noqa: PLC0415
+
+        assert FeatureFlagsInline.max_num == 1
+
+
+# ---------------------------------------------------------------------------
+# Auto-creation signal
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestFeatureFlagsAutoCreation:
+    """Tests for automatic FeatureFlags creation on Conference save."""
+
+    def test_feature_flags_created_with_conference(self) -> None:
+        conference = Conference.objects.create(
+            name="NewConf",
+            slug="newconf",
+            start_date="2026-07-01",
+            end_date="2026-07-05",
+        )
+        assert FeatureFlags.objects.filter(conference=conference).exists()
+
+    def test_feature_flags_all_none_on_creation(self) -> None:
+        conference = Conference.objects.create(
+            name="NoneConf",
+            slug="noneconf",
+            start_date="2026-07-01",
+            end_date="2026-07-05",
+        )
+        flags = conference.feature_flags
+        assert flags.registration_enabled is None
+        assert flags.sponsors_enabled is None
+        assert flags.public_ui_enabled is None
+
+    def test_update_does_not_create_duplicate(self) -> None:
+        conference = Conference.objects.create(
+            name="DupConf",
+            slug="dupconf",
+            start_date="2026-07-01",
+            end_date="2026-07-05",
+        )
+        conference.name = "DupConf Updated"
+        conference.save()
+        assert FeatureFlags.objects.filter(conference=conference).count() == 1
 
 
 # ---------------------------------------------------------------------------

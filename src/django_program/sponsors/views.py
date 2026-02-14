@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from django.shortcuts import get_object_or_404
 from django.views.generic import DetailView, ListView
 
+from django_program.features import FeatureRequiredMixin
 from django_program.pretalx.views import ConferenceMixin
 from django_program.sponsors.models import Sponsor, SponsorLevel
 
@@ -16,9 +17,10 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
 
-class SponsorListView(ConferenceMixin, ListView):
+class SponsorListView(ConferenceMixin, FeatureRequiredMixin, ListView):
     """List view of all active sponsors for a conference, grouped by level."""
 
+    required_feature = ("sponsors", "public_ui")
     template_name = "django_program/sponsors/sponsor_list.html"
     context_object_name = "sponsors"
 
@@ -49,9 +51,10 @@ class SponsorListView(ConferenceMixin, ListView):
         return context
 
 
-class SponsorDetailView(ConferenceMixin, DetailView):
+class SponsorDetailView(ConferenceMixin, FeatureRequiredMixin, DetailView):
     """Detail view for a single sponsor."""
 
+    required_feature = ("sponsors", "public_ui")
     template_name = "django_program/sponsors/sponsor_detail.html"
     context_object_name = "sponsor"
 

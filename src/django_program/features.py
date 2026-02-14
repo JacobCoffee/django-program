@@ -15,6 +15,7 @@ Features can be configured at two levels:
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404, HttpRequest, HttpResponse
 
 from django_program.settings import get_config
@@ -37,10 +38,9 @@ def _get_db_flag(conference: Conference, attr: str) -> bool | None:
     """
     try:
         flags = conference.feature_flags  # type: ignore[union-attr]
-        value: bool | None = getattr(flags, attr, None)
-    except Exception:  # noqa: BLE001 -- RelatedObjectDoesNotExist
+    except ObjectDoesNotExist:
         return None
-    return value
+    return getattr(flags, attr, None)
 
 
 def is_feature_enabled(feature: str, conference: object | None = None) -> bool:
@@ -117,31 +117,35 @@ def require_feature(feature: str, conference: object | None = None) -> None:
 class FeatureRequiredMixin:
     """View mixin that returns 404 when a required feature is disabled.
 
-    Set ``required_feature`` on the view class to the feature name.
-    Optionally implement ``get_conference()`` to enable per-conference
-    DB overrides.
+    Set ``required_feature`` on the view class to the feature name or a
+    tuple of feature names (all must be enabled).  When used alongside
+    ``ConferenceMixin`` (placed *before* this mixin in the MRO), the
+    already-resolved ``self.conference`` is picked up automatically for
+    per-conference DB overrides.
 
     Example::
 
-        class TicketListView(FeatureRequiredMixin, ListView):
-            required_feature = "registration"
-
-            def get_conference(self):
-                return self.request.conference
+        class TicketListView(ConferenceMixin, FeatureRequiredMixin, ListView):
+            required_feature = ("registration", "public_ui")
     """
 
-    required_feature: str = ""
+    required_feature: str | tuple[str, ...] = ""
 
     def get_conference(self) -> object | None:
         """Return the conference for per-conference feature lookups.
 
-        Override this in subclasses to provide a conference instance.
-        The default returns ``None`` (settings-only checks).
+        When ``ConferenceMixin`` runs before this mixin it sets
+        ``self.conference``; the default implementation returns that
+        attribute if present, falling back to ``None``.
         """
-        return None
+        return getattr(self, "conference", None)
 
     def dispatch(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponse:
-        """Check the feature toggle before dispatching the view."""
-        if self.required_feature:
-            require_feature(self.required_feature, conference=self.get_conference())
+        """Check the feature toggle(s) before dispatching the view."""
+        features = self.required_feature
+        if isinstance(features, str):
+            features = (features,) if features else ()
+        conference = self.get_conference()
+        for feature in features:
+            require_feature(feature, conference=conference)
         return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
