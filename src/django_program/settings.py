@@ -55,12 +55,36 @@ class PSFSponsorConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class FeaturesConfig:
+    """Feature toggles for enabling/disabling django-program modules and UIs.
+
+    Module toggles control backend functionality (registration, sponsors, etc.)
+    while UI toggles control the public-facing and management interfaces.
+    The ``all_ui_enabled`` flag acts as a master switch for all UI toggles.
+
+    All features are enabled by default. Set to ``False`` in
+    ``DJANGO_PROGRAM['features']`` to disable.
+    """
+
+    registration_enabled: bool = True
+    sponsors_enabled: bool = True
+    travel_grants_enabled: bool = True
+    programs_enabled: bool = True
+    pretalx_sync_enabled: bool = True
+
+    public_ui_enabled: bool = True
+    manage_ui_enabled: bool = True
+    all_ui_enabled: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class ProgramConfig:
     """Top-level django-program configuration."""
 
     stripe: StripeConfig = field(default_factory=StripeConfig)
     pretalx: PretalxConfig = field(default_factory=PretalxConfig)
     psf_sponsors: PSFSponsorConfig = field(default_factory=PSFSponsorConfig)
+    features: FeaturesConfig = field(default_factory=FeaturesConfig)
     cart_expiry_minutes: int = 30
     pending_order_expiry_minutes: int = 15
     order_reference_prefix: str = "ORD"
@@ -87,6 +111,7 @@ def get_config() -> ProgramConfig:
     stripe_data = raw_data.pop("stripe", {})
     pretalx_data = raw_data.pop("pretalx", {})
     psf_sponsors_data = raw_data.pop("psf_sponsors", {})
+    features_data = raw_data.pop("features", {})
     if not isinstance(stripe_data, Mapping):
         msg = "DJANGO_PROGRAM['stripe'] must be a mapping (dict-like object)"
         raise TypeError(msg)
@@ -96,11 +121,15 @@ def get_config() -> ProgramConfig:
     if not isinstance(psf_sponsors_data, Mapping):
         msg = "DJANGO_PROGRAM['psf_sponsors'] must be a mapping (dict-like object)"
         raise TypeError(msg)
+    if not isinstance(features_data, Mapping):
+        msg = "DJANGO_PROGRAM['features'] must be a mapping (dict-like object)"
+        raise TypeError(msg)
 
     config = ProgramConfig(
         stripe=StripeConfig(**dict(stripe_data)),
         pretalx=PretalxConfig(**dict(pretalx_data)),
         psf_sponsors=PSFSponsorConfig(**dict(psf_sponsors_data)),
+        features=FeaturesConfig(**dict(features_data)),
         **raw_data,
     )
     _validate_program_config(config)

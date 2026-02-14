@@ -3,7 +3,7 @@
 from django import forms
 from django.contrib import admin
 
-from django_program.conference.models import Conference, Section
+from django_program.conference.models import Conference, FeatureFlags, Section
 
 SECRET_PLACEHOLDER = "\u2022" * 12
 
@@ -86,13 +86,75 @@ class SectionInline(admin.TabularInline):
     fields = ("name", "slug", "start_date", "end_date", "order")
 
 
+class FeatureFlagsForm(forms.ModelForm):
+    """Form for FeatureFlags that replaces 'Unknown' with 'Default (enabled)'.
+
+    Each nullable boolean field defaults to ``None`` which means "use the
+    value from ``DJANGO_PROGRAM['features']`` in settings".  Since the
+    out-of-the-box default for every feature is ``True``, the widget
+    label reads "Default (enabled)" instead of Django's generic "Unknown".
+    """
+
+    class Meta:
+        model = FeatureFlags
+        exclude: list[str] = []
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        """Replace 'Unknown' widget labels with 'Default (enabled)'."""
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            if isinstance(field.widget, forms.NullBooleanSelect):
+                field.widget.choices = [
+                    ("unknown", "Default (enabled)"),
+                    ("true", "Yes — force ON"),
+                    ("false", "No — force OFF"),
+                ]
+
+
+class FeatureFlagsInline(admin.StackedInline):
+    """Inline editor for per-conference feature flag overrides.
+
+    Allows toggling individual features directly from the conference
+    admin change form. At most one ``FeatureFlags`` row per conference.
+    """
+
+    model = FeatureFlags
+    form = FeatureFlagsForm
+    extra = 0
+    max_num = 1
+    fieldsets = (
+        (
+            "Module Toggles",
+            {
+                "fields": (
+                    "registration_enabled",
+                    "sponsors_enabled",
+                    "travel_grants_enabled",
+                    "programs_enabled",
+                    "pretalx_sync_enabled",
+                ),
+            },
+        ),
+        (
+            "UI Toggles",
+            {
+                "fields": (
+                    "public_ui_enabled",
+                    "manage_ui_enabled",
+                    "all_ui_enabled",
+                ),
+            },
+        ),
+    )
+
+
 @admin.register(Conference)
 class ConferenceAdmin(admin.ModelAdmin):
     """Admin interface for managing conferences.
 
     Groups fields into logical fieldsets: basic information, dates,
     third-party integrations (Pretalx and Stripe), and status metadata.
-    Sections are editable inline via ``SectionInline``.
+    Sections and feature flags are editable inline.
     """
 
     form = ConferenceForm
@@ -100,7 +162,7 @@ class ConferenceAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
-    inlines = (SectionInline,)
+    inlines = (SectionInline, FeatureFlagsInline)
 
     fieldsets = (
         (
@@ -148,3 +210,49 @@ class SectionAdmin(admin.ModelAdmin):
     list_filter = ("conference",)
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(FeatureFlags)
+class FeatureFlagsAdmin(admin.ModelAdmin):
+    """Standalone admin for per-conference feature flag overrides.
+
+    Provides a list view for quick scanning across conferences.
+    The same data is also editable inline on the Conference admin page.
+    """
+
+    form = FeatureFlagsForm
+    list_display = (
+        "conference",
+        "registration_enabled",
+        "sponsors_enabled",
+        "travel_grants_enabled",
+        "programs_enabled",
+        "public_ui_enabled",
+        "updated_at",
+    )
+    list_filter = ("conference",)
+    fieldsets = (
+        ("Conference", {"fields": ("conference",)}),
+        (
+            "Module Toggles",
+            {
+                "fields": (
+                    "registration_enabled",
+                    "sponsors_enabled",
+                    "travel_grants_enabled",
+                    "programs_enabled",
+                    "pretalx_sync_enabled",
+                ),
+            },
+        ),
+        (
+            "UI Toggles",
+            {
+                "fields": (
+                    "public_ui_enabled",
+                    "manage_ui_enabled",
+                    "all_ui_enabled",
+                ),
+            },
+        ),
+    )

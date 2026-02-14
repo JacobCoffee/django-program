@@ -19,6 +19,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView
 
+from django_program.features import FeatureRequiredMixin
 from django_program.pretalx.views import ConferenceMixin
 from django_program.programs.forms import (
     PaymentInfoForm,
@@ -44,9 +45,10 @@ if TYPE_CHECKING:
     from django_program.pretalx.models import Talk
 
 
-class ActivityListView(ConferenceMixin, ListView):
+class ActivityListView(ConferenceMixin, FeatureRequiredMixin, ListView):
     """List view of all active activities for a conference."""
 
+    required_feature = ("programs", "public_ui")
     template_name = "django_program/programs/activity_list.html"
     context_object_name = "activities"
 
@@ -91,9 +93,10 @@ class ActivityListView(ConferenceMixin, ListView):
         return context
 
 
-class ActivityDetailView(ConferenceMixin, DetailView):
+class ActivityDetailView(ConferenceMixin, FeatureRequiredMixin, DetailView):
     """Detail view for a single activity with linked talks."""
 
+    required_feature = ("programs", "public_ui")
     template_name = "django_program/programs/activity_detail.html"
     context_object_name = "activity"
 
@@ -166,8 +169,10 @@ class ActivityDetailView(ConferenceMixin, DetailView):
         return context
 
 
-class ActivitySignupView(LoginRequiredMixin, ConferenceMixin, View):
+class ActivitySignupView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """POST-only view for signing up to an activity."""
+
+    required_feature = ("programs", "public_ui")
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Handle the signup form submission.
@@ -218,8 +223,10 @@ class ActivitySignupView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(detail_url)
 
 
-class ActivityCancelSignupView(LoginRequiredMixin, ConferenceMixin, View):
+class ActivityCancelSignupView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """POST-only view for cancelling an activity signup."""
+
+    required_feature = ("programs", "public_ui")
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Cancel the user's signup and promote the next waitlisted person if applicable."""
@@ -251,13 +258,14 @@ class ActivityCancelSignupView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("programs:activity-detail", args=[self.conference.slug, activity.slug]))
 
 
-class TravelGrantApplyView(LoginRequiredMixin, ConferenceMixin, View):
+class TravelGrantApplyView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """View for applying for a travel grant.
 
     Uses ``TravelGrantApplicationForm`` for server-side validation of
     the requested amount, travel origin, and reason fields.
     """
 
+    required_feature = ("travel_grants", "public_ui")
     template_name = "django_program/programs/travel_grant_form.html"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
@@ -301,13 +309,14 @@ class TravelGrantApplyView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("programs:travel-grant-status", args=[self.conference.slug]))
 
 
-class TravelGrantStatusView(LoginRequiredMixin, ConferenceMixin, View):
+class TravelGrantStatusView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """View for checking travel grant application status.
 
     Shows current grant status, action buttons based on state,
     visible messages from reviewers, and a message form.
     """
 
+    required_feature = ("travel_grants", "public_ui")
     template_name = "django_program/programs/travel_grant_status.html"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
@@ -342,8 +351,10 @@ def _get_user_grant(request: HttpRequest, conference: object) -> TravelGrant:
     return grant
 
 
-class TravelGrantAcceptView(LoginRequiredMixin, ConferenceMixin, View):
+class TravelGrantAcceptView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """POST-only view to accept an offered travel grant."""
+
+    required_feature = ("travel_grants", "public_ui")
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Accept the offered grant."""
@@ -363,8 +374,10 @@ class TravelGrantAcceptView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("programs:travel-grant-status", args=[self.conference.slug]))
 
 
-class TravelGrantDeclineView(LoginRequiredMixin, ConferenceMixin, View):
+class TravelGrantDeclineView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """POST-only view to decline an offered travel grant."""
+
+    required_feature = ("travel_grants", "public_ui")
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Decline the offered grant."""
@@ -384,8 +397,10 @@ class TravelGrantDeclineView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("programs:travel-grant-status", args=[self.conference.slug]))
 
 
-class TravelGrantWithdrawView(LoginRequiredMixin, ConferenceMixin, View):
+class TravelGrantWithdrawView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """POST-only view to withdraw a travel grant application."""
+
+    required_feature = ("travel_grants", "public_ui")
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Withdraw the application."""
@@ -405,9 +420,10 @@ class TravelGrantWithdrawView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("programs:travel-grant-status", args=[self.conference.slug]))
 
 
-class TravelGrantEditView(LoginRequiredMixin, ConferenceMixin, View):
+class TravelGrantEditView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """View for editing an existing travel grant application."""
 
+    required_feature = ("travel_grants", "public_ui")
     template_name = "django_program/programs/travel_grant_form.html"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
@@ -433,9 +449,10 @@ class TravelGrantEditView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("programs:travel-grant-status", args=[self.conference.slug]))
 
 
-class TravelGrantProvideInfoView(LoginRequiredMixin, ConferenceMixin, View):
+class TravelGrantProvideInfoView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """View for applicants to provide information requested by reviewers."""
 
+    required_feature = ("travel_grants", "public_ui")
     template_name = "django_program/programs/travel_grant_provide_info.html"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
@@ -467,8 +484,10 @@ class TravelGrantProvideInfoView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("programs:travel-grant-status", args=[self.conference.slug]))
 
 
-class TravelGrantMessageView(LoginRequiredMixin, ConferenceMixin, View):
+class TravelGrantMessageView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """POST-only view for sending a message on an existing grant."""
+
+    required_feature = ("travel_grants", "public_ui")
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Create a visible message from the applicant."""
@@ -484,9 +503,10 @@ class TravelGrantMessageView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("programs:travel-grant-status", args=[self.conference.slug]))
 
 
-class ReceiptUploadView(LoginRequiredMixin, ConferenceMixin, View):
+class ReceiptUploadView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """View for uploading and listing expense receipts."""
 
+    required_feature = ("travel_grants", "public_ui")
     template_name = "django_program/programs/travel_grant_receipts.html"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
@@ -536,8 +556,10 @@ class ReceiptUploadView(LoginRequiredMixin, ConferenceMixin, View):
         )
 
 
-class ReceiptDeleteView(LoginRequiredMixin, ConferenceMixin, View):
+class ReceiptDeleteView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """POST-only view for deleting a receipt."""
+
+    required_feature = ("travel_grants", "public_ui")
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Delete the receipt if it has not been approved or flagged."""
@@ -552,9 +574,10 @@ class ReceiptDeleteView(LoginRequiredMixin, ConferenceMixin, View):
         return redirect(reverse("programs:travel-grant-receipts", args=[self.conference.slug]))
 
 
-class PaymentInfoView(LoginRequiredMixin, ConferenceMixin, View):
+class PaymentInfoView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
     """View for submitting or editing payment information."""
 
+    required_feature = ("travel_grants", "public_ui")
     template_name = "django_program/programs/travel_grant_payment_info.html"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002

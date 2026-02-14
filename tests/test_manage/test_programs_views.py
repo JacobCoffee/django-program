@@ -697,6 +697,17 @@ def test_activity_promote_waitlisted_signup_warns_on_overbook(authed_client: Cli
     assert any("may now be overbooked" in message for message in msgs)
 
 
+# ---- ActivityOrganizerMixin anonymous access ----
+
+
+@pytest.mark.django_db
+def test_activity_dashboard_redirects_anonymous_user(client: Client, conference, activity):
+    url = reverse("manage:activity-dashboard", kwargs={"conference_slug": conference.slug, "pk": activity.pk})
+    response = client.get(url)
+    assert response.status_code == 302
+    assert "/accounts/login/" in response.url or "login" in response.url
+
+
 @pytest.mark.django_db
 def test_activity_promote_non_waitlisted_404(authed_client: Client, conference, activity, regular_user):
     signup = ActivitySignup.objects.create(

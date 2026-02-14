@@ -62,3 +62,69 @@ class Section(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.conference.slug})"
+
+
+class FeatureFlags(models.Model):
+    """Per-conference feature toggle overrides.
+
+    Database-backed flags that override the defaults from
+    ``DJANGO_PROGRAM["features"]``. Changes take effect immediately
+    without server restart. Each conference has at most one row.
+
+    All boolean fields are nullable: ``None`` means "use default from
+    settings", while an explicit ``True`` or ``False`` overrides.
+    """
+
+    conference = models.OneToOneField(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="feature_flags",
+    )
+    registration_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Override registration toggle. Leave blank to use default from settings.",
+    )
+    sponsors_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Override sponsors toggle.",
+    )
+    travel_grants_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Override travel grants toggle.",
+    )
+    programs_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Override programs/activities toggle.",
+    )
+    pretalx_sync_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Override Pretalx sync toggle.",
+    )
+    public_ui_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Override public UI toggle.",
+    )
+    manage_ui_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Override manage UI toggle.",
+    )
+    all_ui_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Master UI switch override.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "feature flags"
+        verbose_name_plural = "feature flags"
+
+    def __str__(self) -> str:
+        return f"Feature flags for {self.conference}"

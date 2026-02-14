@@ -16,6 +16,7 @@ from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
 from django_program.conference.models import Conference
+from django_program.features import FeatureRequiredMixin
 from django_program.pretalx.models import ScheduleSlot, Speaker, Talk
 
 if TYPE_CHECKING:
@@ -73,13 +74,14 @@ class ConferenceMixin:
         return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
 
 
-class ScheduleView(ConferenceMixin, TemplateView):
+class ScheduleView(ConferenceMixin, FeatureRequiredMixin, TemplateView):
     """Full schedule view grouped by day.
 
     Renders the conference schedule with slots organized by date. Each day
     is a ``(date, list[ScheduleSlot])`` tuple ordered by start time.
     """
 
+    required_feature = "public_ui"
     template_name = "django_program/pretalx/schedule.html"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -110,13 +112,15 @@ class ScheduleView(ConferenceMixin, TemplateView):
         return context
 
 
-class ScheduleJSONView(ConferenceMixin, View):
+class ScheduleJSONView(ConferenceMixin, FeatureRequiredMixin, View):
     """JSON endpoint for schedule data.
 
     Returns a JSON array of schedule slots suitable for embedding in
     JavaScript schedule widgets. Each slot includes title, room, start/end
     times, slot type, and the linked talk code when available.
     """
+
+    required_feature = "public_ui"
 
     def get(self, _request: HttpRequest, **_kwargs: str) -> JsonResponse:
         """Return schedule slots as a JSON array.
@@ -151,13 +155,14 @@ class ScheduleJSONView(ConferenceMixin, View):
         return JsonResponse(data, safe=False)
 
 
-class TalkDetailView(ConferenceMixin, DetailView):
+class TalkDetailView(ConferenceMixin, FeatureRequiredMixin, DetailView):
     """Detail view for a single talk.
 
     Looks up the talk by its Pretalx code within the conference scope.
     Prefetches the speakers relation for display.
     """
 
+    required_feature = "public_ui"
     template_name = "django_program/pretalx/talk_detail.html"
     context_object_name = "talk"
 
@@ -187,9 +192,10 @@ class TalkDetailView(ConferenceMixin, DetailView):
         return context
 
 
-class SpeakerListView(ConferenceMixin, ListView):
+class SpeakerListView(ConferenceMixin, FeatureRequiredMixin, ListView):
     """List view of all speakers for a conference, ordered by name."""
 
+    required_feature = "public_ui"
     template_name = "django_program/pretalx/speaker_list.html"
     context_object_name = "speakers"
 
@@ -202,13 +208,14 @@ class SpeakerListView(ConferenceMixin, ListView):
         return Speaker.objects.filter(conference=self.conference).order_by("name")
 
 
-class SpeakerDetailView(ConferenceMixin, DetailView):
+class SpeakerDetailView(ConferenceMixin, FeatureRequiredMixin, DetailView):
     """Detail view for a single speaker.
 
     Looks up the speaker by their Pretalx code within the conference scope.
     Prefetches talks for display.
     """
 
+    required_feature = "public_ui"
     template_name = "django_program/pretalx/speaker_detail.html"
     context_object_name = "speaker"
 
