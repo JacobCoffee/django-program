@@ -58,6 +58,173 @@ consumes `PretalxClient` and maps the typed dataclasses into Django ORM models
 `src/django_program/pretalx/client.py` bridges the workspace package into the
 Django app's import namespace.
 
+## Overrides
+
+Pretalx is the source of truth for your schedule, but the real world does not
+care about your source of truth. Speakers cancel at the last minute. Rooms get
+renamed. A talk moves from Hall A to Hall B because of a fire alarm. The
+override system lets organizers patch any synced field locally without touching
+the upstream Pretalx record, and those patches survive re-syncs.
+
+### How Overrides Work
+
+Each synced model (`Talk`, `Speaker`, `Room`) has a matching one-to-one override
+model (`TalkOverride`, `SpeakerOverride`, `RoomOverride`). Override fields
+default to blank/null. When a field is populated, it takes priority over the
+synced value. When blank, the original synced value shows through.
+
+The synced models expose `effective_*` properties that handle this resolution:
+
+```python
+talk = Talk.objects.get(pretalx_code="ABCDEF")
+
+# Returns the synced title unless a TalkOverride sets override_title
+talk.effective_title
+
+# Returns "cancelled" if is_cancelled=True on the override,
+# otherwise override_state if set, otherwise the synced state
+talk.effective_state
+```
+
+Use `effective_*` properties in templates and views. Use the bare fields
+(`talk.title`, `talk.state`) only when you need the raw synced value.
+
+### Override Models
+
+#### TalkOverride
+
+One-to-one with `Talk`. Overridable fields:
+
+| Field                  | Type          | Effect                                           |
+|------------------------|---------------|--------------------------------------------------|
+| `override_title`       | `CharField`   | Replaces `talk.effective_title`                  |
+| `override_abstract`    | `TextField`   | Replaces `talk.effective_abstract`               |
+| `override_state`       | `CharField`   | Replaces `talk.effective_state`                  |
+| `override_room`        | `ForeignKey`  | Replaces `talk.effective_room`                   |
+| `override_slot_start`  | `DateTimeField` | Replaces `talk.effective_slot_start`           |
+| `override_slot_end`    | `DateTimeField` | Replaces `talk.effective_slot_end`             |
+| `is_cancelled`         | `BooleanField`  | Forces `talk.effective_state` to `"cancelled"` |
+| `note`                 | `TextField`   | Internal-only note (not displayed to attendees)  |
+
+The `is_cancelled` flag takes priority over `override_state`. If both are set,
+the talk shows as cancelled.
+
+#### SpeakerOverride
+
+One-to-one with `Speaker`. Overridable fields:
+
+| Field                  | Type        | Effect                                    |
+|------------------------|-------------|-------------------------------------------|
+| `override_name`        | `CharField` | Replaces `speaker.effective_name`         |
+| `override_biography`   | `TextField` | Replaces `speaker.effective_biography`    |
+| `override_avatar_url`  | `URLField`  | Replaces `speaker.effective_avatar_url`   |
+| `override_email`       | `EmailField`| Replaces `speaker.effective_email`        |
+| `note`                 | `TextField` | Internal-only note                        |
+
+#### RoomOverride
+
+One-to-one with `Room`. Overridable fields:
+
+| Field                   | Type                   | Effect                                   |
+|-------------------------|------------------------|------------------------------------------|
+| `override_name`         | `CharField`            | Replaces `room.effective_name`           |
+| `override_description`  | `TextField`            | Replaces `room.effective_description`    |
+| `override_capacity`     | `PositiveIntegerField` | Replaces `room.effective_capacity`       |
+| `note`                  | `TextField`            | Internal-only note                       |
+
+### SubmissionTypeDefault
+
+`SubmissionTypeDefault` is not an override in the same sense. It provides
+fallback room and time-slot values for talks of a given Pretalx submission type
+(e.g. "Poster", "Tutorial") that arrive from Pretalx without scheduling data.
+
+| Field                | Type         | Purpose                                          |
+|----------------------|--------------|--------------------------------------------------|
+| `submission_type`    | `CharField`  | The Pretalx type name to match (case-sensitive)  |
+| `default_room`       | `ForeignKey` | Room assigned to unscheduled talks of this type  |
+| `default_date`       | `DateField`  | Date for synthesized slot times                  |
+| `default_start_time` | `TimeField`  | Start time combined with `default_date`          |
+| `default_end_time`   | `TimeField`  | End time combined with `default_date`            |
+
+Type defaults are applied automatically at the end of `sync_all()` via
+`apply_type_defaults()`. They only affect talks where `room` is `None`, so
+talks already assigned a room by Pretalx are left untouched.
+
+### Creating Overrides via Django Admin
+
+All override models are registered in the Django admin. Navigate to
+**Pretalx > Talk Overrides** (or Speaker Overrides, Room Overrides) to create
+or edit overrides.
+
+#### Cancel a talk
+
+1. Go to **Pretalx > Talk Overrides > Add**.
+2. Select the talk from the `talk` field.
+3. Check `is_cancelled`.
+4. Add a note explaining why (e.g. "Speaker flight cancelled").
+5. Save. The talk's `effective_state` now returns `"cancelled"`.
+
+#### Move a talk to a different room
+
+1. Go to **Pretalx > Talk Overrides > Add**.
+2. Select the talk.
+3. Set `override_room` to the new room.
+4. Optionally adjust `override_slot_start` and `override_slot_end` if the time
+   also changed.
+5. Save.
+
+#### Rename a room on-site
+
+1. Go to **Pretalx > Room Overrides > Add**.
+2. Select the room.
+3. Set `override_name` to the correct name (e.g. "Hall B" instead of
+   "Ballroom 2").
+4. Save. All schedule displays using `room.effective_name` now show the new
+   name.
+
+#### Set up defaults for poster sessions
+
+1. Go to **Pretalx > Submission Type Defaults > Add**.
+2. Set `submission_type` to `"Poster"` (must match the Pretalx type exactly).
+3. Set `default_room` to the poster hall.
+4. Set `default_date`, `default_start_time`, and `default_end_time` for the
+   poster session window.
+5. Save. On the next sync, any poster talks arriving without scheduling data
+   get assigned to this room and time slot.
+
+### Overrides and Sync
+
+Overrides are stored in separate database tables from the synced data. When
+`sync_all()` runs, it updates the `Talk`, `Speaker`, and `Room` tables with
+fresh data from Pretalx. The override tables are not touched. This means:
+
+- Overrides persist across syncs. A `TalkOverride` created before a sync is
+  still there after the sync completes.
+- The synced (base) fields get updated to match Pretalx. If Pretalx changes a
+  talk's title, the `Talk.title` field updates, but `TalkOverride.override_title`
+  stays as-is. The `effective_title` property still returns the override value.
+- Override resolution happens at read time via the `effective_*` properties, not
+  during sync. There is no merge step.
+- Deleting an override restores the synced values instantly. The base data was
+  never modified.
+
+The `conference` field on each override is validated against the parent entity's
+conference. The admin and model validation both reject overrides that reference
+entities from a different conference.
+
+### The `is_empty` Property
+
+Each override model has an `is_empty` property that returns `True` when no
+override fields carry a value (only the `note` field is populated, or everything
+is blank). Use this to identify overrides that were created but never filled in:
+
+```python
+stale = TalkOverride.objects.all()
+for override in stale:
+    if override.is_empty:
+        override.delete()
+```
+
 ## Schema Regeneration
 
 ### Prerequisites
