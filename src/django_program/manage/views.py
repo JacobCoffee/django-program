@@ -20,7 +20,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import models, transaction
-from django.db.models import Count, Q, QuerySet, Sum
+from django.db.models import Case, Count, F, Q, QuerySet, Sum, Value, When
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -2418,16 +2418,28 @@ class TicketTypeListView(ManagePermissionMixin, ListView):
     def get_queryset(self) -> QuerySet[TicketType]:
         """Return ticket types for the current conference.
 
-        Annotates each ticket type with ``sold_count`` and ``revenue`` from
-        orders in paid or partially refunded status.  The ``revenue`` value
-        represents **gross** revenue (total line amounts before any refunds
-        are subtracted).  Partially refunded orders contribute their full
-        original line totals.
+        Annotates each ticket type with:
+
+        * ``sold_count`` -- number of order line items from paid or partially
+          refunded orders.
+        * ``revenue`` -- gross revenue (total line amounts before refunds).
+        * ``remaining_quantity`` -- tickets still available for purchase,
+          computed as ``total_quantity - reserved`` where *reserved* counts
+          quantities from paid/partially-refunded orders plus pending orders
+          with an active inventory hold.  Unlimited ticket types
+          (``total_quantity == 0``) get ``None``.
 
         Returns:
             A queryset of TicketType instances ordered by display order.
         """
         paid_statuses = [Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED]
+        now = timezone.now()
+        reserved_filter = Q(
+            order_line_items__order__status__in=paid_statuses,
+        ) | Q(
+            order_line_items__order__status=Order.Status.PENDING,
+            order_line_items__order__hold_expires_at__gt=now,
+        )
         return (
             TicketType.objects.filter(conference=self.conference)
             .annotate(
@@ -2439,6 +2451,15 @@ class TicketTypeListView(ManagePermissionMixin, ListView):
                     "order_line_items__line_total",
                     filter=Q(order_line_items__order__status__in=paid_statuses),
                     default=0,
+                ),
+                _reserved=Sum(
+                    "order_line_items__quantity",
+                    filter=reserved_filter,
+                    default=0,
+                ),
+                annotated_remaining=Case(
+                    When(total_quantity=0, then=Value(None)),
+                    default=F("total_quantity") - F("_reserved"),
                 ),
             )
             .order_by("order", "name")

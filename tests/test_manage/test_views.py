@@ -2000,6 +2000,73 @@ class TestTicketTypeViews:
         assert tt.revenue == Decimal("198.00")
         assert tt.sold_count == 1
 
+    def test_ticket_type_list_remaining_quantity_unlimited(self, client_logged_in_super, conference, ticket_type):
+        """Unlimited ticket types (total_quantity=0) annotate remaining as None."""
+        assert ticket_type.total_quantity == 0
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        tt = next(iter(resp.context["ticket_types"]))
+        assert tt.annotated_remaining is None
+
+    def test_ticket_type_list_remaining_quantity_limited(self, client_logged_in_super, conference, superuser):
+        """Limited ticket types annotate remaining as total_quantity minus reserved."""
+        limited = TicketType.objects.create(
+            conference=conference,
+            name="Limited",
+            slug="limited",
+            price="50.00",
+            total_quantity=100,
+            order=0,
+        )
+        order = Order.objects.create(
+            conference=conference,
+            user=superuser,
+            status=Order.Status.PAID,
+            reference="ORD-REM-1",
+        )
+        OrderLineItem.objects.create(
+            order=order,
+            description="Limited",
+            quantity=3,
+            unit_price=Decimal("50.00"),
+            line_total=Decimal("150.00"),
+            ticket_type=limited,
+        )
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        tt = next(t for t in resp.context["ticket_types"] if t.pk == limited.pk)
+        assert tt.annotated_remaining == 97
+
+    def test_ticket_type_list_remaining_quantity_pending_hold(self, client_logged_in_super, conference, superuser):
+        """Pending orders with active holds count toward reserved quantity."""
+        limited = TicketType.objects.create(
+            conference=conference,
+            name="Held",
+            slug="held",
+            price="50.00",
+            total_quantity=10,
+            order=0,
+        )
+        order = Order.objects.create(
+            conference=conference,
+            user=superuser,
+            status=Order.Status.PENDING,
+            reference="ORD-HOLD-1",
+            hold_expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        OrderLineItem.objects.create(
+            order=order,
+            description="Held",
+            quantity=2,
+            unit_price=Decimal("50.00"),
+            line_total=Decimal("100.00"),
+            ticket_type=limited,
+        )
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        tt = next(t for t in resp.context["ticket_types"] if t.pk == limited.pk)
+        assert tt.annotated_remaining == 8
+
     def test_ticket_type_create_get(self, client_logged_in_super, conference):
         url = reverse("manage:ticket-type-add", kwargs={"conference_slug": conference.slug})
         resp = client_logged_in_super.get(url)

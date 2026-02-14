@@ -36,7 +36,7 @@
       <td>{{ tt.name }}</td>
       <td>${{ tt.price }}</td>
       <td>{% if tt.total_quantity %}{{ tt.total_quantity }}{% else %}Unlimited{% endif %}</td>
-      <td>{% with remaining=tt.remaining_quantity %}{% if remaining is not None %}{{ remaining }}{% else %}Unlimited{% endif %}{% endwith %}</td>
+      <td>{% if tt.annotated_remaining is not None %}{{ tt.annotated_remaining }}{% else %}Unlimited{% endif %}</td>
       <td>{{ tt.sold_count }}</td>
       <td>${{ tt.revenue }}</td>
       <td>{% if tt.available_from %}{{ tt.available_from|localtime }}{% else %}--{% endif %}</td>
