@@ -7,7 +7,7 @@ Mount under a prefix in the host project::
     ]
 """
 
-from django.urls import path
+from django.urls import include, path
 
 from django_program.manage.views import (
     ActivityCreateView,
@@ -195,4 +195,6 @@ urlpatterns = [
         ManualPaymentView.as_view(),
         name="order-manual-payment",
     ),
+    # --- Voucher Bulk Generation ---
+    path("<slug:conference_slug>/vouchers/bulk/", include("django_program.manage.urls_vouchers")),
 ]
