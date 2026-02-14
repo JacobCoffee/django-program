@@ -2418,24 +2418,25 @@ class TicketTypeListView(ManagePermissionMixin, ListView):
     def get_queryset(self) -> QuerySet[TicketType]:
         """Return ticket types for the current conference.
 
-        Annotates each ticket type with ``sold_count`` to display how many
-        tickets have been sold (orders in paid or partially refunded status).
+        Annotates each ticket type with ``sold_count`` and ``revenue`` from
+        orders in paid or partially refunded status.
 
         Returns:
             A queryset of TicketType instances ordered by display order.
         """
+        paid_statuses = [Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED]
         return (
             TicketType.objects.filter(conference=self.conference)
             .annotate(
                 sold_count=Count(
                     "order_line_items",
-                    filter=Q(
-                        order_line_items__order__status__in=[
-                            Order.Status.PAID,
-                            Order.Status.PARTIALLY_REFUNDED,
-                        ]
-                    ),
-                )
+                    filter=Q(order_line_items__order__status__in=paid_statuses),
+                ),
+                revenue=Sum(
+                    "order_line_items__line_total",
+                    filter=Q(order_line_items__order__status__in=paid_statuses),
+                    default=0,
+                ),
             )
             .order_by("order", "name")
         )
@@ -2510,23 +2511,27 @@ class AddOnListView(ManagePermissionMixin, ListView):
     def get_queryset(self) -> QuerySet[AddOn]:
         """Return add-ons for the current conference.
 
-        Annotates each add-on with ``sold_count``.
+        Annotates each add-on with ``sold_count`` and ``revenue`` from
+        orders in paid or partially refunded status.  Prefetches the
+        ``requires_ticket_types`` relation for efficient template rendering.
 
         Returns:
             A queryset of AddOn instances ordered by display order.
         """
+        paid_statuses = [Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED]
         return (
             AddOn.objects.filter(conference=self.conference)
+            .prefetch_related("requires_ticket_types")
             .annotate(
                 sold_count=Count(
                     "order_line_items",
-                    filter=Q(
-                        order_line_items__order__status__in=[
-                            Order.Status.PAID,
-                            Order.Status.PARTIALLY_REFUNDED,
-                        ]
-                    ),
-                )
+                    filter=Q(order_line_items__order__status__in=paid_statuses),
+                ),
+                revenue=Sum(
+                    "order_line_items__line_total",
+                    filter=Q(order_line_items__order__status__in=paid_statuses),
+                    default=0,
+                ),
             )
             .order_by("order", "name")
         )

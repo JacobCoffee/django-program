@@ -1,4 +1,5 @@
 {% extends "django_program/manage/base.html" %}
+{% load tz %}
 
 {% block title %}Ticket Types{% endblock %}
 
@@ -19,7 +20,11 @@
       <th>Name</th>
       <th>Price</th>
       <th>Quantity</th>
+      <th>Remaining</th>
       <th>Sold</th>
+      <th>Revenue</th>
+      <th>Available From</th>
+      <th>Available Until</th>
       <th>Voucher Required</th>
       <th>Status</th>
       <th>Actions</th>
@@ -31,7 +36,11 @@
       <td>{{ tt.name }}</td>
       <td>${{ tt.price }}</td>
       <td>{% if tt.total_quantity %}{{ tt.total_quantity }}{% else %}Unlimited{% endif %}</td>
+      <td>{% with remaining=tt.remaining_quantity %}{% if remaining is not None %}{{ remaining }}{% else %}Unlimited{% endif %}{% endwith %}</td>
       <td>{{ tt.sold_count }}</td>
+      <td>${{ tt.revenue }}</td>
+      <td>{% if tt.available_from %}{{ tt.available_from|localtime }}{% else %}--{% endif %}</td>
+      <td>{% if tt.available_until %}{{ tt.available_until|localtime }}{% else %}--{% endif %}</td>
       <td>
         {% if tt.requires_voucher %}
         <span class="badge badge--warning">Yes</span>
