@@ -691,7 +691,7 @@ class PretalxSyncService:
 
         try:
             conf_tz = zoneinfo.ZoneInfo(str(self.conference.timezone))
-        except zoneinfo.ZoneInfoNotFoundError, KeyError:
+        except (zoneinfo.ZoneInfoNotFoundError, KeyError):  # fmt: skip
             logger.warning(
                 "Invalid timezone '%s' for conference %s; falling back to UTC for type defaults.",
                 self.conference.timezone,

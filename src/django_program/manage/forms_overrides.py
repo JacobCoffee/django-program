@@ -198,7 +198,9 @@ class SponsorOverrideForm(forms.ModelForm):
         widgets = {
             "override_description": forms.Textarea(attrs={"rows": 4}),
             "note": forms.Textarea(attrs={"rows": 3}),
-            "override_is_active": forms.NullBooleanSelect(),
+            "override_is_active": forms.Select(
+                choices=((None, "Unknown"), (True, "Yes"), (False, "No")),
+            ),
         }
 
     def __init__(self, *args: object, conference: object = None, is_edit: bool = False, **kwargs: object) -> None:
