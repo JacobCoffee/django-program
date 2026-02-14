@@ -17,6 +17,14 @@ All notable changes to this project will be documented in this file.
 - correct create-pull-request SHA typo in CD workflow (#34) - ([ed76290](https://github.com/JacobCoffee/django-program/commit/ed76290daca23bdad74c6911a1b1d12313d8e7a8)) - Jacob Coffee
 
 
+### Documentation
+
+
+- update changelog (#35) - ([378e0c1](https://github.com/JacobCoffee/django-program/commit/378e0c12d5c3a9cf81e85104613eed8bb8b8c23d)) - github-actions[bot]
+
+- add user documentation for 6 merged features (#37) - ([ca47832](https://github.com/JacobCoffee/django-program/commit/ca478320806e6df9b3ee4830fbc209750f9d1a76)) - Jacob Coffee
+
+
 ### Features
 
 
