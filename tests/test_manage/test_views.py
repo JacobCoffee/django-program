@@ -400,6 +400,7 @@ class TestConferenceEditView:
                 "start_date": "2027-05-01",
                 "end_date": "2027-05-03",
                 "timezone": "UTC",
+                "total_capacity": 0,
                 "is_active": "on",
             },
         )
@@ -416,6 +417,7 @@ class TestConferenceEditView:
                 "start_date": "2027-05-01",
                 "end_date": "2027-05-03",
                 "timezone": "UTC",
+                "total_capacity": 0,
                 "is_active": "on",
             },
         )
@@ -2159,6 +2161,29 @@ class TestTicketTypeViews:
         )
         expected = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
         assert resp.url == expected
+
+    def test_ticket_type_list_includes_global_capacity(self, client_logged_in_super, db):
+        """When total_capacity > 0, context includes capacity info."""
+        capped = Conference.objects.create(
+            name="CappedCon",
+            slug="cappedcon-views",
+            start_date=date(2027, 6, 1),
+            end_date=date(2027, 6, 3),
+            total_capacity=100,
+        )
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": capped.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["global_capacity"] == 100
+        assert resp.context["global_sold"] == 0
+
+    def test_ticket_type_list_excludes_global_capacity_when_zero(self, client_logged_in_super, conference):
+        """When total_capacity is 0, context does not include capacity info."""
+        url = reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert "global_capacity" not in resp.context
+        assert "global_sold" not in resp.context
 
 
 # ---------------------------------------------------------------------------

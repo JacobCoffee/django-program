@@ -54,6 +54,7 @@ from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.pretalx.sync import PretalxSyncService
 from django_program.programs.models import Activity, ActivitySignup, Receipt, TravelGrant, TravelGrantMessage
 from django_program.registration.models import AddOn, Order, Payment, TicketType, Voucher
+from django_program.registration.services.capacity import get_global_sold_count
 from django_program.settings import get_config
 from django_program.sponsors.models import Sponsor, SponsorLevel
 from django_program.sponsors.profiles.resolver import resolve_sponsor_profile
@@ -2410,9 +2411,12 @@ class TicketTypeListView(ManagePermissionMixin, ListView):
     paginate_by = 50
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add ``active_nav`` to the template context."""
+        """Add ``active_nav`` and global capacity info to the template context."""
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "ticket-types"
+        if self.conference.total_capacity > 0:
+            context["global_capacity"] = self.conference.total_capacity
+            context["global_sold"] = get_global_sold_count(self.conference)
         return context
 
     def get_queryset(self) -> QuerySet[TicketType]:

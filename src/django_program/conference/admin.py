@@ -168,7 +168,7 @@ class ConferenceAdmin(admin.ModelAdmin):
         (
             None,
             {
-                "fields": ("name", "slug", "venue", "address", "website_url"),
+                "fields": ("name", "slug", "venue", "address", "website_url", "total_capacity"),
             },
         ),
         (

@@ -22,6 +22,7 @@ from django_program.registration.models import (
     Payment,
     Voucher,
 )
+from django_program.registration.services.capacity import validate_global_capacity
 from django_program.registration.services.cart import get_summary_from_items
 from django_program.registration.signals import order_paid
 from django_program.settings import get_config
@@ -100,7 +101,7 @@ class CheckoutService:
         if not items:
             raise ValidationError("Cannot check out an empty cart.")
 
-        _revalidate_stock(items)
+        _revalidate_stock(items, cart.conference)
 
         summary = get_summary_from_items(cart, items)
 
@@ -339,8 +340,12 @@ def _increment_voucher_usage(*, voucher: Voucher | None, now: object) -> None:
         raise ValidationError(f"Voucher code '{voucher.code}' is no longer valid.")
 
 
-def _revalidate_stock(items: list[object]) -> None:
+def _revalidate_stock(items: list[object], conference: object) -> None:
     """Re-validate stock availability for all cart items at checkout time.
+
+    Args:
+        items: Pre-fetched cart items to validate.
+        conference: The conference these items belong to.
 
     Raises:
         ValidationError: If any item has insufficient stock or missing prerequisites.
@@ -352,6 +357,28 @@ def _revalidate_stock(items: list[object]) -> None:
             _revalidate_ticket_stock(item)
         elif item.addon is not None:
             _revalidate_addon_stock(item, now, ticket_type_ids)
+
+    _revalidate_global_capacity(items, conference)
+
+
+def _revalidate_global_capacity(items: list[object], conference: object) -> None:
+    """Validate that checkout ticket quantities fit within the global cap.
+
+    Sums ticket quantities from the cart items and validates against the
+    conference's ``total_capacity``.
+
+    Args:
+        items: Pre-fetched cart items from the checkout flow.
+        conference: The conference to validate capacity against.
+
+    Raises:
+        ValidationError: If the total tickets would exceed the global cap.
+    """
+    ticket_items = [item for item in items if item.ticket_type_id is not None]
+    if not ticket_items:
+        return
+    total_qty = sum(item.quantity for item in ticket_items)
+    validate_global_capacity(conference, total_qty)
 
 
 def _revalidate_ticket_stock(item: object) -> None:

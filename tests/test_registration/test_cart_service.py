@@ -1297,3 +1297,98 @@ class TestEdgeCaseHelpers:
         )
         result = _apply_voucher_discounts(voucher, [line], [(0, Decimal("100.00"))])
         assert result == Decimal("0.00")
+
+
+# =============================================================================
+# TestGlobalCapacityCartIntegration
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestGlobalCapacityCartIntegration:
+    """Tests that add_ticket and update_quantity enforce global capacity."""
+
+    @pytest.fixture
+    def capped_conference(self):
+        return Conference.objects.create(
+            name="CappedCon",
+            slug="cappedcon-cart",
+            start_date=date(2027, 6, 1),
+            end_date=date(2027, 6, 3),
+            timezone="UTC",
+            total_capacity=5,
+        )
+
+    @pytest.fixture
+    def capped_ticket(self, capped_conference):
+        return TicketType.objects.create(
+            conference=capped_conference,
+            name="General",
+            slug="general",
+            price=Decimal("100.00"),
+            total_quantity=0,
+            limit_per_user=10,
+            is_active=True,
+        )
+
+    @pytest.fixture
+    def capped_cart(self, capped_conference, user):
+        return Cart.objects.create(
+            user=user,
+            conference=capped_conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+
+    def test_add_ticket_respects_global_cap(self, capped_cart, capped_ticket):
+        add_ticket(capped_cart, capped_ticket, qty=5)
+
+        with pytest.raises(ValidationError, match="tickets remaining for this conference"):
+            add_ticket(capped_cart, capped_ticket, qty=1)
+
+    def test_add_ticket_bypasses_when_no_cap(self, cart, ticket_type):
+        # conference fixture has total_capacity=0 (default, no limit)
+        add_ticket(cart, ticket_type, qty=10)
+        assert cart.items.first().quantity == 10
+
+    def test_update_quantity_respects_global_cap(self, capped_cart, capped_ticket):
+        item = add_ticket(capped_cart, capped_ticket, qty=3)
+
+        with pytest.raises(ValidationError, match="tickets remaining for this conference"):
+            update_quantity(capped_cart, item.pk, 6)
+
+    def test_update_quantity_within_cap_succeeds(self, capped_cart, capped_ticket):
+        item = add_ticket(capped_cart, capped_ticket, qty=3)
+        result = update_quantity(capped_cart, item.pk, 5)
+        assert result.quantity == 5
+
+    def test_global_cap_with_multiple_ticket_types(self, capped_conference, user):
+        tt_a = TicketType.objects.create(
+            conference=capped_conference,
+            name="A",
+            slug="a",
+            price=Decimal("50.00"),
+            total_quantity=0,
+            limit_per_user=10,
+            is_active=True,
+        )
+        tt_b = TicketType.objects.create(
+            conference=capped_conference,
+            name="B",
+            slug="b",
+            price=Decimal("75.00"),
+            total_quantity=0,
+            limit_per_user=10,
+            is_active=True,
+        )
+        cart = Cart.objects.create(
+            user=user,
+            conference=capped_conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        add_ticket(cart, tt_a, qty=3)
+        add_ticket(cart, tt_b, qty=2)  # total = 5 = cap
+
+        with pytest.raises(ValidationError, match="tickets remaining for this conference"):
+            add_ticket(cart, tt_a, qty=1)

@@ -80,6 +80,7 @@ class ConferenceForm(forms.ModelForm):
             "address",
             "website_url",
             "pretalx_event_slug",
+            "total_capacity",
             "is_active",
         ]
         widgets = {

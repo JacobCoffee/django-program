@@ -34,6 +34,7 @@ from django_program.registration.services.checkout import (
     CheckoutService,
     _expire_stale_pending_orders,
     _increment_voucher_usage,
+    _revalidate_global_capacity,
 )
 from django_program.registration.signals import order_paid
 
@@ -1056,3 +1057,107 @@ class TestExpireStaleOrders:
 
         voucher.refresh_from_db()
         assert voucher.times_used == 2
+
+
+# =============================================================================
+# TestGlobalCapacityCheckoutIntegration
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestGlobalCapacityCheckoutIntegration:
+    """Tests that checkout revalidation enforces global capacity."""
+
+    @pytest.fixture
+    def capped_conference(self):
+        return Conference.objects.create(
+            name="CappedCheckout",
+            slug="capped-checkout",
+            start_date=date(2027, 6, 1),
+            end_date=date(2027, 6, 3),
+            timezone="UTC",
+            total_capacity=3,
+        )
+
+    @pytest.fixture
+    def capped_ticket(self, capped_conference):
+        return TicketType.objects.create(
+            conference=capped_conference,
+            name="General",
+            slug="general",
+            price=Decimal("100.00"),
+            total_quantity=0,
+            limit_per_user=10,
+            is_active=True,
+        )
+
+    @pytest.fixture
+    def capped_cart_with_ticket(self, capped_conference, user, capped_ticket):
+        cart = Cart.objects.create(
+            user=user,
+            conference=capped_conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        add_ticket(cart, capped_ticket, qty=2)
+        return cart
+
+    def test_checkout_passes_within_global_cap(self, capped_cart_with_ticket):
+        order = CheckoutService.checkout(capped_cart_with_ticket)
+        assert order.status == Order.Status.PENDING
+
+    def test_checkout_revalidation_catches_oversell(self, capped_conference, user, capped_ticket):
+        """Simulate oversell: another user buys tickets between cart-add and checkout."""
+        cart = Cart.objects.create(
+            user=user,
+            conference=capped_conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        add_ticket(cart, capped_ticket, qty=2)
+
+        # Another user buys 2 tickets (total sold = 2, cap = 3)
+        other_user = User.objects.create_user(
+            username="oversell-other",
+            email="oversell@example.com",
+            password="testpass123",
+        )
+        order = Order.objects.create(
+            conference=capped_conference,
+            user=other_user,
+            status=Order.Status.PAID,
+            subtotal=Decimal("200.00"),
+            total=Decimal("200.00"),
+            reference=f"ORD-{uuid4().hex[:8].upper()}",
+        )
+        OrderLineItem.objects.create(
+            order=order,
+            description="Ticket",
+            quantity=2,
+            unit_price=Decimal("100.00"),
+            line_total=Decimal("200.00"),
+            ticket_type=capped_ticket,
+        )
+
+        # Now user tries to check out 2 more (total would be 4 > cap 3)
+        with pytest.raises(ValidationError, match="tickets remaining for this conference"):
+            CheckoutService.checkout(cart)
+
+    def test_revalidate_global_capacity_skips_addon_only_items(self, capped_conference):
+        """When all cart items are add-ons (no ticket_type_id), skip capacity check."""
+        addon = AddOn.objects.create(
+            conference=capped_conference,
+            name="Swag",
+            slug="swag-cap",
+            price=Decimal("15.00"),
+            is_active=True,
+        )
+        cart = Cart.objects.create(
+            user=User.objects.create_user(username="addon-only", password="testpass123"),
+            conference=capped_conference,
+            status=Cart.Status.OPEN,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        add_addon(cart, addon, qty=1)
+        items = list(cart.items.select_related("ticket_type", "addon"))
+        _revalidate_global_capacity(items, capped_conference)

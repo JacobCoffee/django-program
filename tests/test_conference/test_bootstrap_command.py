@@ -448,3 +448,50 @@ name = "Gold"
 
     assert "Skipping 'sponsor_levels'" in output
     assert "sponsors app" in output
+
+
+@pytest.mark.django_db
+def test_bootstrap_sets_total_capacity(tmp_path):
+    config_path = _write_config(
+        tmp_path / "capacity.toml",
+        """[conference]
+name = "PyCon Capacity Test"
+start = 2027-05-01
+end = 2027-05-03
+timezone = "UTC"
+total_capacity = 1000
+
+[[conference.sections]]
+name = "Talks"
+start = 2027-05-02
+end = 2027-05-02
+""",
+    )
+
+    call_command("bootstrap_conference", config=config_path)
+
+    conference = Conference.objects.get(slug="pycon-capacity-test")
+    assert conference.total_capacity == 1000
+
+
+@pytest.mark.django_db
+def test_bootstrap_without_total_capacity_defaults_to_zero(tmp_path):
+    config_path = _write_config(
+        tmp_path / "no_capacity.toml",
+        """[conference]
+name = "PyCon No Cap"
+start = 2027-05-01
+end = 2027-05-03
+timezone = "UTC"
+
+[[conference.sections]]
+name = "Talks"
+start = 2027-05-02
+end = 2027-05-02
+""",
+    )
+
+    call_command("bootstrap_conference", config=config_path)
+
+    conference = Conference.objects.get(slug="pycon-no-cap")
+    assert conference.total_capacity == 0

@@ -41,6 +41,7 @@ _CONFERENCE_FIELD_MAP: dict[str, str] = {
     "venue": "venue",
     "website_url": "website_url",
     "pretalx_event_slug": "pretalx_event_slug",
+    "total_capacity": "total_capacity",
 }
 
 _SECTION_FIELD_MAP: dict[str, str] = {

@@ -63,6 +63,7 @@ class TestConferenceForm:
             "address",
             "website_url",
             "pretalx_event_slug",
+            "total_capacity",
             "is_active",
         ]
         assert list(form.fields.keys()) == expected
@@ -74,6 +75,7 @@ class TestConferenceForm:
                 "start_date": "2027-05-01",
                 "end_date": "2027-05-03",
                 "timezone": "UTC",
+                "total_capacity": 0,
                 "is_active": True,
             }
         )
