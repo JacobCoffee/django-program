@@ -137,7 +137,7 @@ def _unique_activity_slug(name: str, conference: object, exclude_pk: int | None 
 
 def _safe_csv_cell(value: object) -> str:
     """Return a CSV-safe string that cannot be interpreted as a formula."""
-    text = str(value or "")
+    text = str(value) if value is not None else ""
     stripped = text.lstrip()
     if stripped and stripped[0] in ("=", "+", "-", "@"):
         return f"'{text}"

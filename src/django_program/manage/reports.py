@@ -190,7 +190,10 @@ def get_voucher_usage(conference: Conference) -> QuerySet[Voucher]:
             revenue_impact=Coalesce(
                 Sum(
                     "conference__orders__discount_amount",
-                    filter=Q(conference__orders__voucher_code=F("code")),
+                    filter=Q(
+                        conference__orders__voucher_code=F("code"),
+                        conference__orders__status__in=_PAID_STATUSES,
+                    ),
                 ),
                 Value(Decimal("0.00")),
             ),
@@ -215,11 +218,12 @@ def get_voucher_summary(conference: Conference) -> dict[str, Any]:
         used=Count("id", filter=Q(times_used__gt=0)),
     )
 
-    # Revenue impact: sum discount_amount from orders that used any voucher code
+    # Revenue impact: sum discount_amount from paid orders that used any voucher code
     voucher_codes = list(qs.values_list("code", flat=True))
     revenue_impact_agg = Order.objects.filter(
         conference=conference,
         voucher_code__in=voucher_codes,
+        status__in=_PAID_STATUSES,
     ).aggregate(
         total_impact=Sum("discount_amount"),
     )
@@ -268,7 +272,7 @@ def _condition_to_dict(cond: object, type_label: str) -> dict[str, Any]:
         products.append("All ticket types")
     if hasattr(cond, "apply_to_addons") and cond.apply_to_addons:  # type: ignore[attr-defined]
         products.append("All add-ons")
-    entry["applicable_products"] = products or ["All"]
+    entry["applicable_products"] = products
 
     return entry
 
@@ -304,7 +308,10 @@ def get_discount_conditions(conference: Conference) -> dict[str, list[dict[str, 
         (DiscountForProduct, "Product Discount"),
         (DiscountForCategory, "Category Discount"),
     ]:
-        conditions = model_class.objects.filter(conference=conference).order_by("priority", "name")
+        qs = model_class.objects.filter(conference=conference).order_by("priority", "name")
+        if hasattr(model_class, "applicable_ticket_types"):
+            qs = qs.prefetch_related("applicable_ticket_types", "applicable_addons")
+        conditions = qs
         entries = [_condition_to_dict(cond, type_label) for cond in conditions]
         if entries:
             result[type_label] = entries

@@ -223,20 +223,20 @@ class Command(BaseCommand):
         now = timezone.now()
         order_configs = [
             # (user_idx, ref, status, ticket_idx, addon_indices, voucher_idx, days_ago)
-            (0, "ORD-SEED-001", "paid", 0, [0, 2], None, 30),
-            (1, "ORD-SEED-002", "paid", 1, [1], None, 25),
-            (2, "ORD-SEED-003", "paid", 2, [2], 4, 22),
-            (3, "ORD-SEED-004", "paid", 3, [0, 1, 2], None, 20),
-            (4, "ORD-SEED-005", "paid", 4, [], 0, 18),
-            (5, "ORD-SEED-006", "pending", 1, [1, 2], None, 5),
-            (6, "ORD-SEED-007", "cancelled", 0, [0], None, 15),
-            (7, "ORD-SEED-008", "paid", 1, [2, 3], None, 12),
-            (8, "ORD-SEED-009", "paid", 2, [], 4, 10),
-            (9, "ORD-SEED-010", "pending", 3, [0, 1], None, 3),
-            (10, "ORD-SEED-011", "paid", 0, [1, 2, 3], 1, 8),
-            (11, "ORD-SEED-012", "cancelled", 1, [], None, 7),
-            (0, "ORD-SEED-013", "paid", 1, [3], None, 2),
-            (3, "ORD-SEED-014", "paid", 2, [1], 4, 1),
+            (0, "ORD-SEED-001", Order.Status.PAID, 0, [0, 2], None, 30),
+            (1, "ORD-SEED-002", Order.Status.PAID, 1, [1], None, 25),
+            (2, "ORD-SEED-003", Order.Status.PAID, 2, [2], 4, 22),
+            (3, "ORD-SEED-004", Order.Status.PAID, 3, [0, 1, 2], None, 20),
+            (4, "ORD-SEED-005", Order.Status.PAID, 4, [], 0, 18),
+            (5, "ORD-SEED-006", Order.Status.PENDING, 1, [1, 2], None, 5),
+            (6, "ORD-SEED-007", Order.Status.CANCELLED, 0, [0], None, 15),
+            (7, "ORD-SEED-008", Order.Status.PAID, 1, [2, 3], None, 12),
+            (8, "ORD-SEED-009", Order.Status.PAID, 2, [], 4, 10),
+            (9, "ORD-SEED-010", Order.Status.PENDING, 3, [0, 1], None, 3),
+            (10, "ORD-SEED-011", Order.Status.PAID, 0, [1, 2, 3], 1, 8),
+            (11, "ORD-SEED-012", Order.Status.CANCELLED, 1, [], None, 7),
+            (0, "ORD-SEED-013", Order.Status.PAID, 1, [3], None, 2),
+            (3, "ORD-SEED-014", Order.Status.PAID, 2, [1], 4, 1),
         ]
 
         checked_in_refs = {"ORD-SEED-001", "ORD-SEED-002", "ORD-SEED-004", "ORD-SEED-008", "ORD-SEED-011"}
@@ -250,19 +250,12 @@ class Command(BaseCommand):
             for ai in addon_idxs:
                 subtotal += addons[ai].price
 
-            discount = Decimal("0.00")
-            voucher_code = ""
-            if voucher_idx is not None:
-                v = vouchers[voucher_idx]
-                voucher_code = v.code
-                if v.voucher_type == "comp":
-                    discount = subtotal
-                elif v.voucher_type == "percentage":
-                    discount = (subtotal * v.discount_value / Decimal(100)).quantize(Decimal("0.01"))
-                elif v.voucher_type == "fixed_amount":
-                    discount = min(v.discount_value, subtotal)
-
+            discount, voucher_code = self._calc_voucher_discount(voucher_idx, vouchers, subtotal)
             total = max(subtotal - discount, Decimal("0.00"))
+
+            hold_expires = None
+            if status == Order.Status.PENDING:
+                hold_expires = now + datetime.timedelta(hours=24)
 
             order, created = Order.objects.get_or_create(
                 reference=ref,
@@ -276,6 +269,7 @@ class Command(BaseCommand):
                     "voucher_code": voucher_code,
                     "billing_name": f"{user.first_name} {user.last_name}",
                     "billing_email": user.email,
+                    "hold_expires_at": hold_expires,
                 },
             )
             if not created:
@@ -300,11 +294,29 @@ class Command(BaseCommand):
                     addon=addon,
                 )
 
-            if status == "paid":
+            if status == Order.Status.PAID:
                 self._create_payment(order, ref, total)
                 self._create_attendee(user, conference, order, ref, created_at, checked_in_refs)
 
         self.stdout.write(f"  Orders: {len(order_configs)}")
+
+    def _calc_voucher_discount(
+        self,
+        voucher_idx: int | None,
+        vouchers: list[Voucher],
+        subtotal: Decimal,
+    ) -> tuple[Decimal, str]:
+        """Calculate discount amount and voucher code for an order."""
+        if voucher_idx is None:
+            return Decimal("0.00"), ""
+        v = vouchers[voucher_idx]
+        if v.voucher_type == Voucher.VoucherType.COMP:
+            return subtotal, v.code
+        if v.voucher_type == Voucher.VoucherType.PERCENTAGE:
+            return (subtotal * v.discount_value / Decimal(100)).quantize(Decimal("0.01")), v.code
+        if v.voucher_type == Voucher.VoucherType.FIXED_AMOUNT:
+            return min(v.discount_value, subtotal), v.code
+        return Decimal("0.00"), v.code
 
     def _create_payment(self, order: Order, ref: str, total: Decimal) -> None:
         """Create a payment record for a paid order."""

@@ -25,18 +25,10 @@ from django_program.manage.reports import (
     get_voucher_summary,
     get_voucher_usage,
 )
+from django_program.manage.views import _safe_csv_cell
 from django_program.registration.models import TicketType
 
 _REPORTS_GROUP_NAME = "Program: Reports"
-
-
-def _safe_csv_cell(value: object) -> str:
-    """Return a CSV-safe string that cannot be interpreted as a formula."""
-    text = str(value or "")
-    stripped = text.lstrip()
-    if stripped and stripped[0] in ("=", "+", "-", "@"):
-        return f"'{text}"
-    return text
 
 
 class ReportPermissionMixin(LoginRequiredMixin):
@@ -203,12 +195,12 @@ class AttendeeManifestExportView(ReportPermissionMixin, View):
         )
 
         for attendee in qs:
-            # Determine ticket type from order line items
+            # Join all ticket line item descriptions
             ticket_name = ""
             if attendee.order:
                 ticket_items = [li for li in attendee.order.line_items.all() if li.ticket_type_id is not None]
                 if ticket_items:
-                    ticket_name = ticket_items[0].description
+                    ticket_name = ", ".join(li.description for li in ticket_items)
 
             writer.writerow(
                 [
@@ -277,7 +269,9 @@ class InventoryReportExportView(ReportPermissionMixin, View):
         )
 
         for tt in get_ticket_inventory(self.conference):
-            remaining = tt.total_quantity - tt.sold_count - tt.reserved_count if tt.total_quantity > 0 else "Unlimited"
+            remaining = (
+                max(0, tt.total_quantity - tt.sold_count - tt.reserved_count) if tt.total_quantity > 0 else "Unlimited"
+            )
             writer.writerow(
                 [
                     "Ticket",
@@ -295,7 +289,7 @@ class InventoryReportExportView(ReportPermissionMixin, View):
 
         for addon in get_addon_inventory(self.conference):
             remaining = (
-                addon.total_quantity - addon.sold_count - addon.reserved_count
+                max(0, addon.total_quantity - addon.sold_count - addon.reserved_count)
                 if addon.total_quantity > 0
                 else "Unlimited"
             )
@@ -451,7 +445,7 @@ class DiscountEffectivenessExportView(ReportPermissionMixin, View):
                         str(cond.get("discount_value", "")),
                         cond.get("times_used", ""),
                         cond.get("limit", ""),
-                        "; ".join(str(p) for p in cond.get("applicable_products", [])),
+                        _safe_csv_cell("; ".join(str(p) for p in cond.get("applicable_products", []))),
                     ]
                 )
 
