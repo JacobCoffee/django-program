@@ -362,3 +362,9 @@ class BadgeAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002, D102
         return False
+
+    def has_change_permission(self, request: HttpRequest, obj: Badge | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: Badge | None = None) -> bool:  # noqa: ARG002, D102
+        return False

@@ -6,8 +6,8 @@ Badge generation produces print-ready attendee badges with QR codes for on-site 
 
 | Model | Purpose |
 |---|---|
-| {class}`~django_program.registration.badges.BadgeTemplate` | A reusable layout definition for a conference. Controls dimensions, colors, content toggles, and optional logo. One template per conference can be marked as the default. |
-| {class}`~django_program.registration.badges.Badge` | A generated badge file linked to an attendee and template. Stores the rendered file (PDF or PNG) and tracks generation metadata. |
+| {class}`~django_program.registration.badge.BadgeTemplate` | A reusable layout definition for a conference. Controls dimensions, colors, content toggles, and optional logo. One template per conference can be marked as the default. |
+| {class}`~django_program.registration.badge.Badge` | A generated badge file linked to an attendee and template. Stores the rendered file (PDF or PNG) and tracks generation metadata. |
 
 ## Badge Templates
 
@@ -32,7 +32,7 @@ Boolean fields control which elements appear on the badge:
 |---|---|---|
 | `show_name` | `True` | Attendee's full name |
 | `show_email` | `False` | Attendee's email address |
-| `show_company` | `True` | Company or organization |
+| `show_company` | `False` | Company or organization (from order billing info) |
 | `show_ticket_type` | `True` | Ticket type label (e.g. "Individual", "Speaker") |
 | `show_qr_code` | `True` | QR code for check-in scanning |
 | `show_conference_name` | `True` | Conference name header |
@@ -45,7 +45,7 @@ Three color fields accept hex color codes:
 |---|---|---|
 | `background_color` | `#FFFFFF` | Badge background |
 | `text_color` | `#000000` | Primary text color |
-| `accent_color` | `#3B82F6` | Accent elements (header bar, ticket type label) |
+| `accent_color` | `#4338CA` | Accent elements (header bar, ticket type label) |
 
 ### Conference Logo
 
@@ -53,7 +53,7 @@ The optional `logo` field accepts an image upload. When set, the logo is rendere
 
 ### Default Template
 
-Each conference can have one default template, controlled by the `is_default` boolean field. When a new template is saved with `is_default=True`, any existing default template for the same conference is automatically unset. The default template is used when generating badges without explicitly specifying a template.
+Each conference can have one default template, controlled by the `is_default` boolean field. A database constraint enforces at most one default template per conference. To change the default, first unset `is_default` on the current default, then set it on the new one. The default template is used when generating badges without explicitly specifying a template.
 
 ## QR Code Generation
 
@@ -83,15 +83,15 @@ PNG output uses Pillow to render raster badges at 300 DPI. PNG works well for on
 
 ## Badge Service API
 
-The `BadgeGenerationService` in `django_program.registration.services.badges` provides programmatic access to all badge operations.
+The `BadgeGenerationService` in `django_program.registration.services.badge` provides programmatic access to all badge operations.
 
 ### Generating a QR Code
 
 ```python
-from django_program.registration.services.badges import BadgeGenerationService
+from django_program.registration.services.badge import BadgeGenerationService
 
 # Returns PNG bytes of the QR code image
-qr_bytes = BadgeGenerationService.generate_qr_code(
+qr_bytes = BadgeGenerationService().generate_qr_code(
     data="pycon-us-2027:A3K9M2X1",
     size=200,  # pixels
 )
@@ -100,13 +100,13 @@ qr_bytes = BadgeGenerationService.generate_qr_code(
 ### Generating a Single Badge
 
 ```python
-from django_program.registration.services.badges import BadgeGenerationService
+from django_program.registration.services.badge import BadgeGenerationService
 
 # PDF output
-pdf_bytes = BadgeGenerationService.generate_badge_pdf(attendee, template)
+pdf_bytes = BadgeGenerationService().generate_badge_pdf(attendee, template)
 
 # PNG output
-png_bytes = BadgeGenerationService.generate_badge_png(attendee, template)
+png_bytes = BadgeGenerationService().generate_badge_png(attendee, template)
 ```
 
 Both methods return raw bytes of the rendered badge file.
@@ -114,10 +114,10 @@ Both methods return raw bytes of the rendered badge file.
 ### Get or Create
 
 ```python
-badge = BadgeGenerationService.generate_or_get_badge(
+badge = BadgeGenerationService().generate_or_get_badge(
     attendee,
     template,
-    format="pdf",  # or "png"
+    badge_format="pdf",  # or "png"
 )
 ```
 
@@ -126,15 +126,15 @@ Returns an existing `Badge` record if one already exists for this attendee/templ
 ### Bulk Generation
 
 ```python
-badges = BadgeGenerationService.bulk_generate_badges(
+badges = BadgeGenerationService().bulk_generate_badges(
     conference,
     template,
-    format="pdf",
+    badge_format="pdf",
     ticket_type=None,  # optional: filter attendees by ticket type
 )
 ```
 
-Generates badges for all attendees of the conference (or a subset filtered by ticket type). Returns a list of `Badge` instances. Attendees who already have a badge for the given template and format are skipped.
+Generates badges for all attendees of the conference (or a subset filtered by ticket type). Returns an iterator of `Badge` instances. Attendees who already have a badge for the given template and format receive their existing badge without regeneration.
 
 ## Badge Management UI
 

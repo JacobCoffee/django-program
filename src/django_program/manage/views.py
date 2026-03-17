@@ -3282,20 +3282,28 @@ class BadgeBulkGenerateView(ManagePermissionMixin, View):
             template = get_object_or_404(BadgeTemplate, pk=template_pk, conference=self.conference)
 
         badge_format = request.POST.get("format", Badge.Format.PDF)
+        if badge_format not in {Badge.Format.PDF, Badge.Format.PNG}:
+            badge_format = Badge.Format.PDF
+
         ticket_type_pk = request.POST.get("ticket_type")
         ticket_type = None
         if ticket_type_pk:
             ticket_type = get_object_or_404(TicketType, pk=ticket_type_pk, conference=self.conference)
 
         service = BadgeGenerationService()
-        count = 0
-        for _badge in service.bulk_generate_badges(
-            conference=self.conference,
-            template=template,
-            badge_format=badge_format,
-            ticket_type=ticket_type,
-        ):
-            count += 1
+        try:
+            count = sum(
+                1
+                for _ in service.bulk_generate_badges(
+                    conference=self.conference,
+                    template=template,
+                    badge_format=badge_format,
+                    ticket_type=ticket_type,
+                )
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(reverse("manage:badge-template-list", kwargs={"conference_slug": self.conference.slug}))
 
         messages.success(request, f"Generated {count} badge{'s' if count != 1 else ''}.")
         return redirect(reverse("manage:badge-list", kwargs={"conference_slug": self.conference.slug}))
@@ -3423,9 +3431,9 @@ class BadgeBulkDownloadView(ManagePermissionMixin, View):
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             for badge in qs.iterator():
                 if badge.file:
-                    username = badge.attendee.user.username
+                    code = badge.attendee.access_code
                     ext = badge.format
-                    zf.writestr(f"badge-{username}.{ext}", badge.file.read())
+                    zf.writestr(f"badge-{code}.{ext}", badge.file.read())
 
         buffer.seek(0)
         response = HttpResponse(buffer.read(), content_type="application/zip")
@@ -3434,35 +3442,33 @@ class BadgeBulkDownloadView(ManagePermissionMixin, View):
 
 
 class BadgePreviewView(ManagePermissionMixin, View):
-    """Generate a preview badge for a template without saving it.
+    """Generate a live preview badge without persisting it.
 
     Uses the first attendee of the conference (or returns a placeholder
     message if none exist) to render what the badge template will look like.
+    Always regenerates fresh output so template edits are reflected immediately.
     """
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
-        """Render a preview badge inline.
+        """Render a preview badge inline without saving.
 
         Args:
             request: The incoming HTTP request.
             **kwargs: URL keyword arguments including ``pk`` for the template.
 
         Returns:
-            An inline HTTP response with the rendered badge.
+            An inline HTTP response with the rendered badge bytes.
         """
         template = get_object_or_404(BadgeTemplate, pk=kwargs["pk"], conference=self.conference)
-        attendee = Attendee.objects.filter(conference=self.conference).select_related("user").first()
+        attendee = (
+            Attendee.objects.filter(conference=self.conference).select_related("user", "conference", "order").first()
+        )
 
         if not attendee:
             return HttpResponse("No attendees available for preview.", status=404, content_type="text/plain")
 
         service = BadgeGenerationService()
-        badge = service.generate_or_get_badge(attendee=attendee, template=template, badge_format="pdf")
-
-        if not badge.file:
-            return HttpResponse("Badge generation failed.", status=500, content_type="text/plain")
-
-        content_type = "application/pdf" if badge.format == Badge.Format.PDF else "image/png"
-        response = HttpResponse(badge.file.read(), content_type=content_type)
-        response["Content-Disposition"] = f'inline; filename="preview-{template.slug}.{badge.format}"'
+        content = service.generate_badge_pdf(attendee, template)
+        response = HttpResponse(content, content_type="application/pdf")
+        response["Content-Disposition"] = f'inline; filename="preview-{template.slug}.pdf"'
         return response

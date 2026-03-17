@@ -107,6 +107,19 @@ class BadgeGenerationService:
         full_name = f"{user.first_name} {user.last_name}".strip()
         return full_name or str(user.username)
 
+    def _get_company(self, attendee: Attendee) -> str:
+        """Get the company/organization for an attendee from their order billing info.
+
+        Args:
+            attendee: The attendee whose company to look up.
+
+        Returns:
+            The billing company, or an empty string if not found.
+        """
+        if attendee.order is None:
+            return ""
+        return str(attendee.order.billing_company or "")
+
     def _get_ticket_type_label(self, attendee: Attendee) -> str:
         """Get the ticket type label for an attendee's order.
 
@@ -165,14 +178,14 @@ class BadgeGenerationService:
 
         if template.show_conference_name:
             c.setFillColorRGB(*layout.accent_rgb)  # type: ignore[attr-defined]
-            c.setFont("Helvetica-Bold", 8)  # type: ignore[attr-defined]
+            c.setFont("Helvetica-Bold", 7)  # type: ignore[attr-defined]
             c.drawString(layout.margin, y_cursor, str(attendee.conference.name))  # type: ignore[attr-defined]
-            y_cursor -= 5 * mm
+            y_cursor -= 4 * mm
 
         if template.show_name:
             c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
             display_name = self._get_attendee_display_name(attendee)
-            font_size = 14
+            font_size = 12
             c.setFont("Helvetica-Bold", font_size)  # type: ignore[attr-defined]
             text_width = c.stringWidth(display_name, "Helvetica-Bold", font_size)  # type: ignore[attr-defined]
             max_text_width = layout.width - 2 * layout.margin
@@ -181,44 +194,56 @@ class BadgeGenerationService:
                 text_width = c.stringWidth(display_name, "Helvetica-Bold", font_size)  # type: ignore[attr-defined]
             c.setFont("Helvetica-Bold", font_size)  # type: ignore[attr-defined]
             c.drawString(layout.margin, y_cursor, display_name)  # type: ignore[attr-defined]
-            y_cursor -= 4 * mm
+            y_cursor -= 3.5 * mm
 
         if template.show_email:
             c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
-            c.setFont("Helvetica", 7)  # type: ignore[attr-defined]
+            c.setFont("Helvetica", 6)  # type: ignore[attr-defined]
             c.drawString(layout.margin, y_cursor, str(attendee.user.email))  # type: ignore[attr-defined]
-            y_cursor -= 3.5 * mm
+            y_cursor -= 3 * mm
+
+        if template.show_company:
+            company = self._get_company(attendee)
+            if company:
+                c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
+                c.setFont("Helvetica", 6)  # type: ignore[attr-defined]
+                c.drawString(layout.margin, y_cursor, company)  # type: ignore[attr-defined]
+                y_cursor -= 3 * mm
 
         if template.show_ticket_type:
             c.setFillColorRGB(*layout.accent_rgb)  # type: ignore[attr-defined]
-            c.setFont("Helvetica", 8)  # type: ignore[attr-defined]
+            c.setFont("Helvetica-Bold", 7)  # type: ignore[attr-defined]
             c.drawString(layout.margin, y_cursor, self._get_ticket_type_label(attendee))  # type: ignore[attr-defined]
-            y_cursor -= 4 * mm
+            y_cursor -= 3 * mm
 
         return y_cursor
 
-    def _draw_pdf_qr(self, c: object, attendee: Attendee, layout: _PDFLayout) -> None:
+    def _draw_pdf_qr(self, c: object, attendee: Attendee, layout: _PDFLayout, height: float) -> None:
         """Draw QR code and access code on a PDF canvas.
+
+        Positions the QR code in the bottom-right area of the badge,
+        sized proportionally to the badge height.
 
         Args:
             c: The reportlab canvas object.
             attendee: The attendee whose QR code to render.
             layout: Layout parameters (dimensions, colors, units).
+            height: The badge height for proportional sizing.
         """
         from reportlab.lib.utils import ImageReader  # noqa: PLC0415
 
         mm = layout.mm_unit
         qr_bytes = self.generate_qr_code(self._get_qr_data(attendee), size=200)
         qr_image = ImageReader(io.BytesIO(qr_bytes))
-        qr_size = 18 * mm
+        qr_size = min(14 * mm, height * 0.3)
         qr_x = layout.width - qr_size - layout.margin
-        qr_y = layout.margin + 3 * mm
+        qr_y = layout.margin + 2 * mm
         c.drawImage(qr_image, qr_x, qr_y, width=qr_size, height=qr_size)  # type: ignore[attr-defined]
 
         c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
-        c.setFont("Courier", 6)  # type: ignore[attr-defined]
+        c.setFont("Courier", 5)  # type: ignore[attr-defined]
         code_text = str(attendee.access_code)
-        code_width = c.stringWidth(code_text, "Courier", 6)  # type: ignore[attr-defined]
+        code_width = c.stringWidth(code_text, "Courier", 5)  # type: ignore[attr-defined]
         code_x = qr_x + (qr_size - code_width) / 2
         c.drawString(code_x, layout.margin, code_text)  # type: ignore[attr-defined]
 
@@ -242,8 +267,8 @@ class BadgeGenerationService:
 
         width = template.width_mm * mm
         height = template.height_mm * mm
-        margin = 4 * mm
-        bar_height = 6 * mm
+        margin = 3 * mm
+        bar_height = 4 * mm
 
         layout = _PDFLayout(
             width=width,
@@ -267,7 +292,7 @@ class BadgeGenerationService:
         self._draw_pdf_text_fields(c, attendee, template, layout, y_cursor)
 
         if template.show_qr_code:
-            self._draw_pdf_qr(c, attendee, layout)
+            self._draw_pdf_qr(c, attendee, layout, height)
 
         c.showPage()
         c.save()
@@ -369,6 +394,12 @@ class BadgeGenerationService:
             draw.text((margin, y_cursor), str(attendee.user.email), fill=text_color, font=font_small)
             y_cursor += int(4 * px_per_mm)
 
+        if template.show_company:
+            company = self._get_company(attendee)
+            if company:
+                draw.text((margin, y_cursor), company, fill=text_color, font=font_small)
+                y_cursor += int(4 * px_per_mm)
+
         if template.show_ticket_type:
             label = self._get_ticket_type_label(attendee)
             draw.text((margin, y_cursor), label, fill=accent_color, font=font_medium)
@@ -412,6 +443,11 @@ class BadgeGenerationService:
         Raises:
             ValueError: If no template is provided and no default exists.
         """
+        valid_formats = {Badge.Format.PDF, Badge.Format.PNG}
+        if badge_format not in valid_formats:
+            msg = f"Unsupported badge format '{badge_format}'. Must be one of: {', '.join(valid_formats)}"
+            raise ValueError(msg)
+
         if template is None:
             template = BadgeTemplate.objects.filter(
                 conference=attendee.conference,
@@ -473,12 +509,24 @@ class BadgeGenerationService:
         Raises:
             ValueError: If no template is provided and no default exists.
         """
-        from django_program.registration.attendee import Attendee  # noqa: PLC0415
+        from django.db.models import Prefetch  # noqa: PLC0415
 
-        queryset = Attendee.objects.filter(conference=conference).select_related(
-            "user",
-            "conference",
-            "order",
+        from django_program.registration.attendee import Attendee  # noqa: PLC0415
+        from django_program.registration.models import OrderLineItem  # noqa: PLC0415
+
+        queryset = (
+            Attendee.objects.filter(conference=conference)
+            .select_related(
+                "user",
+                "conference",
+                "order",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "order__line_items",
+                    queryset=OrderLineItem.objects.filter(ticket_type__isnull=False).select_related("ticket_type"),
+                ),
+            )
         )
 
         if ticket_type is not None:
