@@ -6,6 +6,7 @@ scanning.
 """
 
 import io
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,8 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 
 from django_program.registration.badge import Badge, BadgeTemplate
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -22,6 +25,74 @@ if TYPE_CHECKING:
     from django_program.registration.models import TicketType
 
 _MIN_FONT_SIZE = 8
+_FONT_CACHE: dict[str, str] = {}
+
+
+def _resolve_font_path(font_name: str) -> str | None:
+    """Resolve a font name to a file path.
+
+    Searches in order:
+    1. Absolute path (if the string is already a valid file)
+    2. Django STATICFILES_DIRS
+    3. Django STATIC_ROOT
+    4. Common system font directories
+
+    Args:
+        font_name: Font filename or path (e.g. "Roboto-Bold.ttf" or "/path/to/font.ttf").
+
+    Returns:
+        Resolved absolute path, or ``None`` if not found.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    if not font_name:
+        return None
+
+    if font_name in _FONT_CACHE:
+        return _FONT_CACHE[font_name]
+
+    # Direct path
+    if Path(font_name).is_file():
+        _FONT_CACHE[font_name] = font_name
+        return font_name
+
+    from django.conf import settings  # noqa: PLC0415
+
+    # Search STATICFILES_DIRS
+    search_dirs: list[str | Path] = []
+    search_dirs.extend(getattr(settings, "STATICFILES_DIRS", []))
+    static_root = getattr(settings, "STATIC_ROOT", None)
+    if static_root:
+        search_dirs.append(static_root)
+
+    # Common system font dirs
+    search_dirs.extend(
+        [
+            "/usr/share/fonts",
+            "/usr/local/share/fonts",
+            Path.home() / ".fonts",
+            Path.home() / "Library/Fonts",
+            "/System/Library/Fonts",
+            "/Library/Fonts",
+        ]
+    )
+
+    for base_dir in search_dirs:
+        base = Path(base_dir)
+        if not base.exists():
+            continue
+        # Direct match
+        candidate = base / font_name
+        if candidate.is_file():
+            _FONT_CACHE[font_name] = str(candidate)
+            return str(candidate)
+        # Recursive search
+        for match in base.rglob(font_name):
+            if match.is_file():
+                _FONT_CACHE[font_name] = str(match)
+                return str(match)
+
+    return None
 
 
 def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
@@ -65,6 +136,8 @@ class _PDFLayout:
     mm_unit: float
     accent_rgb: tuple[float, float, float]
     text_rgb: tuple[float, float, float]
+    font_name: str = "Helvetica-Bold"
+    font_body: str = "Helvetica"
 
 
 class BadgeGenerationService:
@@ -156,6 +229,32 @@ class BadgeGenerationService:
         conference_slug = str(attendee.conference.slug)
         return f"{conference_slug}:{attendee.access_code}"
 
+    @staticmethod
+    def _register_pdf_font(font_spec: str, register_name: str) -> str | None:
+        """Resolve and register a TrueType font for PDF rendering.
+
+        Args:
+            font_spec: Font filename or path to resolve.
+            register_name: Name to register the font under in reportlab.
+
+        Returns:
+            The registered font name, or ``None`` if registration failed.
+        """
+        if not font_spec:
+            return None
+        path = _resolve_font_path(font_spec)
+        if not path:
+            return None
+        from reportlab.pdfbase import pdfmetrics  # noqa: PLC0415
+        from reportlab.pdfbase.ttfonts import TTFont  # noqa: PLC0415
+
+        try:
+            pdfmetrics.registerFont(TTFont(register_name, path))
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to register font '%s' from '%s'", font_spec, path)
+            return None
+        return register_name
+
     def _pdf_centered(  # noqa: PLR0913
         self, layout: _PDFLayout, text: str, font: str, max_size: int, min_size: int, y: float
     ) -> float:
@@ -201,17 +300,16 @@ class BadgeGenerationService:
         name_parts = display_name.split()
         mm = layout.mm_unit
 
+        font = layout.font_name
         if len(name_parts) > 1:
             first = name_parts[0]
             last = " ".join(name_parts[1:])
             font_size = 42.0
             for line, y_offset in [(first, 0), (last, 1)]:
-                font_size = self._pdf_centered(
-                    layout, line, "Helvetica-Bold", 42, 18, content_top - y_offset * (font_size + 6)
-                )
+                font_size = self._pdf_centered(layout, line, font, 42, 18, content_top - y_offset * (font_size + 6))
             content_top -= 2 * (font_size + 6) + 4 * mm
         else:
-            font_size = self._pdf_centered(layout, display_name, "Helvetica-Bold", 42, 18, content_top)
+            font_size = self._pdf_centered(layout, display_name, font, 42, 18, content_top)
             content_top -= font_size + 8 * mm
 
         return content_top
@@ -278,7 +376,7 @@ class BadgeGenerationService:
             c.setFillColorRGB(1, 1, 1)  # type: ignore[attr-defined]
             conf_name = str(attendee.conference.name)
             conf_y = layout.height - header_h + (header_h - 18) / 2
-            self._pdf_centered(layout, conf_name, "Helvetica-Bold", 18, 10, conf_y)
+            self._pdf_centered(layout, conf_name, layout.font_name, 18, 10, conf_y)
 
         return layout.height - header_h
 
@@ -309,6 +407,14 @@ class BadgeGenerationService:
         buf = io.BytesIO()
         c = canvas.Canvas(buf, pagesize=(width, height))
 
+        # Resolve custom fonts
+        name_font = "Helvetica-Bold"
+        body_font = "Helvetica"
+        font_name_str = str(template.font_name) if template.font_name else ""
+        font_body_str = str(template.font_body) if template.font_body else ""
+        name_font = self._register_pdf_font(font_name_str, "CustomName") or name_font
+        body_font = self._register_pdf_font(font_body_str, "CustomBody") or body_font
+
         layout = _PDFLayout(
             canvas=c,
             width=width,
@@ -317,16 +423,23 @@ class BadgeGenerationService:
             mm_unit=mm,
             accent_rgb=accent_rgb,
             text_rgb=text_rgb,
+            font_name=name_font,
+            font_body=body_font,
         )
 
         self._pdf_draw_background(layout, template)
         header_bottom = self._pdf_draw_header(layout, attendee, template)
 
         ticket_label = self._get_ticket_type_label(attendee) if template.show_ticket_type else ""
-        header_bottom = self._pdf_draw_ticket_banner(layout, ticket_label, header_bottom)
+        banner_pos = str(template.ticket_banner_position)
 
-        qr_zone_h = 28 * mm if template.show_qr_code else 8 * mm
-        self._pdf_draw_body(layout, attendee, template, ticket_label, header_bottom, margin + qr_zone_h)
+        # Draw banner at configured position (below_header draws it now, others defer to body)
+        if banner_pos == BadgeTemplate.BannerPosition.BELOW_HEADER:
+            header_bottom = self._pdf_draw_ticket_banner(layout, ticket_label, header_bottom)
+            ticket_label = ""  # consumed
+
+        qr_zone_h = 30 * mm if template.show_qr_code else 8 * mm
+        self._pdf_draw_body(layout, attendee, template, ticket_label, banner_pos, header_bottom, margin + qr_zone_h)
 
         if template.show_qr_code:
             self._pdf_draw_qr(layout, attendee)
@@ -361,65 +474,90 @@ class BadgeGenerationService:
             return header_bottom - banner_h
         return header_bottom
 
-    def _pdf_draw_body(  # noqa: PLR0913
+    def _pdf_draw_body(  # noqa: PLR0913, C901, PLR0912
         self,
         layout: _PDFLayout,
         attendee: Attendee,
         template: BadgeTemplate,
         ticket_label: str,
+        banner_pos: str,
         header_bottom: float,
         content_floor: float,
     ) -> None:
         """Draw the body content (name, company, email) vertically centered.
 
+        Also draws the ticket type banner at the configured position
+        if it wasn't already drawn below the header.
+
         Args:
             layout: PDF layout parameters.
             attendee: The attendee.
             template: Badge template.
-            ticket_label: Ticket type label (for inline general admission).
+            ticket_label: Ticket type label (empty if already drawn).
+            banner_pos: Banner position from template config.
             header_bottom: Top of available content zone.
             content_floor: Bottom of available content zone.
         """
         c = layout.canvas
         mm = layout.mm_unit
+        is_special = ticket_label and ticket_label != "General Admission"
 
         # Estimate content height for vertical centering
         content_h = 0.0
+        if is_special and banner_pos == BadgeTemplate.BannerPosition.ABOVE_NAME:
+            content_h += 14 * mm
         if template.show_name:
             content_h += 50
+        if is_special and banner_pos == BadgeTemplate.BannerPosition.BELOW_NAME:
+            content_h += 14 * mm
         if template.show_company and self._get_company(attendee):
             content_h += 24
         if template.show_email:
             content_h += 20
-        if ticket_label == "General Admission":
+        if not is_special and ticket_label:
             content_h += 20
 
         zone_top = header_bottom - 4 * mm
         zone_h = zone_top - content_floor
         y = zone_top - max(0, (zone_h - content_h) / 2)
 
+        if is_special and banner_pos == BadgeTemplate.BannerPosition.ABOVE_NAME:
+            y = self._pdf_draw_ticket_banner(layout, ticket_label, y + 10 * mm)
+            y -= 4 * mm
+
         if template.show_name:
             c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
             y = self._pdf_draw_name(layout, attendee, y)
+
+        if is_special and banner_pos == BadgeTemplate.BannerPosition.BELOW_NAME:
+            y_before = y
+            y = self._pdf_draw_ticket_banner(layout, ticket_label, y + 10 * mm)
+            y = min(y, y_before) - 4 * mm
 
         if template.show_company:
             company = self._get_company(attendee)
             if company:
                 c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
-                self._pdf_centered(layout, company, "Helvetica", 16, 10, y)
+                self._pdf_centered(layout, company, layout.font_body, 16, 10, y)
                 y -= 8 * mm
 
         if template.show_email:
             c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
-            self._pdf_centered(layout, str(attendee.user.email), "Helvetica", 13, 8, y)
+            self._pdf_centered(layout, str(attendee.user.email), layout.font_body, 13, 8, y)
             y -= 7 * mm
 
-        if ticket_label == "General Admission" and template.show_ticket_type:
+        if not is_special and ticket_label:
             c.setFillColorRGB(*layout.accent_rgb)  # type: ignore[attr-defined]
             self._pdf_centered(layout, ticket_label, "Helvetica-Bold", 14, 10, y)
 
+        if is_special and banner_pos == BadgeTemplate.BannerPosition.BOTTOM:
+            self._pdf_draw_ticket_banner(layout, ticket_label, content_floor + 14 * mm)
+
     def _pdf_draw_qr(self, layout: _PDFLayout, attendee: Attendee) -> None:
-        """Draw QR code with access code in the bottom-right corner.
+        """Draw QR code with white backing and access code in the bottom-right.
+
+        The white backing ensures QR readability on any background color
+        or custom background image.
 
         Args:
             layout: PDF layout parameters.
@@ -430,15 +568,32 @@ class BadgeGenerationService:
         mm = layout.mm_unit
         c = layout.canvas
         qr_size = 20 * mm
+        pad = 2 * mm
         qr_bytes = self.generate_qr_code(self._get_qr_data(attendee), size=200)
         qr_x = layout.width - qr_size - layout.margin
         qr_y = layout.margin + 4 * mm
-        c.drawImage(ImageReader(io.BytesIO(qr_bytes)), qr_x, qr_y, width=qr_size, height=qr_size)  # type: ignore[attr-defined]
-        c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
+
+        # White backing with rounded corners for readability on any background
+        c.setFillColorRGB(1, 1, 1)  # type: ignore[attr-defined]
+        c.setStrokeColorRGB(0.85, 0.85, 0.85)  # type: ignore[attr-defined]
+        c.roundRect(  # type: ignore[attr-defined]
+            qr_x - pad,
+            qr_y - pad - 3 * mm,
+            qr_size + 2 * pad,
+            qr_size + 2 * pad + 5 * mm,
+            radius=2 * mm,
+            fill=1,
+            stroke=1,
+        )
+
+        c.drawImage(  # type: ignore[attr-defined]
+            ImageReader(io.BytesIO(qr_bytes)), qr_x, qr_y, width=qr_size, height=qr_size
+        )
+        c.setFillColorRGB(0, 0, 0)  # type: ignore[attr-defined]
         c.setFont("Courier", 7)  # type: ignore[attr-defined]
         code_text = str(attendee.access_code)
         code_width = c.stringWidth(code_text, "Courier", 7)  # type: ignore[attr-defined]
-        c.drawString(qr_x + (qr_size - code_width) / 2, layout.margin, code_text)  # type: ignore[attr-defined]
+        c.drawString(qr_x + (qr_size - code_width) / 2, qr_y - 3 * mm, code_text)  # type: ignore[attr-defined]
 
     def _load_png_fonts(self, px_per_mm: float) -> tuple[object, object, object, object]:
         """Load fonts for PNG badge rendering, falling back to defaults.

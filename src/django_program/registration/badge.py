@@ -34,6 +34,22 @@ class BadgeTemplate(models.Model):
         help_text="Badge height in millimeters (default 152mm / 6 inches, portrait).",
     )
 
+    # Ticket type banner position
+    class BannerPosition(models.TextChoices):
+        """Where to place the ticket type banner on the badge."""
+
+        BELOW_HEADER = "below_header", "Below header"
+        ABOVE_NAME = "above_name", "Above name"
+        BELOW_NAME = "below_name", "Below name"
+        BOTTOM = "bottom", "Bottom of badge"
+
+    ticket_banner_position = models.CharField(
+        max_length=20,
+        choices=BannerPosition.choices,
+        default=BannerPosition.BELOW_HEADER,
+        help_text="Where to place the ticket type banner (Speaker, Sponsor, etc.).",
+    )
+
     # What to show
     show_name = models.BooleanField(default=True)
     show_email = models.BooleanField(default=False)
@@ -46,6 +62,21 @@ class BadgeTemplate(models.Model):
     background_color = models.CharField(max_length=7, default="#FFFFFF")
     text_color = models.CharField(max_length=7, default="#000000")
     accent_color = models.CharField(max_length=7, default="#4338CA")
+
+    # Typography
+    font_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Font name or path for the name field. Searched in STATICFILES_DIRS, "
+        "STATIC_ROOT, then system fonts. Leave blank for Helvetica.",
+    )
+    font_body = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Font name or path for body text (company, email). Leave blank for Helvetica.",
+    )
 
     # Branding
     logo = models.ImageField(upload_to="badges/logos/", blank=True, default="")
