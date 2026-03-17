@@ -3,6 +3,14 @@
 from django.contrib import admin
 from django.http import HttpRequest  # noqa: TC002
 
+from django_program.registration.conditions import (
+    DiscountForCategory,
+    DiscountForProduct,
+    GroupMemberCondition,
+    IncludedProductCondition,
+    SpeakerCondition,
+    TimeOrStockLimitCondition,
+)
 from django_program.registration.models import (
     AddOn,
     Attendee,
@@ -224,3 +232,106 @@ class EventProcessingExceptionAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request: HttpRequest, obj: EventProcessingException | None = None) -> bool:  # noqa: ARG002, D102
         return False
+
+
+# -- Condition / Discount admin -----------------------------------------------
+
+
+@admin.register(TimeOrStockLimitCondition)
+class TimeOrStockLimitConditionAdmin(admin.ModelAdmin):
+    """Admin for time-window and stock-limited conditions."""
+
+    list_display = (
+        "name",
+        "conference",
+        "is_active",
+        "priority",
+        "discount_type",
+        "discount_value",
+        "start_time",
+        "end_time",
+        "times_used",
+        "limit",
+    )
+    list_filter = ("conference", "is_active", "discount_type")
+    search_fields = ("name",)
+    filter_horizontal = ("applicable_ticket_types", "applicable_addons")
+
+
+@admin.register(SpeakerCondition)
+class SpeakerConditionAdmin(admin.ModelAdmin):
+    """Admin for speaker-based discount conditions."""
+
+    list_display = (
+        "name",
+        "conference",
+        "is_active",
+        "priority",
+        "discount_type",
+        "discount_value",
+        "is_presenter",
+        "is_copresenter",
+    )
+    list_filter = ("conference", "is_active", "is_presenter", "is_copresenter")
+    search_fields = ("name",)
+    filter_horizontal = ("applicable_ticket_types", "applicable_addons")
+
+
+@admin.register(GroupMemberCondition)
+class GroupMemberConditionAdmin(admin.ModelAdmin):
+    """Admin for group-membership-based discount conditions."""
+
+    list_display = ("name", "conference", "is_active", "priority", "discount_type", "discount_value")
+    list_filter = ("conference", "is_active")
+    search_fields = ("name",)
+    filter_horizontal = ("applicable_ticket_types", "applicable_addons", "groups")
+
+
+@admin.register(IncludedProductCondition)
+class IncludedProductConditionAdmin(admin.ModelAdmin):
+    """Admin for included-product discount conditions."""
+
+    list_display = ("name", "conference", "is_active", "priority", "discount_type", "discount_value")
+    list_filter = ("conference", "is_active")
+    search_fields = ("name",)
+    filter_horizontal = ("applicable_ticket_types", "applicable_addons", "enabling_ticket_types")
+
+
+@admin.register(DiscountForProduct)
+class DiscountForProductAdmin(admin.ModelAdmin):
+    """Admin for direct product discounts."""
+
+    list_display = (
+        "name",
+        "conference",
+        "is_active",
+        "priority",
+        "discount_type",
+        "discount_value",
+        "start_time",
+        "end_time",
+        "times_used",
+        "limit",
+    )
+    list_filter = ("conference", "is_active", "discount_type")
+    search_fields = ("name",)
+    filter_horizontal = ("applicable_ticket_types", "applicable_addons")
+
+
+@admin.register(DiscountForCategory)
+class DiscountForCategoryAdmin(admin.ModelAdmin):
+    """Admin for category-wide percentage discounts."""
+
+    list_display = (
+        "name",
+        "conference",
+        "is_active",
+        "priority",
+        "percentage",
+        "apply_to_tickets",
+        "apply_to_addons",
+        "times_used",
+        "limit",
+    )
+    list_filter = ("conference", "is_active", "apply_to_tickets", "apply_to_addons")
+    search_fields = ("name",)

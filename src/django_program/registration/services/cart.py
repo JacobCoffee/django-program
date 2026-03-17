@@ -36,16 +36,19 @@ class LineItemSummary:
     unit_price: Decimal
     discount: Decimal
     line_total: Decimal
+    condition_discount: Decimal = Decimal("0.00")
+    condition_name: str = ""
 
 
 @dataclass
 class CartSummary:
-    """Full pricing summary of a cart including voucher discounts."""
+    """Full pricing summary of a cart including voucher and condition discounts."""
 
     items: list[LineItemSummary]
     subtotal: Decimal
     discount: Decimal
     total: Decimal
+    condition_discount: Decimal = Decimal("0.00")
 
 
 def get_or_create_cart(user: object, conference: object) -> Cart:
@@ -326,8 +329,20 @@ def get_summary(cart: Cart) -> CartSummary:
 
 
 def get_summary_from_items(cart: Cart, items: list[CartItem]) -> CartSummary:
-    """Compute pricing summary using a pre-fetched cart-item snapshot."""
+    """Compute pricing summary using a pre-fetched cart-item snapshot.
+
+    Condition-based discounts are applied first, then voucher discounts
+    are calculated on the post-condition price.
+    """
+    from django_program.registration.services.conditions import evaluate_for_cart  # noqa: PLC0415
+
     voucher = cart.voucher
+
+    # Phase 1: Apply condition-based discounts
+    condition_discounts = evaluate_for_cart(cart)
+    condition_discount_map: dict[int, tuple[Decimal, str]] = {
+        cd.cart_item_id: (cd.discount_amount, cd.condition_name) for cd in condition_discounts
+    }
 
     applicable_ticket_ids, applicable_addon_ids = _resolve_voucher_scope(voucher)
 
@@ -338,20 +353,43 @@ def get_summary_from_items(cart: Cart, items: list[CartItem]) -> CartSummary:
         applicable_addon_ids,
     )
 
-    total_discount = _apply_voucher_discounts(
-        voucher,
-        line_summaries,
-        applicable_line_totals,
-    )
+    # Apply condition discounts to line summaries and adjust applicable_line_totals
+    total_condition_discount = Decimal("0.00")
+    adjusted_applicable_line_totals: list[tuple[int, Decimal]] = []
 
     for summary in line_summaries:
-        summary.line_total = summary.line_total - summary.discount
+        cond_discount_info = condition_discount_map.get(summary.item_id)
+        if cond_discount_info is not None:
+            cond_amount, cond_name = cond_discount_info
+            cond_amount = min(cond_amount, summary.line_total)
+            summary.condition_discount = cond_amount
+            summary.condition_name = cond_name
+            total_condition_discount += cond_amount
+
+    # Rebuild applicable_line_totals with post-condition prices
+    for idx, _original_total in applicable_line_totals:
+        post_condition_total = line_summaries[idx].line_total - line_summaries[idx].condition_discount
+        if post_condition_total > Decimal("0.00"):
+            adjusted_applicable_line_totals.append((idx, post_condition_total))
+
+    # Phase 2: Apply voucher discounts on post-condition prices
+    total_voucher_discount = _apply_voucher_discounts(
+        voucher,
+        line_summaries,
+        adjusted_applicable_line_totals,
+    )
+
+    total_discount = total_condition_discount + total_voucher_discount
+
+    for summary in line_summaries:
+        summary.line_total = summary.line_total - summary.condition_discount - summary.discount
 
     return CartSummary(
         items=line_summaries,
         subtotal=subtotal,
         discount=total_discount,
         total=max(subtotal - total_discount, Decimal("0.00")),
+        condition_discount=total_condition_discount,
     )
 
 
