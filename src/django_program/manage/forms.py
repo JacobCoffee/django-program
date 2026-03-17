@@ -719,6 +719,7 @@ class BadgeTemplateForm(forms.ModelForm):
             "text_color",
             "accent_color",
             "logo",
+            "background_image",
         ]
         widgets = {
             "background_color": forms.TextInput(attrs={"type": "color"}),

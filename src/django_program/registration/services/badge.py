@@ -204,24 +204,90 @@ class BadgeGenerationService:
         if len(name_parts) > 1:
             first = name_parts[0]
             last = " ".join(name_parts[1:])
-            font_size = 30.0
+            font_size = 42.0
             for line, y_offset in [(first, 0), (last, 1)]:
                 font_size = self._pdf_centered(
-                    layout, line, "Helvetica-Bold", 30, 14, content_top - y_offset * (font_size + 4)
+                    layout, line, "Helvetica-Bold", 42, 18, content_top - y_offset * (font_size + 6)
                 )
-            content_top -= 2 * (font_size + 4) + 4 * mm
+            content_top -= 2 * (font_size + 6) + 4 * mm
         else:
-            font_size = self._pdf_centered(layout, display_name, "Helvetica-Bold", 30, 14, content_top)
-            content_top -= font_size + 6 * mm
+            font_size = self._pdf_centered(layout, display_name, "Helvetica-Bold", 42, 18, content_top)
+            content_top -= font_size + 8 * mm
 
         return content_top
+
+    def _pdf_draw_background(self, layout: _PDFLayout, template: BadgeTemplate) -> None:
+        """Draw background color and optional background image.
+
+        Args:
+            layout: PDF layout parameters.
+            template: Badge template with background settings.
+        """
+        from reportlab.lib.utils import ImageReader  # noqa: PLC0415
+
+        c = layout.canvas
+        c.setFillColorRGB(*_hex_to_reportlab(str(template.background_color)))  # type: ignore[attr-defined]
+        c.rect(0, 0, layout.width, layout.height, fill=1, stroke=0)  # type: ignore[attr-defined]
+
+        if template.background_image and template.background_image.name:
+            try:
+                bg_img = ImageReader(template.background_image.path)
+                c.drawImage(  # type: ignore[attr-defined]
+                    bg_img, 0, 0, width=layout.width, height=layout.height, preserveAspectRatio=True, anchor="c"
+                )
+            except FileNotFoundError, OSError:
+                pass
+
+    def _pdf_draw_header(self, layout: _PDFLayout, attendee: Attendee, template: BadgeTemplate) -> float:
+        """Draw the accent header bar with logo and conference name.
+
+        Args:
+            layout: PDF layout parameters.
+            attendee: The attendee (for conference name).
+            template: Badge template with logo and color settings.
+
+        Returns:
+            The y position below the header.
+        """
+        from reportlab.lib.utils import ImageReader  # noqa: PLC0415
+
+        mm = layout.mm_unit
+        c = layout.canvas
+        header_h = 22 * mm
+
+        # Only draw header bar if no custom background image
+        if not (template.background_image and template.background_image.name):
+            c.setFillColorRGB(*layout.accent_rgb)  # type: ignore[attr-defined]
+            c.rect(0, layout.height - header_h, layout.width, header_h, fill=1, stroke=0)  # type: ignore[attr-defined]
+
+        # Logo — left side of header
+        if template.logo and template.logo.name:
+            try:
+                logo_img = ImageReader(template.logo.path)
+                logo_h = 14 * mm
+                iw, ih = logo_img.getSize()
+                logo_w = logo_h * (iw / ih)
+                logo_x = layout.margin
+                logo_y = layout.height - header_h + (header_h - logo_h) / 2
+                c.drawImage(logo_img, logo_x, logo_y, width=logo_w, height=logo_h)  # type: ignore[attr-defined]
+            except FileNotFoundError, OSError:
+                pass
+
+        # Conference name — centered (or right of logo)
+        if template.show_conference_name:
+            c.setFillColorRGB(1, 1, 1)  # type: ignore[attr-defined]
+            conf_name = str(attendee.conference.name)
+            conf_y = layout.height - header_h + (header_h - 18) / 2
+            self._pdf_centered(layout, conf_name, "Helvetica-Bold", 18, 10, conf_y)
+
+        return layout.height - header_h
 
     def generate_badge_pdf(self, attendee: Attendee, template: BadgeTemplate) -> bytes:
         """Generate a conference-style portrait badge as PDF.
 
-        Layout (top to bottom): accent header with conference name,
-        large centered attendee name, company/email, ticket type,
-        QR code in bottom-right corner.
+        Fills the page with content: header with logo, huge centered name,
+        company/email, ticket type, and QR code. Supports custom background
+        images from a graphic designer.
 
         Args:
             attendee: The attendee to generate a badge for.
@@ -236,7 +302,6 @@ class BadgeGenerationService:
         width = template.width_mm * mm
         height = template.height_mm * mm
         margin = 6 * mm
-        header_height = 18 * mm
 
         accent_rgb = _hex_to_reportlab(str(template.accent_color))
         text_rgb = _hex_to_reportlab(str(template.text_color))
@@ -254,43 +319,14 @@ class BadgeGenerationService:
             text_rgb=text_rgb,
         )
 
-        # Background
-        c.setFillColorRGB(*_hex_to_reportlab(str(template.background_color)))
-        c.rect(0, 0, width, height, fill=1, stroke=0)
+        self._pdf_draw_background(layout, template)
+        header_bottom = self._pdf_draw_header(layout, attendee, template)
 
-        # Header bar
-        c.setFillColorRGB(*accent_rgb)
-        c.rect(0, height - header_height, width, header_height, fill=1, stroke=0)
+        ticket_label = self._get_ticket_type_label(attendee) if template.show_ticket_type else ""
+        header_bottom = self._pdf_draw_ticket_banner(layout, ticket_label, header_bottom)
 
-        if template.show_conference_name:
-            c.setFillColorRGB(1, 1, 1)
-            conf_y = height - header_height + (header_height - 16) / 2
-            self._pdf_centered(layout, str(attendee.conference.name), "Helvetica-Bold", 16, 10, conf_y)
-
-        # Name
-        content_top = height - header_height - 8 * mm
-        if template.show_name:
-            c.setFillColorRGB(*text_rgb)
-            content_top = self._pdf_draw_name(layout, attendee, content_top)
-
-        # Company
-        if template.show_company:
-            company = self._get_company(attendee)
-            if company:
-                c.setFillColorRGB(*text_rgb)
-                self._pdf_centered(layout, company, "Helvetica", 12, 8, content_top)
-                content_top -= 6 * mm
-
-        # Email
-        if template.show_email:
-            c.setFillColorRGB(*text_rgb)
-            self._pdf_centered(layout, str(attendee.user.email), "Helvetica", 10, 7, content_top)
-            content_top -= 5 * mm
-
-        # Ticket type
-        if template.show_ticket_type:
-            c.setFillColorRGB(*accent_rgb)
-            self._pdf_centered(layout, self._get_ticket_type_label(attendee), "Helvetica-Bold", 12, 8, content_top)
+        qr_zone_h = 28 * mm if template.show_qr_code else 8 * mm
+        self._pdf_draw_body(layout, attendee, template, ticket_label, header_bottom, margin + qr_zone_h)
 
         if template.show_qr_code:
             self._pdf_draw_qr(layout, attendee)
@@ -298,6 +334,89 @@ class BadgeGenerationService:
         c.showPage()
         c.save()
         return buf.getvalue()
+
+    def _pdf_draw_ticket_banner(self, layout: _PDFLayout, ticket_label: str, header_bottom: float) -> float:
+        """Draw a colored ticket-type banner below the header for special types.
+
+        Speaker, Sponsor, and other non-general ticket types get a prominent
+        banner. General Admission is shown inline with the body text instead.
+
+        Args:
+            layout: PDF layout parameters.
+            ticket_label: The ticket type label.
+            header_bottom: Y position of the bottom of the header.
+
+        Returns:
+            Updated header_bottom position.
+        """
+        if ticket_label and ticket_label != "General Admission":
+            mm = layout.mm_unit
+            c = layout.canvas
+            banner_h = 10 * mm
+            c.setFillColorRGB(*layout.accent_rgb)  # type: ignore[attr-defined]
+            c.rect(0, header_bottom - banner_h, layout.width, banner_h, fill=1, stroke=0)  # type: ignore[attr-defined]
+            c.setFillColorRGB(1, 1, 1)  # type: ignore[attr-defined]
+            banner_y = header_bottom - banner_h + 3 * mm
+            self._pdf_centered(layout, ticket_label.upper(), "Helvetica-Bold", 14, 10, banner_y)
+            return header_bottom - banner_h
+        return header_bottom
+
+    def _pdf_draw_body(  # noqa: PLR0913
+        self,
+        layout: _PDFLayout,
+        attendee: Attendee,
+        template: BadgeTemplate,
+        ticket_label: str,
+        header_bottom: float,
+        content_floor: float,
+    ) -> None:
+        """Draw the body content (name, company, email) vertically centered.
+
+        Args:
+            layout: PDF layout parameters.
+            attendee: The attendee.
+            template: Badge template.
+            ticket_label: Ticket type label (for inline general admission).
+            header_bottom: Top of available content zone.
+            content_floor: Bottom of available content zone.
+        """
+        c = layout.canvas
+        mm = layout.mm_unit
+
+        # Estimate content height for vertical centering
+        content_h = 0.0
+        if template.show_name:
+            content_h += 50
+        if template.show_company and self._get_company(attendee):
+            content_h += 24
+        if template.show_email:
+            content_h += 20
+        if ticket_label == "General Admission":
+            content_h += 20
+
+        zone_top = header_bottom - 4 * mm
+        zone_h = zone_top - content_floor
+        y = zone_top - max(0, (zone_h - content_h) / 2)
+
+        if template.show_name:
+            c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
+            y = self._pdf_draw_name(layout, attendee, y)
+
+        if template.show_company:
+            company = self._get_company(attendee)
+            if company:
+                c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
+                self._pdf_centered(layout, company, "Helvetica", 16, 10, y)
+                y -= 8 * mm
+
+        if template.show_email:
+            c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
+            self._pdf_centered(layout, str(attendee.user.email), "Helvetica", 13, 8, y)
+            y -= 7 * mm
+
+        if ticket_label == "General Admission" and template.show_ticket_type:
+            c.setFillColorRGB(*layout.accent_rgb)  # type: ignore[attr-defined]
+            self._pdf_centered(layout, ticket_label, "Helvetica-Bold", 14, 10, y)
 
     def _pdf_draw_qr(self, layout: _PDFLayout, attendee: Attendee) -> None:
         """Draw QR code with access code in the bottom-right corner.

@@ -47,8 +47,14 @@ class BadgeTemplate(models.Model):
     text_color = models.CharField(max_length=7, default="#000000")
     accent_color = models.CharField(max_length=7, default="#4338CA")
 
-    # Logo
+    # Branding
     logo = models.ImageField(upload_to="badges/logos/", blank=True, default="")
+    background_image = models.ImageField(
+        upload_to="badges/backgrounds/",
+        blank=True,
+        default="",
+        help_text="Custom background image from a designer. Overlaid text is rendered on top.",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
