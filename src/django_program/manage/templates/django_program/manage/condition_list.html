@@ -8,11 +8,11 @@
 {% endblock %}
 
 {% block page_actions %}
-<div class="dropdown">
-  <button class="btn btn-primary dropdown-toggle" type="button">Add Condition</button>
-  <div class="dropdown-menu">
+<div style="position:relative;display:inline-block">
+  <button class="btn btn-primary" onclick="var m=document.getElementById('cond-menu');m.style.display=m.style.display==='block'?'none':'block'" type="button">Add Condition &#9662;</button>
+  <div id="cond-menu" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);min-width:220px;z-index:50;padding:0.25rem 0">
     {% for ct in condition_types %}
-    <a href="{% url 'manage:condition-add' conference.slug ct.slug %}" class="dropdown-item">{{ ct.label }}</a>
+    <a href="{% url 'manage:condition-add' conference.slug ct.slug %}" style="display:block;padding:0.5rem 1rem;font-size:0.85rem;color:var(--color-text);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--color-primary-light)'" onmouseout="this.style.background='transparent'">{{ ct.label }}</a>
     {% endfor %}
   </div>
 </div>
@@ -30,17 +30,17 @@
       <th>Priority</th>
       <th>Status</th>
       <th>Usage</th>
-      <th>Actions</th>
+      <th></th>
     </tr>
   </thead>
   <tbody>
     {% for row in condition_rows %}
     <tr>
-      <td>{{ row.condition.name }}</td>
-      <td>{{ row.type_label }}</td>
+      <td><strong>{{ row.condition.name }}</strong></td>
+      <td><span class="badge badge--other">{{ row.type_label }}</span></td>
       <td>{{ row.discount }}</td>
-      <td>{{ row.scope }}</td>
-      <td>{{ row.condition.priority }}</td>
+      <td style="max-width:200px;font-size:0.82rem;color:var(--color-text-muted)">{{ row.scope }}</td>
+      <td class="mono">{{ row.condition.priority }}</td>
       <td>
         {% if row.condition.is_active %}
         <span class="badge badge--active">Active</span>
@@ -59,6 +59,14 @@
 {% else %}
 <div class="empty-state">
   <p>No conditions or discounts for this conference yet.</p>
+  <div style="position:relative;display:inline-block;margin-top:0.5rem">
+    <button class="btn btn-primary" onclick="var m=document.getElementById('cond-menu-empty');m.style.display=m.style.display==='block'?'none':'block'" type="button">Add First Condition &#9662;</button>
+    <div id="cond-menu-empty" style="display:none;position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);min-width:220px;z-index:50;padding:0.25rem 0">
+      {% for ct in condition_types %}
+      <a href="{% url 'manage:condition-add' conference.slug ct.slug %}" style="display:block;padding:0.5rem 1rem;font-size:0.85rem;color:var(--color-text);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--color-primary-light)'" onmouseout="this.style.background='transparent'">{{ ct.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

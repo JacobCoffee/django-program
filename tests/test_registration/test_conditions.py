@@ -772,9 +772,9 @@ class TestConditionEvaluator:
 
         results = evaluate_for_cart(cart)
         assert len(results) == 2
-        amounts = {r.discount_amount for r in results}
-        assert Decimal("10.00") in amounts  # 10% of 100
-        assert Decimal("10.00") in amounts  # 10% of (50 * 2)
+        sorted_discounts = sorted(results, key=lambda r: r.cart_item_id)
+        assert sorted_discounts[0].discount_amount == Decimal("10.00")  # 10% of 100
+        assert sorted_discounts[1].discount_amount == Decimal("10.00")  # 10% of (50 * 2)
 
     @pytest.mark.django_db
     def test_get_eligible_discounts(self, conference, user):

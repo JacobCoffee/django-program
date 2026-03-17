@@ -13,6 +13,9 @@ from typing import TYPE_CHECKING
 
 from django.db import models
 
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
 from django_program.registration.conditions import (
     ConditionBase,
     DiscountForCategory,
@@ -24,9 +27,6 @@ from django_program.registration.conditions import (
 )
 from django_program.registration.models import AddOn, Cart, CartItem, TicketType
 
-if TYPE_CHECKING:
-    from django.db.models import QuerySet
-
 
 @dataclass
 class CartItemDiscount:
@@ -37,6 +37,8 @@ class CartItemDiscount:
     condition_type: str
     discount_amount: Decimal
     original_price: Decimal
+    condition_pk: int = 0
+    condition_model: str = ""
 
 
 # All concrete condition types that use DiscountEffect (ConditionBase + DiscountEffect).
@@ -139,14 +141,11 @@ def _apply_condition_to_items(
                 condition_type=type(condition).__name__,
                 discount_amount=discount_amount,
                 original_price=item.line_total,
+                condition_pk=condition.pk,
+                condition_model=type(condition).__name__,
             )
         )
         discounted_item_ids.add(item.pk)
-
-        if hasattr(condition, "times_used") and hasattr(condition, "limit"):
-            type(condition).objects.filter(pk=condition.pk).update(
-                times_used=models.F("times_used") + 1,
-            )
 
 
 def evaluate_for_items(
@@ -197,6 +196,35 @@ def evaluate_for_cart(cart: Cart) -> list[CartItemDiscount]:
     """
     items = list(cart.items.select_related("ticket_type", "addon"))
     return evaluate_for_items(items, cart.user, cart.conference)
+
+
+def commit_condition_usage(discounts: list[CartItemDiscount]) -> None:
+    """Increment times_used for all stock-limited conditions that were applied.
+
+    Call this at checkout time (not during cart summary viewing) to persist
+    usage counts. Evaluation is side-effect free; this is the commit step.
+
+    Args:
+        discounts: The discount results from ``evaluate_for_items``.
+    """
+    model_map: dict[str, type[ConditionBase]] = {
+        cls.__name__: cls for cls in [*_DISCOUNT_EFFECT_TYPES, DiscountForCategory]
+    }
+    seen_pks: set[tuple[str, int]] = set()
+
+    for d in discounts:
+        if not d.condition_pk or not d.condition_model:
+            continue
+        key = (d.condition_model, d.condition_pk)
+        if key in seen_pks:
+            continue
+        seen_pks.add(key)
+
+        model_cls = model_map.get(d.condition_model)
+        if model_cls and hasattr(model_cls, "times_used"):
+            model_cls.objects.filter(pk=d.condition_pk).update(
+                times_used=models.F("times_used") + 1,
+            )
 
 
 def get_eligible_discounts(user: object, conference: object) -> list[ConditionBase]:

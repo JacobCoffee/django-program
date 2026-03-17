@@ -44,11 +44,11 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import Group
-from django.db import models
-from django.utils import timezone
 
 if TYPE_CHECKING:
     from django.conf import settings
+from django.db import models
+from django.utils import timezone
 
 
 class ConditionBase(models.Model):
