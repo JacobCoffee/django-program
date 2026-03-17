@@ -790,7 +790,9 @@ class Command(BaseCommand):
 
         now = timezone.now()
 
-        # Early bird: 20% off all tickets, first 50 uses
+        # Early bird: 20% off Individual and Student tickets, first 50 uses
+        individual = ticket_types.get("individual")
+        student = ticket_types.get("student")
         early = TimeOrStockLimitCondition.objects.create(
             conference=conference,
             name="Early Bird 20% Off",
@@ -801,7 +803,11 @@ class Command(BaseCommand):
             end_time=now + timedelta(days=60),
             limit=50,
         )
-        self.stdout.write(self.style.SUCCESS(f"  Created condition: {early.name}"))
+        if individual:
+            early.applicable_ticket_types.add(individual)
+        if student:
+            early.applicable_ticket_types.add(student)
+        self.stdout.write(self.style.SUCCESS(f"  Created condition: {early.name} (Individual, Student)"))
 
         # Speaker comp: 100% off for speakers
         speaker_comp = SpeakerCondition.objects.create(
