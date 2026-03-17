@@ -34,6 +34,7 @@ repos:
     rev: v0.0.1
     hooks:
       - id: ty
+        additional_dependencies: ["ty>=0.0.1a27"]
   - repo: https://github.com/sphinx-contrib/sphinx-lint
     rev: v1.0.2
     hooks:

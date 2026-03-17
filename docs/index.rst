@@ -41,6 +41,12 @@ Built for PyCon US but designed to work for any conference that uses Django.
 
       Speaker and schedule sync architecture, schema regeneration, and the pretalx-client package.
 
+   .. grid-item-card:: Badge Generation
+      :link: badge-generation
+      :link-type: doc
+
+      Print-ready attendee badges with QR codes for check-in scanning.
+
    .. grid-item-card:: Programs & Activities
       :link: programs-activities
       :link-type: doc
@@ -115,6 +121,7 @@ Quick Start
    getting-started/index
    configuration
    registration-flow
+   badge-generation
    programs-activities
    management-dashboard
 

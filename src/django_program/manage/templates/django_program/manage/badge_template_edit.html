@@ -1,0 +1,388 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}{% if is_create %}Add Badge Template{% else %}Edit Badge Template{% endif %}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:badge-list' conference.slug %}">Badges</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:badge-template-list' conference.slug %}">Templates</a>
+  <span class="breadcrumb-separator"></span>
+  <span>{% if is_create %}Add{% else %}Edit{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>{% if is_create %}Add Badge Template{% else %}Edit: {{ badge_template.name }}{% endif %}</h1>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .badge-editor-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  @media (max-width: 960px) {
+    .badge-editor-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .badge-preview-panel {
+    position: sticky;
+    top: calc(var(--header-height) + 2rem);
+  }
+
+  .badge-preview-card {
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 1.5rem;
+    background: var(--color-bg);
+  }
+
+  .badge-preview-card h3 {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: 1rem;
+  }
+
+  .badge-mockup {
+    border-radius: 6px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+    overflow: hidden;
+    position: relative;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px;
+    transition: all 0.3s ease;
+  }
+
+  .badge-mockup-accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+  }
+
+  .badge-mockup-conf {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+    margin-top: 6px;
+  }
+
+  .badge-mockup-name {
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 4px 0 2px;
+  }
+
+  .badge-mockup-detail {
+    font-size: 0.55rem;
+    opacity: 0.6;
+    margin: 1px 0;
+  }
+
+  .badge-mockup-qr {
+    width: 36px;
+    height: 36px;
+    border-radius: 3px;
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(5, 1fr);
+    gap: 1px;
+    padding: 3px;
+    opacity: 0.4;
+  }
+
+  .badge-mockup-qr span {
+    border-radius: 1px;
+  }
+
+  .badge-mockup-ticket {
+    font-size: 0.52rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-top: 4px;
+  }
+
+  .form-section-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin: 1.5rem 0 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .form-section-title:first-child {
+    margin-top: 0;
+  }
+
+  .color-field-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .color-field-row .form-group {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .color-field-row input[type="color"] {
+    width: 100%;
+    height: 38px;
+    padding: 2px;
+    cursor: pointer;
+  }
+
+  .checkbox-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .checkbox-row .form-group {
+    margin-bottom: 0.25rem;
+  }
+
+  .checkbox-row .form-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="badge-editor-layout">
+  <div class="form-container" style="max-width:none">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="alert" style="background:var(--color-danger-bg);border:1px solid var(--color-danger);padding:0.75rem 1rem;border-radius:var(--radius-sm);margin-bottom:1rem">
+        {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="form-section-title">Identity</div>
+      {% for field in form %}
+        {% if field.name == "name" or field.name == "slug" %}
+        <div class="form-group">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+          {% if field.errors %}<ul class="errorlist">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+
+      <div class="form-group">
+        <label for="{{ form.is_default.id_for_label }}">
+          {{ form.is_default }} {{ form.is_default.label }}
+        </label>
+        {% if form.is_default.help_text %}<span class="helptext">{{ form.is_default.help_text }}</span>{% endif %}
+      </div>
+
+      <div class="form-section-title">Dimensions</div>
+      <div style="display:flex;gap:1rem">
+        <div class="form-group" style="flex:1">
+          <label for="{{ form.width_mm.id_for_label }}">{{ form.width_mm.label }}</label>
+          {{ form.width_mm }}
+          {% if form.width_mm.help_text %}<span class="helptext">{{ form.width_mm.help_text }}</span>{% endif %}
+          {% if form.width_mm.errors %}<ul class="errorlist">{% for error in form.width_mm.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="form-group" style="flex:1">
+          <label for="{{ form.height_mm.id_for_label }}">{{ form.height_mm.label }}</label>
+          {{ form.height_mm }}
+          {% if form.height_mm.help_text %}<span class="helptext">{{ form.height_mm.help_text }}</span>{% endif %}
+          {% if form.height_mm.errors %}<ul class="errorlist">{% for error in form.height_mm.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-section-title">Visible Fields</div>
+      <div class="checkbox-row">
+        {% for field in form %}
+          {% if field.name|slice:":5" == "show_" %}
+          <div class="form-group">
+            <label for="{{ field.id_for_label }}">
+              {{ field }} {{ field.label }}
+            </label>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="form-section-title">Colors</div>
+      <div class="color-field-row">
+        <div class="form-group">
+          <label for="{{ form.background_color.id_for_label }}">{{ form.background_color.label }}</label>
+          {{ form.background_color }}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.text_color.id_for_label }}">{{ form.text_color.label }}</label>
+          {{ form.text_color }}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.accent_color.id_for_label }}">{{ form.accent_color.label }}</label>
+          {{ form.accent_color }}
+        </div>
+      </div>
+
+      <div class="form-section-title">Layout</div>
+      <div class="form-group">
+        <label for="{{ form.ticket_banner_position.id_for_label }}">Ticket Type Banner Position</label>
+        {{ form.ticket_banner_position }}
+        <span class="helptext">Where to place the ticket type banner (Speaker, Sponsor, etc.) on the badge.</span>
+      </div>
+
+      <div class="form-section-title">Typography</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div class="form-group">
+          <label for="{{ form.font_name.id_for_label }}">Name Font</label>
+          {{ form.font_name }}
+          <span class="helptext">Font file for attendee name (e.g. "Roboto-Bold.ttf"). Blank = Helvetica.</span>
+        </div>
+        <div class="form-group">
+          <label for="{{ form.font_body.id_for_label }}">Body Font</label>
+          {{ form.font_body }}
+          <span class="helptext">Font file for company/email (e.g. "Roboto-Regular.ttf"). Blank = Helvetica.</span>
+        </div>
+      </div>
+
+      <div class="form-section-title">Branding</div>
+      <div class="form-group">
+        <label for="{{ form.logo.id_for_label }}">{{ form.logo.label }}</label>
+        {{ form.logo }}
+        {% if form.logo.help_text %}<span class="helptext">{{ form.logo.help_text }}</span>{% endif %}
+        {% if form.logo.errors %}<ul class="errorlist">{% for error in form.logo.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+      <div class="form-group">
+        <label for="{{ form.background_image.id_for_label }}">Custom Background</label>
+        {{ form.background_image }}
+        <span class="helptext">Upload a custom background from your graphic designer. Text and QR code will be overlaid on top.</span>
+        {% if form.background_image.errors %}<ul class="errorlist">{% for error in form.background_image.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{% if is_create %}Create Template{% else %}Save Changes{% endif %}</button>
+        <a href="{% url 'manage:badge-template-list' conference.slug %}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="badge-preview-panel">
+    <div class="badge-preview-card">
+      <h3>Live Preview</h3>
+      <div id="badge-preview-mockup" class="badge-mockup" style="width:250px;height:160px;background:#FFFFFF;color:#000000">
+        <div class="badge-mockup-accent" style="background:#4338CA"></div>
+        <div>
+          <div class="badge-mockup-conf" id="preview-conf">{{ conference.name }}</div>
+          <div class="badge-mockup-name" id="preview-name">Jane Doe</div>
+          <div class="badge-mockup-detail" id="preview-email">jane@example.com</div>
+          <div class="badge-mockup-detail" id="preview-company">Acme Corp</div>
+          <div class="badge-mockup-ticket" id="preview-ticket" style="background:#4338CA;color:#FFFFFF">General Admission</div>
+        </div>
+        <div class="badge-mockup-qr" id="preview-qr" style="background:rgba(0,0,0,0.06)">
+          <span style="background:currentColor"></span><span></span><span style="background:currentColor"></span><span style="background:currentColor"></span><span></span>
+          <span></span><span style="background:currentColor"></span><span></span><span></span><span style="background:currentColor"></span>
+          <span style="background:currentColor"></span><span></span><span style="background:currentColor"></span><span></span><span style="background:currentColor"></span>
+          <span></span><span style="background:currentColor"></span><span style="background:currentColor"></span><span style="background:currentColor"></span><span></span>
+          <span style="background:currentColor"></span><span></span><span></span><span style="background:currentColor"></span><span style="background:currentColor"></span>
+        </div>
+      </div>
+      <p style="font-size:0.72rem;color:var(--color-text-muted);margin-top:0.75rem;text-align:center">Approximate representation. Actual output may vary.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var mockup = document.getElementById('badge-preview-mockup');
+  var accent = mockup.querySelector('.badge-mockup-accent');
+  var confEl = document.getElementById('preview-conf');
+  var nameEl = document.getElementById('preview-name');
+  var emailEl = document.getElementById('preview-email');
+  var companyEl = document.getElementById('preview-company');
+  var ticketEl = document.getElementById('preview-ticket');
+  var qrEl = document.getElementById('preview-qr');
+
+  function getField(name) {
+    return document.querySelector('[name="' + name + '"]');
+  }
+
+  function update() {
+    var bg = getField('background_color');
+    var txt = getField('text_color');
+    var acc = getField('accent_color');
+
+    if (bg) mockup.style.background = bg.value;
+    if (txt) mockup.style.color = txt.value;
+    if (acc) {
+      accent.style.background = acc.value;
+      ticketEl.style.background = acc.value;
+      ticketEl.style.color = acc ? acc.value : '#fff';
+    }
+
+    var showName = getField('show_name');
+    var showEmail = getField('show_email');
+    var showCompany = getField('show_company');
+    var showTicket = getField('show_ticket_type');
+    var showQr = getField('show_qr_code');
+    var showConf = getField('show_conference_name');
+
+    nameEl.style.display = (showName && showName.checked) ? '' : 'none';
+    emailEl.style.display = (showEmail && showEmail.checked) ? '' : 'none';
+    companyEl.style.display = (showCompany && showCompany.checked) ? '' : 'none';
+    ticketEl.style.display = (showTicket && showTicket.checked) ? '' : 'none';
+    qrEl.style.display = (showQr && showQr.checked) ? '' : 'none';
+    confEl.style.display = (showConf && showConf.checked) ? '' : 'none';
+
+    var w = getField('width_mm');
+    var h = getField('height_mm');
+    if (w && h) {
+      var wVal = parseInt(w.value, 10) || 86;
+      var hVal = parseInt(h.value, 10) || 54;
+      var scale = Math.min(250 / wVal, 200 / hVal);
+      mockup.style.width = Math.round(wVal * scale) + 'px';
+      mockup.style.height = Math.round(hVal * scale) + 'px';
+    }
+  }
+
+  var inputs = document.querySelectorAll('.form-container input, .form-container select');
+  for (var i = 0; i < inputs.length; i++) {
+    inputs[i].addEventListener('input', update);
+    inputs[i].addEventListener('change', update);
+  }
+
+  update();
+})();
+</script>
+{% endblock %}

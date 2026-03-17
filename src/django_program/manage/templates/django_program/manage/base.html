@@ -1102,6 +1102,11 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v4M8 11v4M1 8h4M11 8h4M3.05 3.05l2.83 2.83M10.12 10.12l2.83 2.83M12.95 3.05l-2.83 2.83M5.88 10.12l-2.83 2.83"/></svg></span> Conditions
             </a>
           </li>
+          <li>
+            <a href="{% url 'manage:badge-list' conference.slug %}" class="{% if active_nav == 'badges' %}active{% endif %}">
+              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="7" cy="7" r="1.5"/><path d="M9.5 10V6.5h1"/><path d="M12 10V8.5"/></svg></span> Badges
+            </a>
+          </li>
         </ul>
       </div>
       <div class="sidebar-section">

@@ -15,6 +15,7 @@ from django.utils import timezone
 from django_program.conference.models import Conference, Section
 from django_program.config_loader import load_conference_config
 from django_program.programs.models import Activity, TravelGrant
+from django_program.registration.badge import BadgeTemplate
 from django_program.registration.conditions import (
     DiscountForCategory,
     DiscountForProduct,
@@ -550,6 +551,9 @@ class Command(BaseCommand):
         if demo_users:
             self._seed_credits(conference, demo_users)
 
+        # -- Badge Templates --
+        self._seed_badge_templates(conference)
+
         # -- Activities & Travel Grants --
         self._seed_activities(conference)
         if demo_users:
@@ -755,6 +759,7 @@ class Command(BaseCommand):
             total=Decimal(0),
             billing_name="Carol Chen",
             billing_email="carol@example.com",
+            billing_company="Python Software Foundation",
             reference=f"ORD-{self._generate_voucher_code(length=6)}",
         )
         speaker = TicketType.objects.filter(conference=conference, slug="speaker").first()
@@ -933,6 +938,35 @@ class Command(BaseCommand):
             note="Refund from cancelled tutorial add-on",
         )
         self.stdout.write(self.style.SUCCESS(f"  Created $25 credit for {alice.username}"))
+
+    def _seed_badge_templates(self, conference: Conference) -> None:
+        """Create a default badge template for the conference.
+
+        Args:
+            conference: The conference to create a badge template for.
+        """
+        if BadgeTemplate.objects.filter(conference=conference).exists():
+            self.stdout.write(self.style.WARNING("  Badge templates already exist, skipping."))
+            return
+
+        BadgeTemplate.objects.create(
+            conference=conference,
+            name="Default Badge",
+            slug="default",
+            is_default=True,
+            width_mm=102,
+            height_mm=152,
+            show_name=True,
+            show_email=True,
+            show_company=True,
+            show_ticket_type=True,
+            show_qr_code=True,
+            show_conference_name=True,
+            background_color="#FFFFFF",
+            text_color="#000000",
+            accent_color="#4338CA",
+        )
+        self.stdout.write(self.style.SUCCESS("  Created default badge template"))
 
     def _seed_activities(self, conference: Conference) -> None:
         """Create sample activities for the conference.

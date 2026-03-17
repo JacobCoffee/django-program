@@ -3,6 +3,7 @@
 from django.contrib import admin
 from django.http import HttpRequest  # noqa: TC002
 
+from django_program.registration.badge import Badge, BadgeTemplate
 from django_program.registration.conditions import (
     DiscountForCategory,
     DiscountForProduct,
@@ -335,3 +336,35 @@ class DiscountForCategoryAdmin(admin.ModelAdmin):
     )
     list_filter = ("conference", "is_active", "apply_to_tickets", "apply_to_addons")
     search_fields = ("name",)
+
+
+# -- Badge admin --------------------------------------------------------------
+
+
+@admin.register(BadgeTemplate)
+class BadgeTemplateAdmin(admin.ModelAdmin):
+    """Admin interface for managing badge layout templates."""
+
+    list_display = ("name", "conference", "is_default", "width_mm", "height_mm")
+    list_filter = ("conference", "is_default")
+    search_fields = ("name",)
+    prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(Badge)
+class BadgeAdmin(admin.ModelAdmin):
+    """Read-only admin for viewing generated badges."""
+
+    list_display = ("attendee", "format", "generated_at", "created_at")
+    list_filter = ("format", "generated_at")
+    search_fields = ("attendee__user__username", "attendee__user__email", "attendee__access_code")
+    readonly_fields = ("attendee", "template", "format", "file", "generated_at")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: Badge | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: Badge | None = None) -> bool:  # noqa: ARG002, D102
+        return False

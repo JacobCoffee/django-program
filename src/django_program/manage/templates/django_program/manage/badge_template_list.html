@@ -1,0 +1,121 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Badge Templates{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:badge-list' conference.slug %}">Badges</a>
+  <span class="breadcrumb-separator"></span>
+  <span>Templates</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Badge Templates</h1>
+<p>Design templates for attendee badges &middot; {{ badge_count }} badge{{ badge_count|pluralize }} generated</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:badge-template-add' conference.slug %}" class="btn btn-primary">Add Template</a>
+<a href="{% url 'manage:badge-list' conference.slug %}" class="btn btn-secondary">View Badges</a>
+{% endblock %}
+
+{% block content %}
+{% if badge_templates %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Template</th>
+      <th>Size</th>
+      <th>Fields</th>
+      <th>Colors</th>
+      <th>Badges</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for tmpl in badge_templates %}
+    <tr>
+      <td>
+        <strong>{{ tmpl.name }}</strong>
+        {% if tmpl.is_default %}<span class="badge badge--active" style="margin-left:0.35rem">Default</span>{% endif %}
+        <br><span class="mono" style="font-size:0.78rem;color:var(--color-text-muted)">{{ tmpl.slug }}</span>
+      </td>
+      <td style="white-space:nowrap">{{ tmpl.width_mm }}&times;{{ tmpl.height_mm }}mm</td>
+      <td style="font-size:0.82rem;color:var(--color-text-secondary)">
+        {% if tmpl.show_name %}Name{% endif %}{% if tmpl.show_email %}{% if tmpl.show_name %}, {% endif %}Email{% endif %}{% if tmpl.show_company %}{% if tmpl.show_name or tmpl.show_email %}, {% endif %}Company{% endif %}{% if tmpl.show_ticket_type %}{% if tmpl.show_name or tmpl.show_email or tmpl.show_company %}, {% endif %}Ticket{% endif %}{% if tmpl.show_qr_code %}{% if tmpl.show_name or tmpl.show_email or tmpl.show_company or tmpl.show_ticket_type %}, {% endif %}QR{% endif %}
+      </td>
+      <td>
+        <span style="display:inline-flex;align-items:center;gap:0.3rem">
+          <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid var(--color-border);background:{{ tmpl.background_color }}" title="Background: {{ tmpl.background_color }}"></span>
+          <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid var(--color-border);background:{{ tmpl.text_color }}" title="Text: {{ tmpl.text_color }}"></span>
+          <span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid var(--color-border);background:{{ tmpl.accent_color }}" title="Accent: {{ tmpl.accent_color }}"></span>
+        </span>
+      </td>
+      <td class="mono">{{ tmpl.badge_count }}</td>
+      <td>
+        {% if tmpl.is_default %}
+        <span class="badge badge--active">Default</span>
+        {% else %}
+        <span class="badge badge--inactive">Custom</span>
+        {% endif %}
+      </td>
+      <td style="white-space:nowrap">
+        <a href="{% url 'manage:badge-template-edit' conference.slug tmpl.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+        <a href="{% url 'manage:badge-template-preview' conference.slug tmpl.pk %}" class="btn btn-sm btn-secondary" target="_blank">Preview</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No badge templates for this conference yet.</p>
+  <p><a href="{% url 'manage:badge-template-add' conference.slug %}" class="btn btn-primary">Create First Template</a></p>
+</div>
+{% endif %}
+
+{% if badge_templates %}
+<div style="margin-top:2.5rem">
+  <h3 class="section-heading">Bulk Generate Badges</h3>
+  <div class="card card--static" style="margin-top:0.75rem">
+    <div class="card-body">
+      <form method="post" action="{% url 'manage:badge-bulk-generate' conference.slug %}">
+        {% csrf_token %}
+        <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:0.3rem">Template</label>
+            <select name="template_pk" style="padding:0.45rem 0.75rem;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:0.875rem;font-family:var(--font-sans)">
+              <option value="">Default template</option>
+              {% for tmpl in badge_templates %}
+              <option value="{{ tmpl.pk }}">{{ tmpl.name }}{% if tmpl.is_default %} (default){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:0.3rem">Format</label>
+            <select name="format" style="padding:0.45rem 0.75rem;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:0.875rem;font-family:var(--font-sans)">
+              <option value="pdf">PDF</option>
+              <option value="png">PNG</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:0.3rem">Ticket Type</label>
+            <select name="ticket_type" style="padding:0.45rem 0.75rem;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:0.875rem;font-family:var(--font-sans)">
+              <option value="">All ticket types</option>
+              {% for tt in ticket_types %}
+              <option value="{{ tt.pk }}">{{ tt.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary" onclick="return confirm('This will generate badges for all matching attendees. Continue?')">Generate Badges</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -14,6 +14,7 @@ from django.core.validators import RegexValidator
 from django_program.conference.models import Conference, Section
 from django_program.pretalx.models import Room, ScheduleSlot, Talk
 from django_program.programs.models import Activity, TravelGrant, TravelGrantMessage
+from django_program.registration.badge import BadgeTemplate
 from django_program.registration.conditions import (
     DiscountForCategory,
     DiscountForProduct,
@@ -690,4 +691,41 @@ class DiscountForCategoryForm(forms.ModelForm):
                 format="%Y-%m-%dT%H:%M",
             ),
             "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class BadgeTemplateForm(forms.ModelForm):
+    """Form for creating and editing badge templates.
+
+    Provides color input widgets for the color fields and a file input
+    for the optional logo upload.
+    """
+
+    class Meta:
+        model = BadgeTemplate
+        fields = [
+            "name",
+            "slug",
+            "is_default",
+            "width_mm",
+            "height_mm",
+            "show_name",
+            "show_email",
+            "show_company",
+            "show_ticket_type",
+            "show_qr_code",
+            "show_conference_name",
+            "ticket_banner_position",
+            "font_name",
+            "font_body",
+            "background_color",
+            "text_color",
+            "accent_color",
+            "logo",
+            "background_image",
+        ]
+        widgets = {
+            "background_color": forms.TextInput(attrs={"type": "color"}),
+            "text_color": forms.TextInput(attrs={"type": "color"}),
+            "accent_color": forms.TextInput(attrs={"type": "color"}),
         }
