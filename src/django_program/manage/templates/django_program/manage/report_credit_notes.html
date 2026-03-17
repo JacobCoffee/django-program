@@ -1,0 +1,100 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Credit Notes{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Credit Notes
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Credit Notes</h1>
+<p>Store credits and refund balances for {{ conference.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:report-credit-export' conference.slug %}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">{{ credit_summary.count }}</div>
+    <div class="stat-card-label">Total Credits</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ credit_summary.total_issued }}</div>
+    <div class="stat-card-label">Total Issued</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ credit_summary.total_outstanding }}</div>
+    <div class="stat-card-label">Outstanding</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ credit_summary.total_applied }}</div>
+    <div class="stat-card-label">Applied</div>
+  </div>
+</div>
+
+{% if credits %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>Email</th>
+      <th style="text-align: right;">Amount</th>
+      <th style="text-align: right;">Remaining</th>
+      <th>Source Order</th>
+      <th>Applied To</th>
+      <th>Status</th>
+      <th>Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for credit in credits %}
+    <tr>
+      <td>{{ credit.user.get_full_name|default:credit.user.username }}</td>
+      <td>{{ credit.user.email|default:"--" }}</td>
+      <td style="text-align: right;" class="mono">${{ credit.amount }}</td>
+      <td style="text-align: right;" class="mono">${{ credit.remaining_amount }}</td>
+      <td>
+        {% if credit.source_order %}
+        <span class="mono" style="font-size: 0.82rem;">{{ credit.source_order.reference }}</span>
+        {% else %}
+        <span style="color: var(--color-text-muted);">--</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if credit.applied_to_order %}
+        <span class="mono" style="font-size: 0.82rem;">{{ credit.applied_to_order.reference }}</span>
+        {% else %}
+        <span style="color: var(--color-text-muted);">--</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if credit.status == "available" %}
+        <span class="badge badge--active">Available</span>
+        {% elif credit.status == "applied" %}
+        <span class="badge badge--other">Applied</span>
+        {% elif credit.status == "expired" %}
+        <span class="badge badge--inactive">Expired</span>
+        {% endif %}
+      </td>
+      <td style="font-size: 0.82rem;">{{ credit.created_at|date:"M j, Y" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No credit notes found for this conference.</p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -6,11 +6,13 @@ current conference and gated by report-level permissions.
 """
 
 import csv
+import datetime
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views import View
 from django.views.generic import ListView, TemplateView
 
@@ -19,14 +21,21 @@ from django_program.manage.reports import (
     get_addon_inventory,
     get_attendee_manifest,
     get_attendee_summary,
+    get_credit_notes,
+    get_credit_summary,
     get_discount_conditions,
     get_discount_summary,
+    get_reconciliation,
+    get_registration_flow,
+    get_sales_by_date,
+    get_speaker_registrations,
     get_ticket_inventory,
     get_voucher_summary,
     get_voucher_usage,
 )
 from django_program.manage.views import _safe_csv_cell
-from django_program.registration.models import TicketType
+from django_program.pretalx.models import Speaker
+from django_program.registration.models import Order, Payment, TicketType
 
 _REPORTS_GROUP_NAME = "Program: Reports"
 
@@ -117,6 +126,12 @@ class ReportsDashboardView(ReportPermissionMixin, TemplateView):
         context["ticket_types"] = get_ticket_inventory(conference)
         context["voucher_summary"] = get_voucher_summary(conference)
         context["discount_summary"] = get_discount_summary(conference)
+        context["credit_summary"] = get_credit_summary(conference)
+        context["speaker_count"] = Speaker.objects.filter(conference=conference).count()
+
+        thirty_days_ago = timezone.now().date() - datetime.timedelta(days=30)
+        recent_sales = get_sales_by_date(conference, date_from=thirty_days_ago)
+        context["recent_sales_total"] = sum(row["revenue"] for row in recent_sales)
 
         return context
 
@@ -448,5 +463,329 @@ class DiscountEffectivenessExportView(ReportPermissionMixin, View):
                         _safe_csv_cell("; ".join(str(p) for p in cond.get("applicable_products", []))),
                     ]
                 )
+
+        return response
+
+
+def _parse_date_param(value: str | None) -> datetime.date | None:
+    """Parse an ISO date string from a GET parameter.
+
+    Args:
+        value: A date string in YYYY-MM-DD format, or None/empty.
+
+    Returns:
+        A ``datetime.date`` instance, or ``None`` if parsing fails.
+    """
+    if not value:
+        return None
+    try:
+        return datetime.date.fromisoformat(value)
+    except ValueError, TypeError:
+        return None
+
+
+class SalesByDateView(ReportPermissionMixin, TemplateView):
+    """Daily sales aggregation report with date filtering."""
+
+    template_name = "django_program/manage/report_sales_by_date.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Build context with daily sales data and summary totals.
+
+        Args:
+            **kwargs: Additional context data.
+
+        Returns:
+            Template context with sales rows and aggregate totals.
+        """
+        context: dict[str, object] = super().get_context_data(**kwargs)
+        date_from = _parse_date_param(self.request.GET.get("date_from"))
+        date_until = _parse_date_param(self.request.GET.get("date_until"))
+        rows = get_sales_by_date(self.conference, date_from=date_from, date_until=date_until)
+
+        context["sales_rows"] = rows
+        context["total_orders"] = sum(r["count"] for r in rows)
+        context["total_revenue"] = sum(r["revenue"] for r in rows)
+        context["current_date_from"] = self.request.GET.get("date_from", "")
+        context["current_date_until"] = self.request.GET.get("date_until", "")
+        return context
+
+
+class SalesByDateExportView(ReportPermissionMixin, View):
+    """CSV export of daily sales data."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Return a CSV download of daily sales.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments.
+
+        Returns:
+            An HttpResponse with CSV content.
+        """
+        date_from = _parse_date_param(request.GET.get("date_from"))
+        date_until = _parse_date_param(request.GET.get("date_until"))
+        rows = get_sales_by_date(self.conference, date_from=date_from, date_until=date_until)
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{self.conference.slug}-sales-by-date.csv"'
+        writer = csv.writer(response)
+        writer.writerow(["Date", "Orders", "Revenue"])
+
+        for row in rows:
+            writer.writerow(
+                [
+                    row["date"].isoformat(),
+                    row["count"],
+                    str(row["revenue"]),
+                ]
+            )
+
+        return response
+
+
+class CreditNotesView(ReportPermissionMixin, TemplateView):
+    """Credit notes listing with summary statistics."""
+
+    template_name = "django_program/manage/report_credit_notes.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Build context with credit records and summary stats.
+
+        Args:
+            **kwargs: Additional context data.
+
+        Returns:
+            Template context with credits queryset and summary.
+        """
+        context: dict[str, object] = super().get_context_data(**kwargs)
+        context["credits"] = get_credit_notes(self.conference)
+        context["credit_summary"] = get_credit_summary(self.conference)
+        return context
+
+
+class CreditNotesExportView(ReportPermissionMixin, View):
+    """CSV export of credit notes."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Return a CSV download of credit notes.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments.
+
+        Returns:
+            An HttpResponse with CSV content.
+        """
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{self.conference.slug}-credit-notes.csv"'
+        writer = csv.writer(response)
+        writer.writerow(
+            [
+                "User",
+                "Email",
+                "Amount",
+                "Remaining",
+                "Status",
+                "Source Order",
+                "Applied To Order",
+                "Note",
+                "Created",
+            ]
+        )
+
+        for credit in get_credit_notes(self.conference):
+            writer.writerow(
+                [
+                    _safe_csv_cell(credit.user.get_full_name() or credit.user.username),
+                    _safe_csv_cell(credit.user.email),
+                    str(credit.amount),
+                    str(credit.remaining_amount),
+                    credit.get_status_display(),
+                    credit.source_order.reference if credit.source_order else "",
+                    credit.applied_to_order.reference if credit.applied_to_order else "",
+                    _safe_csv_cell(credit.note),
+                    credit.created_at.isoformat(),
+                ]
+            )
+
+        return response
+
+
+class SpeakerRegistrationView(ReportPermissionMixin, TemplateView):
+    """Speaker registration status report."""
+
+    template_name = "django_program/manage/report_speaker_registration.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Build context with speaker registration data.
+
+        Args:
+            **kwargs: Additional context data.
+
+        Returns:
+            Template context with speakers queryset.
+        """
+        context: dict[str, object] = super().get_context_data(**kwargs)
+        speakers = get_speaker_registrations(self.conference)
+        context["speakers"] = speakers
+        total = speakers.count()
+        registered = sum(1 for s in speakers if s.has_paid_order)
+        context["total_speakers"] = total
+        context["registered_count"] = registered
+        context["unregistered_count"] = total - registered
+        return context
+
+
+class SpeakerRegistrationExportView(ReportPermissionMixin, View):
+    """CSV export of speaker registration data."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Return a CSV download of speaker registration status.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments.
+
+        Returns:
+            An HttpResponse with CSV content.
+        """
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{self.conference.slug}-speaker-registrations.csv"'
+        writer = csv.writer(response)
+        writer.writerow(["Name", "Email", "Talk Count", "Registered"])
+
+        for speaker in get_speaker_registrations(self.conference):
+            writer.writerow(
+                [
+                    _safe_csv_cell(str(speaker.name)),
+                    _safe_csv_cell(speaker.email or (speaker.user.email if speaker.user else "")),
+                    speaker.talk_count,
+                    "Yes" if speaker.has_paid_order else "No",
+                ]
+            )
+
+        return response
+
+
+class ReconciliationView(ReportPermissionMixin, TemplateView):
+    """Financial reconciliation report with stat cards and detail tables."""
+
+    template_name = "django_program/manage/report_reconciliation.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Build context with reconciliation data.
+
+        Args:
+            **kwargs: Additional context data.
+
+        Returns:
+            Template context with reconciliation summary and breakdowns.
+        """
+        context: dict[str, object] = super().get_context_data(**kwargs)
+        context["recon"] = get_reconciliation(self.conference)
+        return context
+
+
+class ReconciliationExportView(ReportPermissionMixin, View):
+    """CSV export of financial reconciliation data."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Return a CSV download of reconciliation data.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments.
+
+        Returns:
+            An HttpResponse with CSV content.
+        """
+        recon = get_reconciliation(self.conference)
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{self.conference.slug}-reconciliation.csv"'
+        writer = csv.writer(response)
+
+        writer.writerow(["Section", "Item", "Count", "Amount"])
+        writer.writerow(["Summary", "Total Sales", "", str(recon["sales_total"])])
+        writer.writerow(["Summary", "Total Payments", "", str(recon["payments_total"])])
+        writer.writerow(["Summary", "Credits Issued (Refunds)", "", str(recon["refunds_total"])])
+        writer.writerow(["Summary", "Credits Outstanding", "", str(recon["credits_outstanding"])])
+        writer.writerow(["Summary", "Discrepancy", "", str(recon["discrepancy"])])
+
+        for row in recon["by_payment_method"]:
+            label = dict(Payment.Method.choices).get(row["method"], row["method"])
+            writer.writerow(["Payment Method", label, row["count"], str(row["total"])])
+
+        for row in recon["by_order_status"]:
+            label = dict(Order.Status.choices).get(row["status"], row["status"])
+            writer.writerow(["Order Status", label, row["count"], str(row["total"])])
+
+        return response
+
+
+class RegistrationFlowView(ReportPermissionMixin, TemplateView):
+    """Daily registrations and cancellations flow report."""
+
+    template_name = "django_program/manage/report_registration_flow.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Build context with daily registration flow data.
+
+        Args:
+            **kwargs: Additional context data.
+
+        Returns:
+            Template context with flow rows and totals.
+        """
+        context: dict[str, object] = super().get_context_data(**kwargs)
+        date_from = _parse_date_param(self.request.GET.get("date_from"))
+        date_until = _parse_date_param(self.request.GET.get("date_until"))
+        rows = get_registration_flow(self.conference, date_from=date_from, date_until=date_until)
+
+        for row in rows:
+            row["net"] = row["registrations"] - row["cancellations"]
+
+        context["flow_rows"] = rows
+        context["total_registrations"] = sum(r["registrations"] for r in rows)
+        context["total_cancellations"] = sum(r["cancellations"] for r in rows)
+        context["current_date_from"] = self.request.GET.get("date_from", "")
+        context["current_date_until"] = self.request.GET.get("date_until", "")
+        return context
+
+
+class RegistrationFlowExportView(ReportPermissionMixin, View):
+    """CSV export of registration flow data."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Return a CSV download of daily registration flow.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments.
+
+        Returns:
+            An HttpResponse with CSV content.
+        """
+        date_from = _parse_date_param(request.GET.get("date_from"))
+        date_until = _parse_date_param(request.GET.get("date_until"))
+        rows = get_registration_flow(self.conference, date_from=date_from, date_until=date_until)
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{self.conference.slug}-registration-flow.csv"'
+        writer = csv.writer(response)
+        writer.writerow(["Date", "Registrations", "Cancellations", "Net"])
+
+        for row in rows:
+            net = row["registrations"] - row["cancellations"]
+            writer.writerow(
+                [
+                    row["date"].isoformat(),
+                    row["registrations"],
+                    row["cancellations"],
+                    net,
+                ]
+            )
 
         return response

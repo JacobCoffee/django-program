@@ -8,17 +8,22 @@ effectiveness reports. All queries are scoped to a specific conference.
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Count, F, Q, QuerySet, Sum, Value
-from django.db.models.functions import Coalesce
+from django.db.models import Count, Exists, F, OuterRef, Q, QuerySet, Sum, Value
+from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
 if TYPE_CHECKING:
+    import datetime
+
     from django_program.conference.models import Conference
 
+from django_program.pretalx.models import Speaker
 from django_program.registration.models import (
     AddOn,
     Attendee,
+    Credit,
     Order,
+    Payment,
     TicketType,
     Voucher,
 )
@@ -357,3 +362,274 @@ def get_discount_summary(conference: Conference) -> dict[str, int]:
         active += agg["active"] or 0
 
     return {"total": total, "active": active}
+
+
+def get_sales_by_date(
+    conference: Conference,
+    *,
+    date_from: datetime.date | None = None,
+    date_until: datetime.date | None = None,
+) -> list[dict[str, Any]]:
+    """Return daily sales aggregation with order count and total revenue.
+
+    Queries paid orders for the conference, grouped by the date portion of
+    ``created_at``. Optionally filtered by a date range.
+
+    Args:
+        conference: The conference to scope the query to.
+        date_from: Optional lower bound (inclusive) for order date.
+        date_until: Optional upper bound (inclusive) for order date.
+
+    Returns:
+        A list of dicts with ``date``, ``count``, and ``revenue`` keys,
+        ordered chronologically.
+    """
+    qs = Order.objects.filter(
+        conference=conference,
+        status__in=_PAID_STATUSES,
+    )
+
+    if date_from is not None:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_until is not None:
+        qs = qs.filter(created_at__date__lte=date_until)
+
+    rows = (
+        qs.annotate(date=TruncDate("created_at"))
+        .values("date")
+        .annotate(
+            count=Count("id"),
+            revenue=Coalesce(Sum("total"), Value(_ZERO)),
+        )
+        .order_by("date")
+    )
+
+    return [
+        {
+            "date": row["date"],
+            "count": row["count"],
+            "revenue": row["revenue"],
+        }
+        for row in rows
+    ]
+
+
+def get_credit_notes(conference: Conference) -> QuerySet[Credit]:
+    """Return all credit records for the conference with related objects.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A queryset of Credit objects with user, source_order, and
+        applied_to_order pre-loaded.
+    """
+    return (
+        Credit.objects.filter(conference=conference)
+        .select_related("user", "source_order", "applied_to_order")
+        .order_by("-created_at")
+    )
+
+
+def get_credit_summary(conference: Conference) -> dict[str, Any]:
+    """Return summary statistics for credit notes.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with total_issued, total_outstanding, total_applied, and count.
+    """
+    qs = Credit.objects.filter(conference=conference)
+    agg = qs.aggregate(
+        count=Count("id"),
+        total_issued=Coalesce(Sum("amount"), Value(_ZERO)),
+        total_outstanding=Coalesce(
+            Sum("remaining_amount", filter=Q(status=Credit.Status.AVAILABLE)),
+            Value(_ZERO),
+        ),
+        total_applied=Coalesce(
+            Sum("amount", filter=Q(status=Credit.Status.APPLIED)),
+            Value(_ZERO),
+        ),
+    )
+    return {
+        "count": agg["count"] or 0,
+        "total_issued": agg["total_issued"],
+        "total_outstanding": agg["total_outstanding"],
+        "total_applied": agg["total_applied"],
+    }
+
+
+def get_speaker_registrations(conference: Conference) -> QuerySet[Speaker]:
+    """Return speakers annotated with registration status.
+
+    Joins through Speaker -> user -> Order to determine whether each speaker
+    has a paid registration for the conference.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A queryset of Speaker objects annotated with ``has_paid_order`` and
+        ``talk_count``.
+    """
+    return (
+        Speaker.objects.filter(conference=conference)
+        .select_related("user")
+        .annotate(
+            has_paid_order=Exists(
+                Order.objects.filter(
+                    conference=conference,
+                    user_id=OuterRef("user_id"),
+                    status__in=_PAID_STATUSES,
+                )
+            ),
+            talk_count=Count("talks"),
+        )
+        .order_by("name")
+    )
+
+
+def get_reconciliation(conference: Conference) -> dict[str, Any]:
+    """Return comprehensive financial reconciliation data.
+
+    Computes sales totals, payment totals, refund/credit balances, and
+    breakdowns by payment method and order status.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with sales_total, payments_total, refunds_total,
+        credits_outstanding, discrepancy, by_payment_method,
+        and by_order_status.
+    """
+    sales_agg = Order.objects.filter(
+        conference=conference,
+        status__in=_PAID_STATUSES,
+    ).aggregate(
+        sales_total=Coalesce(Sum("total"), Value(_ZERO)),
+    )
+    sales_total = sales_agg["sales_total"]
+
+    payments_agg = Payment.objects.filter(
+        order__conference=conference,
+        status=Payment.Status.SUCCEEDED,
+    ).aggregate(
+        payments_total=Coalesce(Sum("amount"), Value(_ZERO)),
+    )
+    payments_total = payments_agg["payments_total"]
+
+    credit_agg = Credit.objects.filter(conference=conference).aggregate(
+        refunds_total=Coalesce(
+            Sum("amount", filter=Q(source_order__isnull=False)),
+            Value(_ZERO),
+        ),
+        credits_outstanding=Coalesce(
+            Sum("remaining_amount", filter=Q(status=Credit.Status.AVAILABLE)),
+            Value(_ZERO),
+        ),
+    )
+    refunds_total = credit_agg["refunds_total"]
+    credits_outstanding = credit_agg["credits_outstanding"]
+
+    by_payment_method = list(
+        Payment.objects.filter(
+            order__conference=conference,
+            status=Payment.Status.SUCCEEDED,
+        )
+        .values("method")
+        .annotate(
+            count=Count("id"),
+            total=Coalesce(Sum("amount"), Value(_ZERO)),
+        )
+        .order_by("method")
+    )
+
+    by_order_status = list(
+        Order.objects.filter(conference=conference)
+        .values("status")
+        .annotate(
+            count=Count("id"),
+            total=Coalesce(Sum("total"), Value(_ZERO)),
+        )
+        .order_by("status")
+    )
+
+    return {
+        "sales_total": sales_total,
+        "payments_total": payments_total,
+        "refunds_total": refunds_total,
+        "credits_outstanding": credits_outstanding,
+        "discrepancy": sales_total - payments_total,
+        "by_payment_method": by_payment_method,
+        "by_order_status": by_order_status,
+    }
+
+
+def get_registration_flow(
+    conference: Conference,
+    *,
+    date_from: datetime.date | None = None,
+    date_until: datetime.date | None = None,
+) -> list[dict[str, Any]]:
+    """Return daily registration and cancellation counts.
+
+    Registrations are counted from Attendee creation dates. Cancellations
+    are counted from Order records with status CANCELLED, grouped by the
+    date portion of ``updated_at``.
+
+    Args:
+        conference: The conference to scope the query to.
+        date_from: Optional lower bound (inclusive) for the date range.
+        date_until: Optional upper bound (inclusive) for the date range.
+
+    Returns:
+        A list of dicts with ``date``, ``registrations``, and
+        ``cancellations`` keys, ordered chronologically.
+    """
+    reg_qs = Attendee.objects.filter(conference=conference)
+    cancel_qs = Order.objects.filter(
+        conference=conference,
+        status=Order.Status.CANCELLED,
+    )
+
+    if date_from is not None:
+        reg_qs = reg_qs.filter(created_at__date__gte=date_from)
+        cancel_qs = cancel_qs.filter(updated_at__date__gte=date_from)
+    if date_until is not None:
+        reg_qs = reg_qs.filter(created_at__date__lte=date_until)
+        cancel_qs = cancel_qs.filter(updated_at__date__lte=date_until)
+
+    reg_rows = (
+        reg_qs.annotate(date=TruncDate("created_at"))
+        .values("date")
+        .annotate(registrations=Count("id"))
+        .order_by("date")
+    )
+
+    cancel_rows = (
+        cancel_qs.annotate(date=TruncDate("updated_at"))
+        .values("date")
+        .annotate(cancellations=Count("id"))
+        .order_by("date")
+    )
+
+    merged: dict[datetime.date, dict[str, int]] = {}
+    for row in reg_rows:
+        merged.setdefault(row["date"], {"registrations": 0, "cancellations": 0})
+        merged[row["date"]]["registrations"] = row["registrations"]
+
+    for row in cancel_rows:
+        merged.setdefault(row["date"], {"registrations": 0, "cancellations": 0})
+        merged[row["date"]]["cancellations"] = row["cancellations"]
+
+    return [
+        {
+            "date": date,
+            "registrations": vals["registrations"],
+            "cancellations": vals["cancellations"],
+        }
+        for date, vals in sorted(merged.items())
+    ]

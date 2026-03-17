@@ -1,0 +1,77 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Registration Flow{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Registration Flow
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Registration Flow</h1>
+<p>Daily registrations and cancellations for {{ conference.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:report-registration-flow-export' conference.slug %}?date_from={{ current_date_from }}&date_until={{ current_date_until }}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">{{ total_registrations }}</div>
+    <div class="stat-card-label">Total Registrations</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ total_cancellations }}</div>
+    <div class="stat-card-label">Total Cancellations</div>
+  </div>
+</div>
+
+<form method="get" class="filter-bar">
+  <label for="date_from">From</label>
+  <input type="date" name="date_from" id="date_from" value="{{ current_date_from }}" onchange="this.form.submit()">
+  <label for="date_until">Until</label>
+  <input type="date" name="date_until" id="date_until" value="{{ current_date_until }}" onchange="this.form.submit()">
+  {% if current_date_from or current_date_until %}
+  <a href="{% url 'manage:report-registration-flow' conference.slug %}" class="btn btn-sm btn-secondary">Clear</a>
+  {% endif %}
+</form>
+
+{% if flow_rows %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th style="text-align: right;">Registrations</th>
+      <th style="text-align: right;">Cancellations</th>
+      <th style="text-align: right;">Net</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in flow_rows %}
+    <tr>
+      <td>{{ row.date|date:"M j, Y" }}</td>
+      <td style="text-align: right;" class="mono">{{ row.registrations }}</td>
+      <td style="text-align: right;" class="mono">{{ row.cancellations }}</td>
+      <td style="text-align: right;" class="mono">{{ row.net }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No registration activity found for the selected date range.</p>
+  {% if current_date_from or current_date_until %}
+  <p><a href="{% url 'manage:report-registration-flow' conference.slug %}" class="btn btn-sm btn-secondary">Clear Filters</a></p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

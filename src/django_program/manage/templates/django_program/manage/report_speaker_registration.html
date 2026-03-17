@@ -1,0 +1,74 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Speaker Registration{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Speaker Registration
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Speaker Registration</h1>
+<p>Registration status for speakers at {{ conference.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:report-speaker-export' conference.slug %}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">{{ total_speakers }}</div>
+    <div class="stat-card-label">Total Speakers</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ registered_count }}</div>
+    <div class="stat-card-label">Registered</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ unregistered_count }}</div>
+    <div class="stat-card-label">Not Registered</div>
+  </div>
+</div>
+
+{% if speakers %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Email</th>
+      <th style="text-align: right;">Talks</th>
+      <th>Registration</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for speaker in speakers %}
+    <tr>
+      <td style="font-weight: 500;">{{ speaker.name }}</td>
+      <td>{{ speaker.email|default:speaker.user.email|default:"--" }}</td>
+      <td style="text-align: right;" class="mono">{{ speaker.talk_count }}</td>
+      <td>
+        {% if speaker.has_paid_order %}
+        <span class="badge badge--active">Registered</span>
+        {% else %}
+        <span class="badge badge--warning">Not Registered</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No speakers found for this conference.</p>
+</div>
+{% endif %}
+
+{% endblock %}

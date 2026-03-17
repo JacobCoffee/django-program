@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from django_program.conference.models import Conference
+from django_program.pretalx.models import Speaker
 from django_program.registration.conditions import (
     DiscountForProduct,
     TimeOrStockLimitCondition,
@@ -15,6 +16,7 @@ from django_program.registration.conditions import (
 from django_program.registration.models import (
     AddOn,
     Attendee,
+    Credit,
     Order,
     OrderLineItem,
     Payment,
@@ -81,6 +83,8 @@ class Command(BaseCommand):
         users = self._create_users()
         self._create_orders(conference, users, ticket_types, addons, vouchers)
         self._create_discount_conditions(conference, ticket_types)
+        self._create_credits(conference, users)
+        self._create_speakers(conference, users)
 
         self.stdout.write(self.style.SUCCESS(f"Seeded data for {conference.name}:"))
         self.stdout.write("  Admin user: admin / admin")
@@ -391,3 +395,103 @@ class Command(BaseCommand):
             product_discount.applicable_ticket_types.set(ticket_types)
 
         self.stdout.write("  Discount conditions: 2")
+
+    def _create_credits(self, conference: Conference, users: list[object]) -> None:
+        """Create sample credit records with varying statuses."""
+        # Find some existing orders for source/applied references
+        paid_orders = list(
+            Order.objects.filter(conference=conference, status=Order.Status.PAID).order_by("created_at")[:3]
+        )
+
+        credit_defs = [
+            {
+                "user": users[0],
+                "amount": Decimal("50.00"),
+                "remaining_amount": Decimal("50.00"),
+                "status": Credit.Status.AVAILABLE,
+                "source_order": paid_orders[0] if paid_orders else None,
+                "applied_to_order": None,
+                "note": "Partial refund for schedule conflict",
+            },
+            {
+                "user": users[2],
+                "amount": Decimal("99.00"),
+                "remaining_amount": Decimal("0.00"),
+                "status": Credit.Status.APPLIED,
+                "source_order": paid_orders[1] if len(paid_orders) > 1 else None,
+                "applied_to_order": paid_orders[2] if len(paid_orders) > 2 else None,
+                "note": "Full refund applied to new order",
+            },
+            {
+                "user": users[5],
+                "amount": Decimal("25.00"),
+                "remaining_amount": Decimal("25.00"),
+                "status": Credit.Status.EXPIRED,
+                "source_order": None,
+                "applied_to_order": None,
+                "note": "Promotional credit expired",
+            },
+        ]
+
+        count = 0
+        for cdef in credit_defs:
+            _, created = Credit.objects.get_or_create(
+                user=cdef["user"],
+                conference=conference,
+                amount=cdef["amount"],
+                defaults={
+                    "remaining_amount": cdef["remaining_amount"],
+                    "status": cdef["status"],
+                    "source_order": cdef["source_order"],
+                    "applied_to_order": cdef["applied_to_order"],
+                    "note": cdef["note"],
+                },
+            )
+            if created:
+                count += 1
+
+        self.stdout.write(f"  Credits: {count}")
+
+    def _create_speakers(self, conference: Conference, users: list[object]) -> None:
+        """Create sample speaker records linked to existing users."""
+        speaker_defs = [
+            {
+                "pretalx_code": "SPKR001",
+                "name": f"{users[1].first_name} {users[1].last_name}",
+                "email": users[1].email,
+                "user": users[1],
+                "biography": "Python developer and open-source contributor.",
+            },
+            {
+                "pretalx_code": "SPKR002",
+                "name": f"{users[3].first_name} {users[3].last_name}",
+                "email": users[3].email,
+                "user": users[3],
+                "biography": "Data scientist specializing in ML pipelines.",
+            },
+            {
+                "pretalx_code": "SPKR003",
+                "name": f"{users[6].first_name} {users[6].last_name}",
+                "email": users[6].email,
+                "user": users[6],
+                "biography": "Backend engineer focused on distributed systems.",
+            },
+        ]
+
+        count = 0
+        for sdef in speaker_defs:
+            _, created = Speaker.objects.get_or_create(
+                conference=conference,
+                pretalx_code=sdef["pretalx_code"],
+                defaults={
+                    "name": sdef["name"],
+                    "email": sdef["email"],
+                    "user": sdef["user"],
+                    "biography": sdef["biography"],
+                    "synced_at": timezone.now(),
+                },
+            )
+            if created:
+                count += 1
+
+        self.stdout.write(f"  Speakers: {count}")

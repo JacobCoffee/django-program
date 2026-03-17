@@ -51,6 +51,27 @@
       {% endif %}
     </a>
   </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:report-credit-notes' conference.slug %}">
+      <div class="stat-card-value">{{ credit_summary.count }}</div>
+      <div class="stat-card-label">Credits</div>
+      {% if credit_summary.total_outstanding %}
+      <span class="badge badge--warning" style="margin-top: 0.4rem;">${{ credit_summary.total_outstanding }} outstanding</span>
+      {% endif %}
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:report-speaker-registration' conference.slug %}">
+      <div class="stat-card-value">{{ speaker_count }}</div>
+      <div class="stat-card-label">Speakers</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:report-sales-by-date' conference.slug %}">
+      <div class="stat-card-value">${{ recent_sales_total }}</div>
+      <div class="stat-card-label">Sales (30 days)</div>
+    </a>
+  </div>
 </div>
 
 <h2 class="section-heading">Available Reports</h2>
@@ -78,6 +99,36 @@
     <div class="card-body">
       <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Discount Effectiveness</div>
       <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Overview of all discount conditions, their types, usage counts, and applicable products.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-sales-by-date' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Sales by Date</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Daily ticket sales count and revenue for paid orders, with date range filtering.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-credit-notes' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Credit Notes</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Store credits and refund balances with status, linked orders, and outstanding amounts.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-speaker-registration' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Speaker Registration</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Speakers and whether they have a paid registration, with talk counts.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-reconciliation' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Reconciliation</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Financial reconciliation with sales, payments, credits, and discrepancy detection.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-registration-flow' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Registration Flow</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Daily flow of new registrations and cancellations with net change tracking.</div>
     </div>
   </a>
 </div>
