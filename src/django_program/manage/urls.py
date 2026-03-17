@@ -19,6 +19,8 @@ from django_program.manage.views import (
     AddOnCreateView,
     AddOnEditView,
     AddOnListView,
+    AttendeeDetailView,
+    AttendeeListView,
     ConferenceEditView,
     ConferenceListView,
     DashboardView,
@@ -167,6 +169,8 @@ urlpatterns = [
     path("<slug:conference_slug>/receipts/<int:pk>/approve/", ReceiptApproveView.as_view(), name="receipt-approve"),
     path("<slug:conference_slug>/receipts/<int:pk>/flag/", ReceiptFlagView.as_view(), name="receipt-flag"),
     # Registration management
+    path("<slug:conference_slug>/attendees/", AttendeeListView.as_view(), name="attendee-list"),
+    path("<slug:conference_slug>/attendees/<int:pk>/", AttendeeDetailView.as_view(), name="attendee-detail"),
     path("<slug:conference_slug>/ticket-types/", TicketTypeListView.as_view(), name="ticket-type-list"),
     path("<slug:conference_slug>/ticket-types/add/", TicketTypeCreateView.as_view(), name="ticket-type-add"),
     path(

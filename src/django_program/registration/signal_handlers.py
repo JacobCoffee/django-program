@@ -1,18 +1,11 @@
 """Signal handlers for the registration app."""
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from django.contrib.auth.models import AbstractUser
-
-    from django_program.registration.models import Order
-
 
 def create_attendee_on_order_paid(
     sender: type,  # noqa: ARG001
     *,
-    order: Order,
-    user: AbstractUser,
+    order: Order,  # noqa: F821
+    user: AbstractUser,  # noqa: F821
     **kwargs: object,  # noqa: ARG001
 ) -> None:
     """Auto-create or update an Attendee when an order is paid.

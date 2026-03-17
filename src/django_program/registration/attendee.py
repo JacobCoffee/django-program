@@ -12,14 +12,30 @@ from django.conf import settings
 from django.db import models
 
 
-def generate_access_code() -> str:
+def generate_access_code(*, max_retries: int = 10) -> str:
     """Generate an 8-character uppercase alphanumeric access code.
 
+    Retries on collision up to ``max_retries`` times. The keyspace is
+    36^8 (~2.8 trillion), so collisions are extremely unlikely.
+
+    Args:
+        max_retries: Maximum retry attempts on collision.
+
     Returns:
-        A random string of 8 uppercase letters and digits.
+        A unique random string of 8 uppercase letters and digits.
+
+    Raises:
+        RuntimeError: If a unique code cannot be generated after retries.
     """
+    from django_program.registration.attendee import Attendee  # noqa: PLC0415
+
     alphabet = string.ascii_uppercase + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(8))
+    for _ in range(max_retries):
+        code = "".join(secrets.choice(alphabet) for _ in range(8))
+        if not Attendee.objects.filter(access_code=code).exists():
+            return code
+    msg = f"Failed to generate unique access code after {max_retries} attempts"
+    raise RuntimeError(msg)
 
 
 class AttendeeProfileBase(models.Model):
@@ -51,7 +67,13 @@ class AttendeeProfileBase(models.Model):
 
 
 class Attendee(models.Model):
-    """Links a user to a conference with registration state and check-in tracking."""
+    """Links a user to a conference with registration state and check-in tracking.
+
+    Unlike ``AttendeeProfileBase``, this uses a ``ForeignKey`` to the user
+    because a single user can attend multiple conferences. The ``order`` field
+    is also a ``ForeignKey`` (not OneToOne) so that replacement/upgrade orders
+    can update the link without constraint violations.
+    """
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -63,12 +85,12 @@ class Attendee(models.Model):
         on_delete=models.CASCADE,
         related_name="attendees",
     )
-    order = models.OneToOneField(
+    order = models.ForeignKey(
         "program_registration.Order",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="attendee",
+        related_name="attendees",
     )
     access_code = models.CharField(max_length=20, unique=True, editable=False)
     checked_in_at = models.DateTimeField(null=True, blank=True)

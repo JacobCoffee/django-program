@@ -94,7 +94,7 @@ class TestAttendeeModel:
         order = _make_order(conference=conf, user=user)
         attendee = Attendee.objects.create(user=user, conference=conf, order=order)
         assert attendee.order == order
-        assert order.attendee == attendee
+        assert order.attendees.first() == attendee
 
 
 # -- Tests: Signal handler ---------------------------------------------------

@@ -53,7 +53,7 @@ from django_program.manage.forms import (
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk, TalkOverride
 from django_program.pretalx.sync import PretalxSyncService
 from django_program.programs.models import Activity, ActivitySignup, Receipt, TravelGrant, TravelGrantMessage
-from django_program.registration.models import AddOn, Order, Payment, TicketType, Voucher
+from django_program.registration.models import AddOn, Attendee, Credit, Order, Payment, TicketType, Voucher
 from django_program.registration.services.capacity import get_global_sold_count
 from django_program.settings import get_config
 from django_program.sponsors.models import Sponsor, SponsorLevel
@@ -2726,6 +2726,93 @@ class VoucherEditView(ManagePermissionMixin, UpdateView):
         """Save and flash success."""
         messages.success(self.request, "Voucher updated successfully.")
         return super().form_valid(form)
+
+
+class AttendeeListView(ManagePermissionMixin, ListView):
+    """List attendees for the current conference with check-in status."""
+
+    template_name = "django_program/manage/attendee_list.html"
+    context_object_name = "attendees"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add active_nav and filter state to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "attendees"
+        context["current_filter"] = self.request.GET.get("filter", "")
+        context["search_query"] = self.request.GET.get("q", "")
+        context["total_count"] = Attendee.objects.filter(conference=self.conference).count()
+        context["checked_in_count"] = Attendee.objects.filter(
+            conference=self.conference, checked_in_at__isnull=False
+        ).count()
+        return context
+
+    def get_queryset(self) -> QuerySet[Attendee]:
+        """Return attendees for the current conference with optional filters."""
+        qs = Attendee.objects.filter(conference=self.conference).select_related("user", "order").order_by("-created_at")
+        filter_param = self.request.GET.get("filter", "").strip()
+        if filter_param == "checked_in":
+            qs = qs.filter(checked_in_at__isnull=False)
+        elif filter_param == "not_checked_in":
+            qs = qs.filter(checked_in_at__isnull=True)
+        search = self.request.GET.get("q", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(user__username__icontains=search)
+                | Q(user__email__icontains=search)
+                | Q(access_code__icontains=search)
+            )
+        return qs
+
+
+class AttendeeDetailView(ManagePermissionMixin, DetailView):
+    """Staff-facing attendee dossier showing all activity for this person at this conference."""
+
+    template_name = "django_program/manage/attendee_detail.html"
+    context_object_name = "attendee"
+
+    def get_queryset(self) -> QuerySet[Attendee]:
+        """Scope to current conference."""
+        return Attendee.objects.filter(conference=self.conference).select_related("user", "order", "conference")
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Aggregate all attendee activity into context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "attendees"
+        attendee = self.object
+        user = attendee.user
+
+        # Orders
+        context["orders"] = (
+            Order.objects.filter(user=user, conference=self.conference)
+            .prefetch_related("line_items", "payments")
+            .order_by("-created_at")
+        )
+
+        # Credits
+        context["credits"] = Credit.objects.filter(user=user, conference=self.conference).order_by("-created_at")
+
+        # Vouchers used (from orders with voucher_code set)
+        context["vouchers_used"] = (
+            Order.objects.filter(user=user, conference=self.conference)
+            .exclude(voucher_code="")
+            .values_list("voucher_code", flat=True)
+            .distinct()
+        )
+
+        # Activity signups
+        context["activity_signups"] = (
+            ActivitySignup.objects.filter(user=user, activity__conference=self.conference)
+            .select_related("activity")
+            .order_by("-created_at")
+        )
+
+        # Travel grants
+        context["travel_grants"] = TravelGrant.objects.filter(user=user, conference=self.conference).order_by(
+            "-created_at"
+        )
+
+        return context
 
 
 class OrderListView(ManagePermissionMixin, ListView):

@@ -1,0 +1,219 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}{{ attendee.user.username }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:attendee-list' conference.slug %}">Attendees</a>
+  <span class="breadcrumb-separator"></span>
+  <span>{{ attendee.user.get_full_name|default:attendee.user.username }}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>{{ attendee.user.get_full_name|default:attendee.user.username }}</h1>
+<p>Attendee dossier for {{ conference.name }}</p>
+{% endblock %}
+
+{% block content %}
+{# ---- Identity & Status ---- #}
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Username</div>
+    <div class="info-item-value">{{ attendee.user.username }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Email</div>
+    <div class="info-item-value">{{ attendee.user.email|default:"—" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Access Code</div>
+    <div class="info-item-value mono" style="font-size: 1.1rem; font-weight: 700; letter-spacing: 0.1em;">{{ attendee.access_code }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Registration</div>
+    <div class="info-item-value">
+      {% if attendee.completed_registration %}
+      <span class="badge badge--active">Complete</span>
+      {% else %}
+      <span class="badge badge--inactive">Incomplete</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Check-In</div>
+    <div class="info-item-value">
+      {% if attendee.checked_in_at %}
+      <span class="badge badge--active">Checked In</span>
+      <br><small>{{ attendee.checked_in_at|date:"M j, Y g:i A" }}</small>
+      {% else %}
+      <span class="badge badge--warning">Not Checked In</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Registered</div>
+    <div class="info-item-value">{{ attendee.created_at|date:"M j, Y g:i A" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Last Login</div>
+    <div class="info-item-value">{{ attendee.user.last_login|date:"M j, Y g:i A"|default:"Never" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Account Created</div>
+    <div class="info-item-value">{{ attendee.user.date_joined|date:"M j, Y" }}</div>
+  </div>
+</div>
+
+{# ---- Orders ---- #}
+<h2 class="section-heading">Orders</h2>
+{% if orders %}
+{% for order in orders %}
+<div class="card" style="margin-bottom: 1rem;">
+  <div style="padding: 0.75rem 1.25rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <a href="{% url 'manage:order-detail' conference.slug order.pk %}" class="mono" style="font-weight: 600;">{{ order.reference }}</a>
+      <span style="margin-left: 0.5rem;">
+        {% if order.status == "paid" %}
+        <span class="badge badge--active">Paid</span>
+        {% elif order.status == "pending" %}
+        <span class="badge badge--warning">Pending</span>
+        {% elif order.status == "refunded" %}
+        <span class="badge badge--other">Refunded</span>
+        {% elif order.status == "partially_refunded" %}
+        <span class="badge badge--warning">Partial Refund</span>
+        {% elif order.status == "cancelled" %}
+        <span class="badge badge--inactive">Cancelled</span>
+        {% endif %}
+      </span>
+    </div>
+    <div style="font-size: 0.85rem; color: var(--color-text-muted);">
+      {{ order.created_at|date:"M j, Y" }} &middot; <strong>${{ order.total }}</strong>
+      {% if order.voucher_code %} &middot; <span class="mono" style="font-size: 0.78rem;">{{ order.voucher_code }}</span>{% endif %}
+    </div>
+  </div>
+  <div style="padding: 0.5rem 1.25rem;">
+    <table class="data-table" style="margin: 0;">
+      <thead>
+        <tr><th>Item</th><th>Qty</th><th style="text-align:right">Price</th></tr>
+      </thead>
+      <tbody>
+        {% for item in order.line_items.all %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td>{{ item.quantity }}</td>
+          <td style="text-align:right">${{ item.line_total }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if order.payments.all %}
+    <div style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--color-text-muted);">
+      Payments:
+      {% for payment in order.payments.all %}
+        {{ payment.get_method_display }} ${{ payment.amount }}{% if payment.status != "succeeded" %} ({{ payment.get_status_display }}){% endif %}{% if not forloop.last %}, {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<p style="font-size: 0.88rem; color: var(--color-text-muted); margin-bottom: 2rem;">No orders.</p>
+{% endif %}
+
+{# ---- Credits ---- #}
+{% if credits %}
+<h2 class="section-heading">Credits</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr><th>Amount</th><th>Remaining</th><th>Status</th><th>Note</th><th>Date</th></tr>
+  </thead>
+  <tbody>
+    {% for credit in credits %}
+    <tr>
+      <td>${{ credit.amount }}</td>
+      <td>${{ credit.remaining_amount }}</td>
+      <td>
+        {% if credit.status == "available" %}<span class="badge badge--active">Available</span>
+        {% elif credit.status == "applied" %}<span class="badge badge--other">Applied</span>
+        {% else %}<span class="badge badge--inactive">Expired</span>{% endif %}
+      </td>
+      <td>{{ credit.note|default:"—"|truncatechars:60 }}</td>
+      <td>{{ credit.created_at|date:"M j, Y" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{# ---- Vouchers Used ---- #}
+{% if vouchers_used %}
+<h2 class="section-heading">Vouchers Used</h2>
+<div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 2rem;">
+  {% for code in vouchers_used %}
+  <span class="badge badge--other mono">{{ code }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ---- Activity Signups ---- #}
+{% if activity_signups %}
+<h2 class="section-heading">Activity Signups</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr><th>Activity</th><th>Type</th><th>Status</th><th>Signed Up</th></tr>
+  </thead>
+  <tbody>
+    {% for signup in activity_signups %}
+    <tr>
+      <td>
+        <a href="{% url 'manage:activity-dashboard' conference.slug signup.activity.pk %}">{{ signup.activity.name }}</a>
+      </td>
+      <td>{{ signup.activity.get_activity_type_display }}</td>
+      <td>
+        {% if signup.status == "confirmed" %}<span class="badge badge--active">Confirmed</span>
+        {% elif signup.status == "waitlisted" %}<span class="badge badge--warning">Waitlisted</span>
+        {% elif signup.status == "cancelled" %}<span class="badge badge--inactive">Cancelled</span>
+        {% endif %}
+      </td>
+      <td>{{ signup.created_at|date:"M j, Y" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{# ---- Travel Grants ---- #}
+{% if travel_grants %}
+<h2 class="section-heading">Travel Grants</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr><th>Type</th><th>Status</th><th>Requested</th><th>Approved</th><th>Disbursed</th><th>Date</th></tr>
+  </thead>
+  <tbody>
+    {% for grant in travel_grants %}
+    <tr>
+      <td>{{ grant.get_request_type_display }}</td>
+      <td>
+        {% if grant.status == "accepted" %}<span class="badge badge--active">Accepted</span>
+        {% elif grant.status == "offered" %}<span class="badge badge--warning">Offered</span>
+        {% elif grant.status == "submitted" %}<span class="badge badge--other">Submitted</span>
+        {% elif grant.status == "disbursed" %}<span class="badge badge--active">Disbursed</span>
+        {% elif grant.status == "rejected" %}<span class="badge badge--inactive">Rejected</span>
+        {% elif grant.status == "withdrawn" %}<span class="badge badge--inactive">Withdrawn</span>
+        {% else %}<span class="badge">{{ grant.get_status_display }}</span>{% endif %}
+      </td>
+      <td>${{ grant.requested_amount|default:"0" }}</td>
+      <td>{% if grant.approved_amount %}<strong>${{ grant.approved_amount }}</strong>{% else %}—{% endif %}</td>
+      <td>{% if grant.disbursed_amount %}<strong>${{ grant.disbursed_amount }}</strong>{% else %}—{% endif %}</td>
+      <td>{{ grant.created_at|date:"M j, Y" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% endblock %}
