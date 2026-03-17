@@ -185,12 +185,12 @@ Select the condition type first, then fill in the type-specific form. The `<type
 
 | Type Slug | Condition Type | Use Case |
 |---|---|---|
-| `time-stock` | TimeOrStockLimitCondition | Early-bird discounts, flash sales |
+| `time-limit` | TimeOrStockLimitCondition | Early-bird discounts, flash sales |
 | `speaker` | SpeakerCondition | Automatic speaker discounts |
-| `group` | GroupMemberCondition | Staff/volunteer pricing |
+| `group-member` | GroupMemberCondition | Staff/volunteer pricing |
 | `included-product` | IncludedProductCondition | Bundle discounts (buy X, get Y% off) |
-| `product` | DiscountForProduct | Direct product discounts |
-| `category` | DiscountForCategory | Broad percentage off tickets and/or add-ons |
+| `product-discount` | DiscountForProduct | Direct product discounts |
+| `category-discount` | DiscountForCategory | Broad percentage off tickets and/or add-ons |
 
 All condition forms share the base fields (name, description, priority, active toggle) plus the type-specific fields (time windows, group selectors, product M2Ms, etc.).
 

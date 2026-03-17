@@ -95,7 +95,10 @@ def _gather_all_conditions(conference: object) -> list[ConditionBase]:
     all_conditions: list[ConditionBase] = []
 
     for condition_cls in _DISCOUNT_EFFECT_TYPES:
-        qs = condition_cls.objects.filter(conference=conference, is_active=True)
+        qs = condition_cls.objects.filter(
+            conference=conference,
+            is_active=True,
+        ).prefetch_related("applicable_ticket_types", "applicable_addons")
         all_conditions.extend(qs)
 
     category_qs = DiscountForCategory.objects.filter(conference=conference, is_active=True)
@@ -117,8 +120,8 @@ def _apply_condition_to_items(
     applicable_addon_ids: set[int] = set()
 
     if not is_category:
-        applicable_ticket_ids = set(condition.applicable_ticket_types.values_list("pk", flat=True))
-        applicable_addon_ids = set(condition.applicable_addons.values_list("pk", flat=True))
+        applicable_ticket_ids = {t.pk for t in condition.applicable_ticket_types.all()}
+        applicable_addon_ids = {a.pk for a in condition.applicable_addons.all()}
 
     for item in items:
         if item.pk in discounted_item_ids:
@@ -153,12 +156,12 @@ def evaluate_for_items(
     user: object,
     conference: object,
 ) -> list[CartItemDiscount]:
-    """Evaluate all conditions against a list of cart items.
+    """Evaluate all conditions against a list of cart items (side-effect free).
 
     Gathers all active conditions into a single priority-sorted list,
     evaluates each against the user, and applies the first matching
-    discount per item (no stacking). Increments ``times_used`` for
-    stock-limited conditions.
+    discount per item (no stacking). Does NOT mutate the database;
+    call ``commit_condition_usage()`` at checkout to persist usage.
 
     Args:
         items: Pre-fetched cart items to evaluate against.
@@ -206,8 +209,8 @@ def commit_condition_usage(discounts: list[CartItemDiscount]) -> None:
 
     Groups discounts by condition and increments ``times_used`` by the number
     of items each condition discounted. Uses a conditional UPDATE that only
-    increments when ``limit=0 OR times_used < limit`` to prevent over-usage
-    under concurrency.
+    increments when ``limit=0 OR times_used + count <= limit`` to prevent
+    overshooting the cap under concurrency.
 
     Args:
         discounts: The discount results from ``evaluate_for_items``.
@@ -229,7 +232,7 @@ def commit_condition_usage(discounts: list[CartItemDiscount]) -> None:
             model_cls.objects.filter(
                 pk=pk,
             ).filter(
-                models.Q(limit=0) | models.Q(times_used__lt=models.F("limit")),
+                models.Q(limit=0) | models.Q(times_used__lte=models.F("limit") - count),
             ).update(
                 times_used=models.F("times_used") + count,
             )

@@ -5,7 +5,7 @@ summary computation. All functions are stateless and operate on Cart model
 instances directly.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -49,11 +49,7 @@ class CartSummary:
     discount: Decimal
     total: Decimal
     condition_discount: Decimal = Decimal("0.00")
-    condition_discounts: list = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.condition_discounts is None:
-            self.condition_discounts = []
+    condition_discounts: list[object] = field(default_factory=list)
 
 
 def get_or_create_cart(user: object, conference: object) -> Cart:
