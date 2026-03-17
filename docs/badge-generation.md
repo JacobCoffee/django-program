@@ -19,10 +19,10 @@ Templates use millimeter measurements matching standard badge/card sizes:
 
 | Field | Default | Description |
 |---|---|---|
-| `width_mm` | `86` | Badge width in millimeters |
-| `height_mm` | `54` | Badge height in millimeters |
+| `width_mm` | `102` | Badge width in millimeters |
+| `height_mm` | `152` | Badge height in millimeters |
 
-The default 86x54mm matches a standard credit card / ISO 7810 ID-1 size, which fits most badge holders and lanyards.
+The default 102x152mm matches a portrait 4x6 inch badge, which fits standard conference badge holders and lanyards.
 
 ### Content Toggles
 

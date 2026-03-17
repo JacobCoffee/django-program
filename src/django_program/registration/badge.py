@@ -4,7 +4,10 @@ Provides a configurable badge template system and a model for tracking
 generated badge files (PDF or PNG) per attendee.
 """
 
+from django.core.validators import RegexValidator
 from django.db import models
+
+_hex_color_validator = RegexValidator(r"^#[0-9A-Fa-f]{6}$", "Enter a valid hex color (e.g. #FF0000).")
 
 
 class BadgeTemplate(models.Model):
@@ -59,9 +62,9 @@ class BadgeTemplate(models.Model):
     show_conference_name = models.BooleanField(default=True)
 
     # Styling
-    background_color = models.CharField(max_length=7, default="#FFFFFF")
-    text_color = models.CharField(max_length=7, default="#000000")
-    accent_color = models.CharField(max_length=7, default="#4338CA")
+    background_color = models.CharField(max_length=7, default="#FFFFFF", validators=[_hex_color_validator])
+    text_color = models.CharField(max_length=7, default="#000000", validators=[_hex_color_validator])
+    accent_color = models.CharField(max_length=7, default="#4338CA", validators=[_hex_color_validator])
 
     # Typography
     font_name = models.CharField(

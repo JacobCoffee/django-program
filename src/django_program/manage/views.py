@@ -3182,7 +3182,7 @@ class BadgeTemplateListView(ManagePermissionMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "badges"
         context["ticket_types"] = TicketType.objects.filter(conference=self.conference).order_by("order", "name")
-        context["badge_count"] = Badge.objects.filter(attendee__conference=self.conference).count()
+        context["badge_count"] = Badge.objects.filter(attendee__conference=self.conference, file__gt="").count()
         return context
 
     def get_queryset(self) -> QuerySet[BadgeTemplate]:

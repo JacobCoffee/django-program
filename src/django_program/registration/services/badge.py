@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from django_program.registration.attendee import Attendee
     from django_program.registration.models import TicketType
 
-_MIN_FONT_SIZE = 8
 _FONT_CACHE: dict[str, str] = {}
 
 
@@ -206,15 +205,9 @@ class BadgeGenerationService:
         """
         if attendee.order is None:
             return "General Admission"
-        first_line = (
-            attendee.order.line_items.filter(
-                ticket_type__isnull=False,
-            )
-            .select_related("ticket_type")
-            .first()
-        )
-        if first_line and first_line.ticket_type:
-            return str(first_line.ticket_type.name)
+        for line_item in attendee.order.line_items.all():
+            if line_item.ticket_type is not None:
+                return str(line_item.ticket_type.name)
         return "General Admission"
 
     def _get_qr_data(self, attendee: Attendee) -> str:
@@ -373,7 +366,9 @@ class BadgeGenerationService:
 
         # Conference name — centered (or right of logo)
         if template.show_conference_name:
-            c.setFillColorRGB(1, 1, 1)  # type: ignore[attr-defined]
+            has_bg_image = template.background_image and template.background_image.name
+            name_color = layout.text_rgb if has_bg_image else (1, 1, 1)
+            c.setFillColorRGB(*name_color)  # type: ignore[attr-defined]
             conf_name = str(attendee.conference.name)
             conf_y = layout.height - header_h + (header_h - 18) / 2
             self._pdf_centered(layout, conf_name, layout.font_name, 18, 10, conf_y)
@@ -742,7 +737,7 @@ class BadgeGenerationService:
         """
         valid_formats = {Badge.Format.PDF, Badge.Format.PNG}
         if badge_format not in valid_formats:
-            msg = f"Unsupported badge format '{badge_format}'. Must be one of: {', '.join(valid_formats)}"
+            msg = f"Unsupported badge format '{badge_format}'. Must be one of: {', '.join(sorted(valid_formats))}"
             raise ValueError(msg)
 
         if template is None:
