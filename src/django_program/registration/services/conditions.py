@@ -204,26 +204,34 @@ def commit_condition_usage(discounts: list[CartItemDiscount]) -> None:
     Call this at checkout time (not during cart summary viewing) to persist
     usage counts. Evaluation is side-effect free; this is the commit step.
 
+    Groups discounts by condition and increments ``times_used`` by the number
+    of items each condition discounted. Uses a conditional UPDATE that only
+    increments when ``limit=0 OR times_used < limit`` to prevent over-usage
+    under concurrency.
+
     Args:
         discounts: The discount results from ``evaluate_for_items``.
     """
     model_map: dict[str, type[ConditionBase]] = {
         cls.__name__: cls for cls in [*_DISCOUNT_EFFECT_TYPES, DiscountForCategory]
     }
-    seen_pks: set[tuple[str, int]] = set()
+    usage_counts: dict[tuple[str, int], int] = {}
 
     for d in discounts:
         if not d.condition_pk or not d.condition_model:
             continue
         key = (d.condition_model, d.condition_pk)
-        if key in seen_pks:
-            continue
-        seen_pks.add(key)
+        usage_counts[key] = usage_counts.get(key, 0) + 1
 
-        model_cls = model_map.get(d.condition_model)
+    for (model_name, pk), count in usage_counts.items():
+        model_cls = model_map.get(model_name)
         if model_cls and hasattr(model_cls, "times_used"):
-            model_cls.objects.filter(pk=d.condition_pk).update(
-                times_used=models.F("times_used") + 1,
+            model_cls.objects.filter(
+                pk=pk,
+            ).filter(
+                models.Q(limit=0) | models.Q(times_used__lt=models.F("limit")),
+            ).update(
+                times_used=models.F("times_used") + count,
             )
 
 

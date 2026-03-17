@@ -8,23 +8,6 @@ from django.utils import timezone
 
 from django_program.registration.attendee import Attendee, AttendeeProfileBase
 
-__all__ = [
-    "AddOn",
-    "Attendee",
-    "AttendeeProfileBase",
-    "Cart",
-    "CartItem",
-    "Credit",
-    "EventProcessingException",
-    "Order",
-    "OrderLineItem",
-    "Payment",
-    "StripeCustomer",
-    "StripeEvent",
-    "TicketType",
-    "Voucher",
-]
-
 
 class TicketType(models.Model):
     """A purchasable ticket category for a conference.
@@ -684,6 +667,8 @@ from django_program.registration.conditions import (  # noqa: E402
 
 __all__ = [
     "AddOn",
+    "Attendee",
+    "AttendeeProfileBase",
     "Cart",
     "CartItem",
     "Credit",

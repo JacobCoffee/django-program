@@ -9,10 +9,10 @@
 
 {% block page_actions %}
 <div style="position:relative;display:inline-block">
-  <button class="btn btn-primary" onclick="var m=document.getElementById('cond-menu');m.style.display=m.style.display==='block'?'none':'block'" type="button">Add Condition &#9662;</button>
-  <div id="cond-menu" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);min-width:220px;z-index:50;padding:0.25rem 0">
+  <button class="btn btn-primary" aria-expanded="false" aria-controls="cond-menu" onclick="toggleDropdown('cond-menu', this)" type="button">Add Condition &#9662;</button>
+  <div id="cond-menu" role="menu" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);min-width:220px;z-index:50;padding:0.25rem 0">
     {% for ct in condition_types %}
-    <a href="{% url 'manage:condition-add' conference.slug ct.slug %}" style="display:block;padding:0.5rem 1rem;font-size:0.85rem;color:var(--color-text);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--color-primary-light)'" onmouseout="this.style.background='transparent'">{{ ct.label }}</a>
+    <a href="{% url 'manage:condition-add' conference.slug ct.slug %}" role="menuitem" style="display:block;padding:0.5rem 1rem;font-size:0.85rem;color:var(--color-text);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--color-primary-light)'" onmouseout="this.style.background='transparent'">{{ ct.label }}</a>
     {% endfor %}
   </div>
 </div>
@@ -60,13 +60,46 @@
 <div class="empty-state">
   <p>No conditions or discounts for this conference yet.</p>
   <div style="position:relative;display:inline-block;margin-top:0.5rem">
-    <button class="btn btn-primary" onclick="var m=document.getElementById('cond-menu-empty');m.style.display=m.style.display==='block'?'none':'block'" type="button">Add First Condition &#9662;</button>
-    <div id="cond-menu-empty" style="display:none;position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);min-width:220px;z-index:50;padding:0.25rem 0">
+    <button class="btn btn-primary" aria-expanded="false" aria-controls="cond-menu-empty" onclick="toggleDropdown('cond-menu-empty', this)" type="button">Add First Condition &#9662;</button>
+    <div id="cond-menu-empty" role="menu" style="display:none;position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);min-width:220px;z-index:50;padding:0.25rem 0">
       {% for ct in condition_types %}
-      <a href="{% url 'manage:condition-add' conference.slug ct.slug %}" style="display:block;padding:0.5rem 1rem;font-size:0.85rem;color:var(--color-text);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--color-primary-light)'" onmouseout="this.style.background='transparent'">{{ ct.label }}</a>
+      <a href="{% url 'manage:condition-add' conference.slug ct.slug %}" role="menuitem" style="display:block;padding:0.5rem 1rem;font-size:0.85rem;color:var(--color-text);text-decoration:none;transition:background .1s" onmouseover="this.style.background='var(--color-primary-light)'" onmouseout="this.style.background='transparent'">{{ ct.label }}</a>
       {% endfor %}
     </div>
   </div>
 </div>
 {% endif %}
+
+<script>
+function toggleDropdown(menuId, btn) {
+  var menu = document.getElementById(menuId);
+  var isOpen = menu.style.display === 'block';
+  menu.style.display = isOpen ? 'none' : 'block';
+  btn.setAttribute('aria-expanded', String(!isOpen));
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    var menus = document.querySelectorAll('[role="menu"]');
+    menus.forEach(function(menu) {
+      if (menu.style.display === 'block') {
+        menu.style.display = 'none';
+        var btn = document.querySelector('[aria-controls="' + menu.id + '"]');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+});
+
+document.addEventListener('click', function(e) {
+  var menus = document.querySelectorAll('[role="menu"]');
+  menus.forEach(function(menu) {
+    var btn = document.querySelector('[aria-controls="' + menu.id + '"]');
+    if (btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+      menu.style.display = 'none';
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
+});
+</script>
 {% endblock %}

@@ -93,6 +93,14 @@ class ConditionBase(models.Model):
         raise NotImplementedError
 
 
+def _validate_discount_value(value: Decimal) -> None:
+    """Validate that discount_value is non-negative."""
+    if value < 0:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        raise ValidationError("Discount value cannot be negative.")
+
+
 class DiscountEffect(models.Model):
     """Abstract base for discount effects that reduce price.
 
@@ -116,6 +124,7 @@ class DiscountEffect(models.Model):
         decimal_places=2,
         default=Decimal("0.00"),
         help_text="Percentage (0-100) or fixed amount depending on discount_type.",
+        validators=[_validate_discount_value],
     )
     max_quantity = models.PositiveIntegerField(
         default=0,
@@ -154,7 +163,8 @@ class DiscountEffect(models.Model):
         line_total = unit_price * effective_qty
 
         if self.discount_type == self.DiscountType.PERCENTAGE:
-            pct = self.discount_value / Decimal(100)
+            clamped = min(self.discount_value, Decimal(100))
+            pct = clamped / Decimal(100)
             return (line_total * pct).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         if self.discount_type == self.DiscountType.FIXED_AMOUNT:

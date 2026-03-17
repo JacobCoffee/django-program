@@ -2991,11 +2991,11 @@ def _describe_scope(condition: ConditionBase) -> str:
         return ", ".join(parts) if parts else "--"
     parts = []
     if hasattr(condition, "applicable_ticket_types"):
-        tickets = list(condition.applicable_ticket_types.values_list("name", flat=True))
+        tickets = [str(t.name) for t in condition.applicable_ticket_types.all()]
         if tickets:
             parts.extend(tickets)
     if hasattr(condition, "applicable_addons"):
-        addons = list(condition.applicable_addons.values_list("name", flat=True))
+        addons = [str(a.name) for a in condition.applicable_addons.all()]
         if addons:
             parts.extend(addons)
     if not parts:

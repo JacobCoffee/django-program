@@ -49,6 +49,11 @@ class CartSummary:
     discount: Decimal
     total: Decimal
     condition_discount: Decimal = Decimal("0.00")
+    condition_discounts: list = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.condition_discounts is None:
+            self.condition_discounts = []
 
 
 def get_or_create_cart(user: object, conference: object) -> Cart:
@@ -390,6 +395,7 @@ def get_summary_from_items(cart: Cart, items: list[CartItem]) -> CartSummary:
         discount=total_discount,
         total=max(subtotal - total_discount, Decimal("0.00")),
         condition_discount=total_condition_discount,
+        condition_discounts=condition_discounts,
     )
 
 

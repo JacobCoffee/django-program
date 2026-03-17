@@ -647,8 +647,6 @@ class TestConditionEvaluator:
     @pytest.mark.django_db
     def test_cross_type_priority_ordering(self, cart, conference, user):
         """Priority is respected globally across different condition types."""
-        from django.contrib.auth.models import Group  # noqa: PLC0415
-
         ticket = TicketType.objects.create(
             conference=conference,
             name="CrossType",
