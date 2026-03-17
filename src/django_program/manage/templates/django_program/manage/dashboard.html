@@ -210,6 +210,7 @@
         <a href="{% url 'manage:voucher-list' conference.slug %}" class="dir-link">Vouchers <span class="dir-link-n">{{ stats.vouchers }}</span></a>
         <a href="{% url 'manage:sponsor-manage-list' conference.slug %}" class="dir-link">Sponsors <span class="dir-link-n">{{ stats.sponsors }}</span></a>
         <a href="{% url 'manage:travel-grant-list' conference.slug %}" class="dir-link">Travel Grants <span class="dir-link-n">{{ stats.travel_grants }}</span></a>
+        <a href="{% url 'manage:reports-dashboard' conference.slug %}" class="dir-link">Reports</a>
       </div>
     </div>
   </div>

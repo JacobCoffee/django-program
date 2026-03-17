@@ -1,0 +1,85 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  Reports
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Reports</h1>
+<p>Admin reports and analytics for {{ conference.name }}</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <a href="{% url 'manage:report-attendee-manifest' conference.slug %}">
+      <div class="stat-card-value">{{ attendee_summary.total }}</div>
+      <div class="stat-card-label">Total Attendees</div>
+      {% if attendee_summary.checked_in %}
+      <span class="badge badge--active" style="margin-top: 0.4rem;">{{ attendee_summary.checked_in }} checked in</span>
+      {% endif %}
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:report-inventory' conference.slug %}">
+      <div class="stat-card-value">{{ ticket_types|length }}</div>
+      <div class="stat-card-label">Ticket Types</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:report-voucher-usage' conference.slug %}">
+      <div class="stat-card-value">{{ voucher_summary.total }}</div>
+      <div class="stat-card-label">Vouchers</div>
+      {% if voucher_summary.used %}
+      <span class="badge badge--other" style="margin-top: 0.4rem;">{{ voucher_summary.used }} used</span>
+      {% endif %}
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="{% url 'manage:report-discount-effectiveness' conference.slug %}">
+      <div class="stat-card-value">{{ discount_summary.total }}</div>
+      <div class="stat-card-label">Conditions</div>
+      {% if discount_summary.active %}
+      <span class="badge badge--active" style="margin-top: 0.4rem;">{{ discount_summary.active }} active</span>
+      {% endif %}
+    </a>
+  </div>
+</div>
+
+<h2 class="section-heading">Available Reports</h2>
+
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <a href="{% url 'manage:report-attendee-manifest' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Attendee Manifest</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Filterable list of all attendees with ticket type, check-in status, and access codes.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-inventory' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Product Inventory</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Stock status for ticket types and add-ons with sold, reserved, and remaining counts.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-voucher-usage' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Voucher Usage</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Redemption rates, revenue impact, and usage details for all vouchers.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-discount-effectiveness' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Discount Effectiveness</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Overview of all discount conditions, their types, usage counts, and applicable products.</div>
+    </div>
+  </a>
+</div>
+
+{% endblock %}

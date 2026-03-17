@@ -1,0 +1,104 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Discount Effectiveness{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Discount Effectiveness
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Discount Effectiveness</h1>
+<p>Conditions and discount rules for {{ conference.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:report-discount-export' conference.slug %}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">{{ discount_summary.total }}</div>
+    <div class="stat-card-label">Total Conditions</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ discount_summary.active }}</div>
+    <div class="stat-card-label">Active</div>
+  </div>
+</div>
+
+{% if conditions_by_type %}
+  {% for type_label, conditions in conditions_by_type.items %}
+  <h2 class="section-heading">{{ type_label }}</h2>
+  <table class="data-table" style="margin-bottom: 2rem;">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th style="text-align: right;">Priority</th>
+        <th style="text-align: right;">Discount</th>
+        <th style="text-align: right;">Usage</th>
+        <th>Applicable Products</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cond in conditions %}
+      <tr>
+        <td style="font-weight: 500;">{{ cond.name }}</td>
+        <td style="text-align: right;" class="mono">{{ cond.priority }}</td>
+        <td style="text-align: right;" class="mono">
+          {% if cond.discount_type %}
+            {% if cond.discount_type == "Percentage" %}
+              {{ cond.discount_value }}%
+            {% elif cond.discount_type == "Fixed Amount" %}
+              ${{ cond.discount_value }}
+            {% else %}
+              {{ cond.discount_type }}: {{ cond.discount_value }}
+            {% endif %}
+          {% else %}
+            <span style="color: var(--color-text-muted);">--</span>
+          {% endif %}
+        </td>
+        <td style="text-align: right;" class="mono">
+          {% if cond.times_used is not None %}
+            {{ cond.times_used }}{% if cond.limit %} / {{ cond.limit }}{% endif %}
+          {% else %}
+            <span style="color: var(--color-text-muted);">--</span>
+          {% endif %}
+        </td>
+        <td style="font-size: 0.82rem;">
+          {% if cond.applicable_products %}
+            {% for product in cond.applicable_products %}
+              <span class="badge badge--other">{{ product }}</span>
+            {% endfor %}
+          {% else %}
+            <span style="color: var(--color-text-muted);">All products</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if cond.is_active %}
+          <span class="badge badge--active">Active</span>
+          {% else %}
+          <span class="badge badge--inactive">Inactive</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+{% else %}
+<div class="empty-state">
+  <p>No discount conditions configured for this conference.</p>
+  <p><a href="{% url 'manage:condition-list' conference.slug %}" class="btn btn-primary btn-sm">Manage Conditions</a></p>
+</div>
+{% endif %}
+
+{% endblock %}
