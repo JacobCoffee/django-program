@@ -126,6 +126,7 @@ The management sidebar exposes several additional views beyond financial reporti
 - **Add-ons** -- Manage conference add-ons (t-shirts, tutorials, etc.).
 - **Vouchers** -- Individual voucher CRUD alongside the bulk generation tool.
 - **Conditions** -- Create and manage discount conditions across all 6 types (see below).
+- **Badges** -- Create badge templates, preview layouts, and bulk generate PDF/PNG badges for attendees (see [Badge Generation](badge-generation.md)).
 
 **Sponsors**
 

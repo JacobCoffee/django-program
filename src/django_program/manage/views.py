@@ -35,6 +35,7 @@ from django_program.conference.models import Conference, Section
 from django_program.manage.forms import (
     ActivityForm,
     AddOnForm,
+    BadgeTemplateForm,
     ConferenceForm,
     DisbursementForm,
     DiscountForCategoryForm,
@@ -60,6 +61,7 @@ from django_program.manage.forms import (
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk, TalkOverride
 from django_program.pretalx.sync import PretalxSyncService
 from django_program.programs.models import Activity, ActivitySignup, Receipt, TravelGrant, TravelGrantMessage
+from django_program.registration.badge import Badge, BadgeTemplate
 from django_program.registration.conditions import (
     ConditionBase,
     DiscountForCategory,
@@ -70,6 +72,7 @@ from django_program.registration.conditions import (
     TimeOrStockLimitCondition,
 )
 from django_program.registration.models import AddOn, Attendee, Credit, Order, Payment, TicketType, Voucher
+from django_program.registration.services.badge import BadgeGenerationService
 from django_program.registration.services.capacity import get_global_sold_count
 from django_program.settings import get_config
 from django_program.sponsors.models import Sponsor, SponsorLevel
@@ -3160,3 +3163,306 @@ class ConditionEditView(ManagePermissionMixin, UpdateView):
     def get_success_url(self) -> str:
         """Redirect to the condition list."""
         return reverse("manage:condition-list", kwargs={"conference_slug": self.conference.slug})
+
+
+# ---------------------------------------------------------------------------
+# Badge Management
+# ---------------------------------------------------------------------------
+
+
+class BadgeTemplateListView(ManagePermissionMixin, ListView):
+    """List badge templates for the current conference."""
+
+    template_name = "django_program/manage/badge_template_list.html"
+    context_object_name = "badge_templates"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add navigation, ticket types, and badge counts to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "badges"
+        context["ticket_types"] = TicketType.objects.filter(conference=self.conference).order_by("order", "name")
+        context["badge_count"] = Badge.objects.filter(attendee__conference=self.conference).count()
+        return context
+
+    def get_queryset(self) -> QuerySet[BadgeTemplate]:
+        """Return badge templates for the current conference.
+
+        Annotates each template with the count of badges generated from it.
+
+        Returns:
+            A queryset of BadgeTemplate instances ordered by name.
+        """
+        return (
+            BadgeTemplate.objects.filter(conference=self.conference)
+            .annotate(badge_count=Count("badges"))
+            .order_by("-is_default", "name")
+        )
+
+
+class BadgeTemplateCreateView(ManagePermissionMixin, CreateView):
+    """Create a new badge template for the current conference."""
+
+    template_name = "django_program/manage/badge_template_edit.html"
+    form_class = BadgeTemplateForm
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add navigation and create flag to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "badges"
+        context["is_create"] = True
+        return context
+
+    def form_valid(self, form: BadgeTemplateForm) -> HttpResponse:
+        """Assign the conference before saving.
+
+        Args:
+            form: The validated badge template form.
+
+        Returns:
+            A redirect response to the template list.
+        """
+        form.instance.conference = self.conference
+        messages.success(self.request, "Badge template created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the badge template list."""
+        return reverse("manage:badge-template-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class BadgeTemplateEditView(ManagePermissionMixin, UpdateView):
+    """Edit an existing badge template."""
+
+    template_name = "django_program/manage/badge_template_edit.html"
+    form_class = BadgeTemplateForm
+    context_object_name = "badge_template"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add navigation metadata to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "badges"
+        return context
+
+    def get_queryset(self) -> QuerySet[BadgeTemplate]:
+        """Scope to the current conference."""
+        return BadgeTemplate.objects.filter(conference=self.conference)
+
+    def form_valid(self, form: BadgeTemplateForm) -> HttpResponse:
+        """Save and flash success."""
+        messages.success(self.request, "Badge template updated successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the badge template list."""
+        return reverse("manage:badge-template-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class BadgeBulkGenerateView(ManagePermissionMixin, View):
+    """Generate badges for all attendees of the current conference.
+
+    Accepts optional ``template_pk``, ``ticket_type``, and ``format``
+    POST parameters to control which template, ticket scope, and output
+    format to use for generation.
+    """
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Trigger bulk badge generation and redirect with a count message.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments.
+
+        Returns:
+            A redirect to the badge list with a success message.
+        """
+        template = None
+        template_pk = request.POST.get("template_pk")
+        if template_pk:
+            template = get_object_or_404(BadgeTemplate, pk=template_pk, conference=self.conference)
+
+        badge_format = request.POST.get("format", Badge.Format.PDF)
+        ticket_type_pk = request.POST.get("ticket_type")
+        ticket_type = None
+        if ticket_type_pk:
+            ticket_type = get_object_or_404(TicketType, pk=ticket_type_pk, conference=self.conference)
+
+        service = BadgeGenerationService()
+        count = 0
+        for _badge in service.bulk_generate_badges(
+            conference=self.conference,
+            template=template,
+            badge_format=badge_format,
+            ticket_type=ticket_type,
+        ):
+            count += 1
+
+        messages.success(request, f"Generated {count} badge{'s' if count != 1 else ''}.")
+        return redirect(reverse("manage:badge-list", kwargs={"conference_slug": self.conference.slug}))
+
+
+class BadgeListView(ManagePermissionMixin, ListView):
+    """List all generated badges with download links and filtering."""
+
+    template_name = "django_program/manage/badge_list.html"
+    context_object_name = "badges"
+    paginate_by = 50
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add navigation, filters, and ticket types to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "badges"
+        context["ticket_types"] = TicketType.objects.filter(conference=self.conference).order_by("order", "name")
+        context["badge_templates"] = BadgeTemplate.objects.filter(conference=self.conference).order_by("name")
+        context["current_ticket_type"] = self.request.GET.get("ticket_type", "")
+        context["current_format"] = self.request.GET.get("format", "")
+        context["search_query"] = self.request.GET.get("q", "")
+        context["total_badge_count"] = Badge.objects.filter(
+            attendee__conference=self.conference,
+            file__gt="",
+        ).count()
+        return context
+
+    def get_queryset(self) -> QuerySet[Badge]:
+        """Return generated badges for the current conference with filters.
+
+        Supports filtering by ticket type, format, and search by attendee
+        name, email, or access code.
+
+        Returns:
+            A queryset of Badge instances ordered by generation date.
+        """
+        qs = (
+            Badge.objects.filter(attendee__conference=self.conference, file__gt="")
+            .select_related("attendee__user", "attendee__order", "template")
+            .order_by("-generated_at")
+        )
+
+        ticket_type_pk = self.request.GET.get("ticket_type", "").strip()
+        if ticket_type_pk:
+            qs = qs.filter(attendee__order__line_items__ticket_type_id=ticket_type_pk).distinct()
+
+        format_filter = self.request.GET.get("format", "").strip()
+        if format_filter:
+            qs = qs.filter(format=format_filter)
+
+        search = self.request.GET.get("q", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(attendee__user__username__icontains=search)
+                | Q(attendee__user__email__icontains=search)
+                | Q(attendee__access_code__icontains=search)
+            )
+
+        return qs
+
+
+class BadgeDownloadView(ManagePermissionMixin, View):
+    """Serve a single badge file as a download attachment."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
+        """Return the badge file as an attachment.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments including ``pk``.
+
+        Returns:
+            An HTTP response with the file content.
+        """
+        badge = get_object_or_404(
+            Badge.objects.select_related("attendee__user"),
+            pk=kwargs["pk"],
+            attendee__conference=self.conference,
+        )
+        if not badge.file:
+            messages.error(request, "Badge file not found.")
+            return redirect(reverse("manage:badge-list", kwargs={"conference_slug": self.conference.slug}))
+
+        content_type = "application/pdf" if badge.format == Badge.Format.PDF else "image/png"
+        username = badge.attendee.user.username
+        filename = f"badge-{username}.{badge.format}"
+        response = HttpResponse(badge.file.read(), content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+class BadgeBulkDownloadView(ManagePermissionMixin, View):
+    """Generate a ZIP archive of all matching badges and stream it."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Build and return a ZIP of badge files.
+
+        Accepts optional ``ticket_type`` and ``format`` query parameters
+        to filter which badges are included.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments.
+
+        Returns:
+            An HTTP response with the ZIP archive.
+        """
+        import io  # noqa: PLC0415
+        import zipfile  # noqa: PLC0415
+
+        qs = Badge.objects.filter(
+            attendee__conference=self.conference,
+            file__gt="",
+        ).select_related("attendee__user")
+
+        ticket_type_pk = request.GET.get("ticket_type", "").strip()
+        if ticket_type_pk:
+            qs = qs.filter(attendee__order__line_items__ticket_type_id=ticket_type_pk).distinct()
+
+        format_filter = request.GET.get("format", "").strip()
+        if format_filter:
+            qs = qs.filter(format=format_filter)
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for badge in qs.iterator():
+                if badge.file:
+                    username = badge.attendee.user.username
+                    ext = badge.format
+                    zf.writestr(f"badge-{username}.{ext}", badge.file.read())
+
+        buffer.seek(0)
+        response = HttpResponse(buffer.read(), content_type="application/zip")
+        response["Content-Disposition"] = f'attachment; filename="badges-{self.conference.slug}.zip"'
+        return response
+
+
+class BadgePreviewView(ManagePermissionMixin, View):
+    """Generate a preview badge for a template without saving it.
+
+    Uses the first attendee of the conference (or returns a placeholder
+    message if none exist) to render what the badge template will look like.
+    """
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Render a preview badge inline.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments including ``pk`` for the template.
+
+        Returns:
+            An inline HTTP response with the rendered badge.
+        """
+        template = get_object_or_404(BadgeTemplate, pk=kwargs["pk"], conference=self.conference)
+        attendee = Attendee.objects.filter(conference=self.conference).select_related("user").first()
+
+        if not attendee:
+            return HttpResponse("No attendees available for preview.", status=404, content_type="text/plain")
+
+        service = BadgeGenerationService()
+        badge = service.generate_or_get_badge(attendee=attendee, template=template, badge_format="pdf")
+
+        if not badge.file:
+            return HttpResponse("Badge generation failed.", status=500, content_type="text/plain")
+
+        content_type = "application/pdf" if badge.format == Badge.Format.PDF else "image/png"
+        response = HttpResponse(badge.file.read(), content_type=content_type)
+        response["Content-Disposition"] = f'inline; filename="preview-{template.slug}.{badge.format}"'
+        return response

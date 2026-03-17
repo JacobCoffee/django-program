@@ -1,0 +1,105 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Badges{% endblock %}
+
+{% block page_title %}
+<h1>Badges</h1>
+<p>{{ total_badge_count }} badge{{ total_badge_count|pluralize }} generated</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:badge-template-list' conference.slug %}" class="btn btn-secondary">Manage Templates</a>
+{% if total_badge_count %}
+<a href="{% url 'manage:badge-bulk-download' conference.slug %}{% if current_ticket_type %}?ticket_type={{ current_ticket_type }}{% endif %}{% if current_format %}{% if current_ticket_type %}&{% else %}?{% endif %}format={{ current_format }}{% endif %}" class="btn btn-secondary">Download All as ZIP</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="filter-bar">
+  <form method="get" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+    <input type="text" name="q" value="{{ search_query }}" placeholder="Search name, email, or access code" style="min-width:240px">
+    <select name="ticket_type" onchange="this.form.submit()">
+      <option value="">All ticket types</option>
+      {% for tt in ticket_types %}
+      <option value="{{ tt.pk }}" {% if current_ticket_type == tt.pk|stringformat:"d" %}selected{% endif %}>{{ tt.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="format" onchange="this.form.submit()">
+      <option value="">All formats</option>
+      <option value="pdf" {% if current_format == "pdf" %}selected{% endif %}>PDF</option>
+      <option value="png" {% if current_format == "png" %}selected{% endif %}>PNG</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-primary">Search</button>
+    {% if current_ticket_type or current_format or search_query %}
+    <a href="{% url 'manage:badge-list' conference.slug %}" class="btn btn-sm btn-secondary">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if badges %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Attendee</th>
+      <th>Email</th>
+      <th>Template</th>
+      <th>Format</th>
+      <th>Generated</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for badge in badges %}
+    <tr>
+      <td>
+        <a href="{% url 'manage:attendee-detail' conference.slug badge.attendee.pk %}">{{ badge.attendee.user.username }}</a>
+      </td>
+      <td style="font-size:0.85rem;color:var(--color-text-secondary)">{{ badge.attendee.user.email|default:"-" }}</td>
+      <td>
+        {% if badge.template %}
+        {{ badge.template.name }}
+        {% else %}
+        <span style="color:var(--color-text-muted)">Default</span>
+        {% endif %}
+      </td>
+      <td>
+        <span class="badge {% if badge.format == 'pdf' %}badge--accepted{% else %}badge--other{% endif %}">{{ badge.get_format_display }}</span>
+      </td>
+      <td style="font-size:0.85rem">
+        {% if badge.generated_at %}
+        {{ badge.generated_at|date:"M j, Y g:i A" }}
+        {% else %}
+        <span style="color:var(--color-text-muted)">-</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{% url 'manage:badge-download' conference.slug badge.pk %}" class="btn btn-sm btn-primary">Download</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if is_paginated %}
+<div class="pagination">
+  {% if page_obj.has_previous %}
+  <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if current_ticket_type %}ticket_type={{ current_ticket_type }}&{% endif %}{% if current_format %}format={{ current_format }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+  {% endif %}
+  <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}
+  <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if current_ticket_type %}ticket_type={{ current_ticket_type }}&{% endif %}{% if current_format %}format={{ current_format }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <p>No badges found{% if search_query %} matching "{{ search_query }}"{% endif %}{% if current_ticket_type %} for the selected ticket type{% endif %}{% if current_format %} in {{ current_format|upper }} format{% endif %}.</p>
+  {% if not search_query and not current_ticket_type and not current_format %}
+  <p style="margin-top:0.75rem">
+    <a href="{% url 'manage:badge-template-list' conference.slug %}" class="btn btn-primary">Set Up Templates</a>
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

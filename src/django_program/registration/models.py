@@ -656,6 +656,8 @@ class EventProcessingException(models.Model):
 # Re-export condition models so they can be imported from this module.
 # This import is safe because conditions.py uses string-based model references
 # for FK/M2M fields and lazy imports for model lookups in methods.
+# Re-export badge models for convenience.
+from django_program.registration.badge import Badge, BadgeTemplate  # noqa: E402
 from django_program.registration.conditions import (  # noqa: E402
     DiscountForCategory,
     DiscountForProduct,
@@ -669,6 +671,8 @@ __all__ = [
     "AddOn",
     "Attendee",
     "AttendeeProfileBase",
+    "Badge",
+    "BadgeTemplate",
     "Cart",
     "CartItem",
     "Credit",
