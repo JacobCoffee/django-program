@@ -21,6 +21,9 @@ from django_program.manage.views import (
     AddOnListView,
     AttendeeDetailView,
     AttendeeListView,
+    ConditionCreateView,
+    ConditionEditView,
+    ConditionListView,
     ConferenceEditView,
     ConferenceListView,
     DashboardView,
@@ -198,6 +201,18 @@ urlpatterns = [
         "<slug:conference_slug>/orders/<int:pk>/payment/",
         ManualPaymentView.as_view(),
         name="order-manual-payment",
+    ),
+    # --- Conditions & Discounts ---
+    path("<slug:conference_slug>/conditions/", ConditionListView.as_view(), name="condition-list"),
+    path(
+        "<slug:conference_slug>/conditions/<slug:type_slug>/add/",
+        ConditionCreateView.as_view(),
+        name="condition-add",
+    ),
+    path(
+        "<slug:conference_slug>/conditions/<slug:type_slug>/<int:pk>/edit/",
+        ConditionEditView.as_view(),
+        name="condition-edit",
     ),
     # --- Voucher Bulk Generation ---
     path("<slug:conference_slug>/vouchers/bulk/", include("django_program.manage.urls_vouchers")),

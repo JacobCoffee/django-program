@@ -1,0 +1,64 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Conditions & Discounts{% endblock %}
+
+{% block page_title %}
+<h1>Conditions & Discounts</h1>
+<p>Automatic discounts, eligibility rules, and pricing conditions</p>
+{% endblock %}
+
+{% block page_actions %}
+<div class="dropdown">
+  <button class="btn btn-primary dropdown-toggle" type="button">Add Condition</button>
+  <div class="dropdown-menu">
+    {% for ct in condition_types %}
+    <a href="{% url 'manage:condition-add' conference.slug ct.slug %}" class="dropdown-item">{{ ct.label }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if condition_rows %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Discount</th>
+      <th>Scope</th>
+      <th>Priority</th>
+      <th>Status</th>
+      <th>Usage</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in condition_rows %}
+    <tr>
+      <td>{{ row.condition.name }}</td>
+      <td>{{ row.type_label }}</td>
+      <td>{{ row.discount }}</td>
+      <td>{{ row.scope }}</td>
+      <td>{{ row.condition.priority }}</td>
+      <td>
+        {% if row.condition.is_active %}
+        <span class="badge badge--active">Active</span>
+        {% else %}
+        <span class="badge badge--inactive">Inactive</span>
+        {% endif %}
+      </td>
+      <td>{{ row.usage }}</td>
+      <td>
+        <a href="{% url 'manage:condition-edit' conference.slug row.type_slug row.condition.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No conditions or discounts for this conference yet.</p>
+</div>
+{% endif %}
+{% endblock %}
