@@ -2,11 +2,16 @@
 
 Orchestrates evaluation of all active conditions for a user/cart context and
 returns applicable discounts as structured data for cart pricing integration.
+
+All condition types are merged into a single priority-sorted list before
+evaluation so that priority ordering is respected globally across types.
 """
 
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
+
+from django.db import models
 
 from django_program.registration.conditions import (
     ConditionBase,
@@ -35,7 +40,7 @@ class CartItemDiscount:
 
 
 # All concrete condition types that use DiscountEffect (ConditionBase + DiscountEffect).
-_CONDITION_TYPES: list[type[ConditionBase]] = [
+_DISCOUNT_EFFECT_TYPES: list[type[ConditionBase]] = [
     TimeOrStockLimitCondition,
     SpeakerCondition,
     GroupMemberCondition,
@@ -71,15 +76,7 @@ def _item_matches_discount_scope(
 
 
 def _item_matches_category_scope(item: CartItem, condition: DiscountForCategory) -> bool:
-    """Check whether a cart item falls within a category discount's scope.
-
-    Args:
-        item: The cart item to check.
-        condition: The category discount to check against.
-
-    Returns:
-        True if the item's type matches the category scope.
-    """
+    """Check whether a cart item falls within a category discount's scope."""
     if item.ticket_type_id is not None:
         return condition.apply_to_tickets
     if item.addon_id is not None:
@@ -87,106 +84,110 @@ def _item_matches_category_scope(item: CartItem, condition: DiscountForCategory)
     return False
 
 
-def _apply_discount_effect_conditions(
+def _gather_all_conditions(conference: object) -> list[ConditionBase]:
+    """Fetch all active conditions across all types, sorted globally by priority.
+
+    Returns a single merged list sorted by (priority, name) so that
+    evaluation respects priority across different condition types.
+    """
+    all_conditions: list[ConditionBase] = []
+
+    for condition_cls in _DISCOUNT_EFFECT_TYPES:
+        qs = condition_cls.objects.filter(conference=conference, is_active=True)
+        all_conditions.extend(qs)
+
+    category_qs = DiscountForCategory.objects.filter(conference=conference, is_active=True)
+    all_conditions.extend(category_qs)
+
+    all_conditions.sort(key=lambda c: (c.priority, str(c.name)))
+    return all_conditions
+
+
+def _apply_condition_to_items(
+    condition: ConditionBase,
     items: list[CartItem],
-    user: object,
-    conference: object,
     discounted_item_ids: set[int],
     results: list[CartItemDiscount],
 ) -> None:
-    """Evaluate all DiscountEffect-based conditions and collect discounts.
+    """Apply a single evaluated condition to undiscounted cart items."""
+    is_category = isinstance(condition, DiscountForCategory)
+    applicable_ticket_ids: set[int] = set()
+    applicable_addon_ids: set[int] = set()
 
-    Args:
-        items: Cart items to evaluate against.
-        user: The cart owner.
-        conference: The conference context.
-        discounted_item_ids: Already-discounted item PKs (mutated in place).
-        results: Discount results list (mutated in place).
-    """
-    for condition_cls in _CONDITION_TYPES:
-        conditions = condition_cls.objects.filter(
-            conference=conference,
-            is_active=True,
-        ).order_by("priority", "name")
+    if not is_category:
+        applicable_ticket_ids = set(condition.applicable_ticket_types.values_list("pk", flat=True))
+        applicable_addon_ids = set(condition.applicable_addons.values_list("pk", flat=True))
 
-        for condition in conditions:
-            if not condition.evaluate(user, conference):
-                continue
-
-            applicable_ticket_ids = set(condition.applicable_ticket_types.values_list("pk", flat=True))
-            applicable_addon_ids = set(condition.applicable_addons.values_list("pk", flat=True))
-
-            for item in items:
-                if item.pk in discounted_item_ids:
-                    continue
-                if not _item_matches_discount_scope(item, applicable_ticket_ids, applicable_addon_ids):
-                    continue
-
-                discount_amount = condition.calculate_discount(item.unit_price, item.quantity)
-                if discount_amount > Decimal("0.00"):
-                    results.append(
-                        CartItemDiscount(
-                            cart_item_id=item.pk,
-                            condition_name=str(condition.name),
-                            condition_type=condition_cls.__name__,
-                            discount_amount=discount_amount,
-                            original_price=item.line_total,
-                        )
-                    )
-                    discounted_item_ids.add(item.pk)
-
-
-def _apply_category_conditions(
-    items: list[CartItem],
-    user: object,
-    conference: object,
-    discounted_item_ids: set[int],
-    results: list[CartItemDiscount],
-) -> None:
-    """Evaluate category discount conditions and collect discounts.
-
-    Args:
-        items: Cart items to evaluate against.
-        user: The cart owner.
-        conference: The conference context.
-        discounted_item_ids: Already-discounted item PKs (mutated in place).
-        results: Discount results list (mutated in place).
-    """
-    category_conditions = DiscountForCategory.objects.filter(
-        conference=conference,
-        is_active=True,
-    ).order_by("priority", "name")
-
-    for condition in category_conditions:
-        if not condition.evaluate(user, conference):
+    for item in items:
+        if item.pk in discounted_item_ids:
             continue
 
-        for item in items:
-            if item.pk in discounted_item_ids:
-                continue
+        if is_category:
             if not _item_matches_category_scope(item, condition):
                 continue
+        elif not _item_matches_discount_scope(item, applicable_ticket_ids, applicable_addon_ids):
+            continue
 
-            discount_amount = condition.calculate_discount(item.unit_price, item.quantity)
-            if discount_amount > Decimal("0.00"):
-                results.append(
-                    CartItemDiscount(
-                        cart_item_id=item.pk,
-                        condition_name=str(condition.name),
-                        condition_type="DiscountForCategory",
-                        discount_amount=discount_amount,
-                        original_price=item.line_total,
-                    )
-                )
-                discounted_item_ids.add(item.pk)
+        discount_amount = condition.calculate_discount(item.unit_price, item.quantity)
+        if discount_amount <= Decimal("0.00"):
+            continue
+
+        results.append(
+            CartItemDiscount(
+                cart_item_id=item.pk,
+                condition_name=str(condition.name),
+                condition_type=type(condition).__name__,
+                discount_amount=discount_amount,
+                original_price=item.line_total,
+            )
+        )
+        discounted_item_ids.add(item.pk)
+
+        if hasattr(condition, "times_used") and hasattr(condition, "limit"):
+            type(condition).objects.filter(pk=condition.pk).update(
+                times_used=models.F("times_used") + 1,
+            )
+
+
+def evaluate_for_items(
+    items: list[CartItem],
+    user: object,
+    conference: object,
+) -> list[CartItemDiscount]:
+    """Evaluate all conditions against a list of cart items.
+
+    Gathers all active conditions into a single priority-sorted list,
+    evaluates each against the user, and applies the first matching
+    discount per item (no stacking). Increments ``times_used`` for
+    stock-limited conditions.
+
+    Args:
+        items: Pre-fetched cart items to evaluate against.
+        user: The cart owner.
+        conference: The conference context.
+
+    Returns:
+        A list of CartItemDiscount entries, one per discounted cart item.
+    """
+    if not items:
+        return []
+
+    all_conditions = _gather_all_conditions(conference)
+    discounted_item_ids: set[int] = set()
+    results: list[CartItemDiscount] = []
+
+    for condition in all_conditions:
+        if condition.evaluate(user, conference):
+            _apply_condition_to_items(condition, items, discounted_item_ids, results)
+
+    return results
 
 
 def evaluate_for_cart(cart: Cart) -> list[CartItemDiscount]:
-    """Evaluate all conditions and return applicable discounts for each cart item.
+    """Evaluate all conditions for a cart.
 
-    Queries all active conditions for the cart's conference, evaluates each
-    against the cart's user, and calculates discounts for matching cart items.
-    First match by priority wins per item (no stacking).
+    Convenience wrapper around ``evaluate_for_items`` that fetches the
+    cart's items with related data.
 
     Args:
         cart: The cart to evaluate conditions for.
@@ -195,18 +196,7 @@ def evaluate_for_cart(cart: Cart) -> list[CartItemDiscount]:
         A list of CartItemDiscount entries, one per discounted cart item.
     """
     items = list(cart.items.select_related("ticket_type", "addon"))
-    if not items:
-        return []
-
-    user = cart.user
-    conference = cart.conference
-    discounted_item_ids: set[int] = set()
-    results: list[CartItemDiscount] = []
-
-    _apply_discount_effect_conditions(items, user, conference, discounted_item_ids, results)
-    _apply_category_conditions(items, user, conference, discounted_item_ids, results)
-
-    return results
+    return evaluate_for_items(items, cart.user, cart.conference)
 
 
 def get_eligible_discounts(user: object, conference: object) -> list[ConditionBase]:
@@ -219,17 +209,8 @@ def get_eligible_discounts(user: object, conference: object) -> list[ConditionBa
     Returns:
         A list of condition instances the user qualifies for.
     """
-    eligible: list[ConditionBase] = []
-
-    all_types = [*_CONDITION_TYPES, DiscountForCategory]
-    for condition_cls in all_types:
-        conditions = condition_cls.objects.filter(
-            conference=conference,
-            is_active=True,
-        ).order_by("priority", "name")
-        eligible.extend(c for c in conditions if c.evaluate(user, conference))
-
-    return eligible
+    all_conditions = _gather_all_conditions(conference)
+    return [c for c in all_conditions if c.evaluate(user, conference)]
 
 
 def get_visible_products(user: object, conference: object) -> tuple[QuerySet, QuerySet]:  # noqa: ARG001

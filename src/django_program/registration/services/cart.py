@@ -334,12 +334,12 @@ def get_summary_from_items(cart: Cart, items: list[CartItem]) -> CartSummary:
     Condition-based discounts are applied first, then voucher discounts
     are calculated on the post-condition price.
     """
-    from django_program.registration.services.conditions import evaluate_for_cart  # noqa: PLC0415
+    from django_program.registration.services.conditions import evaluate_for_items  # noqa: PLC0415
 
     voucher = cart.voucher
 
-    # Phase 1: Apply condition-based discounts
-    condition_discounts = evaluate_for_cart(cart)
+    # Phase 1: Apply condition-based discounts (using the passed items, not re-querying)
+    condition_discounts = evaluate_for_items(items, cart.user, cart.conference)
     condition_discount_map: dict[int, tuple[Decimal, str]] = {
         cd.cart_item_id: (cd.discount_amount, cd.condition_name) for cd in condition_discounts
     }

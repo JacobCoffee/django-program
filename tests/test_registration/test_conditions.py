@@ -326,16 +326,18 @@ class TestSpeakerCondition:
         )
         talk.speakers.add(primary_speaker, co_speaker)
 
-        # is_presenter only - user is copresenter, should be False
+        # is_presenter=True means any linked speaker qualifies (Pretalx has no
+        # explicit primary role, so we don't distinguish presenter vs copresenter
+        # when is_presenter is set)
         condition = SpeakerCondition.objects.create(
             conference=conference,
-            name="Presenter Only",
+            name="Presenter Flag",
             is_presenter=True,
             is_copresenter=False,
         )
-        assert condition.evaluate(user, conference) is False
+        assert condition.evaluate(user, conference) is True
 
-        # is_copresenter only - should be True for user
+        # is_copresenter only - qualifies when speaker is on a multi-speaker talk
         condition2 = SpeakerCondition.objects.create(
             conference=conference,
             name="Copresenter Only",
@@ -641,6 +643,46 @@ class TestConditionEvaluator:
         assert len(results) == 1
         assert results[0].discount_amount == Decimal("10.00")
         assert results[0].condition_name == "10% discount"
+
+    @pytest.mark.django_db
+    def test_cross_type_priority_ordering(self, cart, conference, user):
+        """Priority is respected globally across different condition types."""
+        from django.contrib.auth.models import Group  # noqa: PLC0415
+
+        ticket = TicketType.objects.create(
+            conference=conference,
+            name="CrossType",
+            slug="cross-type-prio",
+            price=Decimal("100.00"),
+            is_active=True,
+        )
+        CartItem.objects.create(cart=cart, ticket_type=ticket, quantity=1)
+
+        # Higher priority (lower number) group condition: 50% off
+        group = Group.objects.create(name="staff-prio-test")
+        user.groups.add(group)
+        group_cond = GroupMemberCondition.objects.create(
+            conference=conference,
+            name="Staff 50%",
+            priority=-1,
+            discount_type=DiscountEffect.DiscountType.PERCENTAGE,
+            discount_value=Decimal("50.00"),
+        )
+        group_cond.groups.add(group)
+
+        # Lower priority (higher number) time condition: 10% off
+        TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Early 10%",
+            priority=5,
+            discount_type=DiscountEffect.DiscountType.PERCENTAGE,
+            discount_value=Decimal("10.00"),
+        )
+
+        results = evaluate_for_cart(cart)
+        assert len(results) == 1
+        assert results[0].condition_name == "Staff 50%"
+        assert results[0].discount_amount == Decimal("50.00")
 
     @pytest.mark.django_db
     def test_applicable_ticket_types_filter(self, cart, conference):

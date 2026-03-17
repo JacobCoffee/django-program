@@ -240,9 +240,12 @@ class SpeakerCondition(ConditionBase, DiscountEffect):
     def evaluate(self, user: settings.AUTH_USER_MODEL, conference: object) -> bool:  # noqa: ARG002
         """Return True if the user is linked to a Speaker for this conference.
 
-        Primary speaker is determined by lowest PK in the M2M relationship
-        (first speaker added to the talk). When both ``is_presenter`` and
-        ``is_copresenter`` are True, any speaker role qualifies.
+        Pretalx has no explicit primary/copresenter role, so any linked
+        speaker qualifies when either flag is set. When both flags are
+        True, any speaker qualifies. When only ``is_presenter`` is True,
+        any speaker on at least one talk qualifies. When only
+        ``is_copresenter`` is True, the speaker must appear on a talk
+        with at least one other speaker.
 
         Args:
             user: The authenticated user to check.
@@ -254,18 +257,16 @@ class SpeakerCondition(ConditionBase, DiscountEffect):
         if not speakers.exists():
             return False
 
-        if self.is_presenter and self.is_copresenter:
+        if self.is_presenter:
             return True
 
-        for speaker in speakers:
-            talks = speaker.talks.filter(conference=self.conference)
-            for talk in talks:
-                primary_pk = talk.speakers.order_by("pk").values_list("pk", flat=True).first()
-                is_primary = primary_pk == speaker.pk
-                if self.is_presenter and is_primary:
-                    return True
-                if self.is_copresenter and not is_primary:
-                    return True
+        if self.is_copresenter:
+            for speaker in speakers:
+                for talk in speaker.talks.filter(conference=self.conference):
+                    if talk.speakers.count() > 1:
+                        return True
+            return False
+
         return False
 
 
