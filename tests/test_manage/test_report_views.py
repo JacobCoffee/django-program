@@ -8,14 +8,18 @@ from django.contrib.auth.models import Group, User
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
+from model_bakery import baker
 
 from django_program.conference.models import Conference
+from django_program.pretalx.models import Speaker
 from django_program.registration.conditions import TimeOrStockLimitCondition
 from django_program.registration.models import (
     AddOn,
     Attendee,
+    Credit,
     Order,
     OrderLineItem,
+    Payment,
     TicketType,
     Voucher,
 )
@@ -774,3 +778,406 @@ class TestCSVInjectionSafety:
         content = resp.content.decode()
         # The leading '=' should be escaped with a preceding apostrophe
         assert "'=CMD" in content
+
+
+# ---------------------------------------------------------------------------
+# Sales by Date Report
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sales_data(conference, users, ticket_general, paid_order):
+    """Set up paid orders for sales-by-date testing.
+
+    The ``paid_order`` fixture already creates a single paid order.
+    This fixture just ensures the necessary objects are materialised.
+    """
+    return {"conference": conference, "paid_order": paid_order}
+
+
+@pytest.mark.django_db
+class TestSalesByDateReport:
+    """Tests for the Sales by Date report."""
+
+    def test_returns_200(self, client_logged_in_super, conference):
+        client_logged_in_super.get(_url("report-sales-by-date", conference))
+        resp = client_logged_in_super.get(_url("report-sales-by-date", conference))
+        assert resp.status_code == 200
+
+    def test_contains_sales_rows(self, client_logged_in_super, sales_data):
+        conference = sales_data["conference"]
+        resp = client_logged_in_super.get(_url("report-sales-by-date", conference))
+        assert "sales_rows" in resp.context
+        assert "total_orders" in resp.context
+        assert "total_revenue" in resp.context
+
+    def test_sales_rows_reflect_paid_orders(self, client_logged_in_super, sales_data):
+        conference = sales_data["conference"]
+        resp = client_logged_in_super.get(_url("report-sales-by-date", conference))
+        assert resp.context["total_orders"] >= 1
+        assert resp.context["total_revenue"] >= Decimal("0.01")
+
+    def test_date_filtering(self, client_logged_in_super, sales_data):
+        conference = sales_data["conference"]
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        url = _url("report-sales-by-date", conference) + f"?date_from={tomorrow}"
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["total_orders"] == 0
+
+    def test_date_until_filtering(self, client_logged_in_super, sales_data):
+        conference = sales_data["conference"]
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        url = _url("report-sales-by-date", conference) + f"?date_until={yesterday}"
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        # Order created today should be excluded
+        assert resp.context["total_orders"] == 0
+
+
+@pytest.mark.django_db
+class TestSalesByDateExport:
+    """CSV export tests for the Sales by Date report."""
+
+    def test_csv_content_type(self, client_logged_in_super, sales_data):
+        conference = sales_data["conference"]
+        resp = client_logged_in_super.get(_url("report-sales-export", conference))
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "text/csv"
+
+    def test_csv_header_fields(self, client_logged_in_super, sales_data):
+        conference = sales_data["conference"]
+        resp = client_logged_in_super.get(_url("report-sales-export", conference))
+        content = resp.content.decode()
+        header = content.split("\n")[0]
+        assert "Date" in header
+        assert "Orders" in header
+        assert "Revenue" in header
+
+    def test_csv_contains_data_rows(self, client_logged_in_super, sales_data):
+        conference = sales_data["conference"]
+        resp = client_logged_in_super.get(_url("report-sales-export", conference))
+        content = resp.content.decode()
+        lines = content.strip().split("\n")
+        # header + at least 1 data row from the paid order
+        assert len(lines) >= 2
+
+
+# ---------------------------------------------------------------------------
+# Credit Notes Report
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def credit_data(conference, users, paid_order):
+    """Create credit records for credit note report testing."""
+    credit = baker.make(
+        Credit,
+        conference=conference,
+        user=users[0],
+        amount=Decimal("25.00"),
+        remaining_amount=Decimal("25.00"),
+        status=Credit.Status.AVAILABLE,
+        source_order=paid_order,
+        note="Test refund credit",
+    )
+    return {"conference": conference, "credit": credit}
+
+
+@pytest.mark.django_db
+class TestCreditNotesReport:
+    """Tests for the Credit Notes report."""
+
+    def test_returns_200(self, client_logged_in_super, credit_data):
+        conference = credit_data["conference"]
+        resp = client_logged_in_super.get(_url("report-credit-notes", conference))
+        assert resp.status_code == 200
+
+    def test_contains_credits_in_context(self, client_logged_in_super, credit_data):
+        conference = credit_data["conference"]
+        resp = client_logged_in_super.get(_url("report-credit-notes", conference))
+        credits = list(resp.context["credits"])
+        assert len(credits) == 1
+        assert credits[0].amount == Decimal("25.00")
+
+    def test_contains_credit_summary(self, client_logged_in_super, credit_data):
+        conference = credit_data["conference"]
+        resp = client_logged_in_super.get(_url("report-credit-notes", conference))
+        summary = resp.context["credit_summary"]
+        assert summary["count"] == 1
+        assert summary["total_issued"] == Decimal("25.00")
+
+    def test_empty_conference_returns_200(self, client_logged_in_super, conference):
+        resp = client_logged_in_super.get(_url("report-credit-notes", conference))
+        assert resp.status_code == 200
+        assert resp.context["credit_summary"]["count"] == 0
+
+
+@pytest.mark.django_db
+class TestCreditNotesExport:
+    """CSV export tests for the Credit Notes report."""
+
+    def test_csv_content_type(self, client_logged_in_super, credit_data):
+        conference = credit_data["conference"]
+        resp = client_logged_in_super.get(_url("report-credit-export", conference))
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "text/csv"
+
+    def test_csv_has_header_and_rows(self, client_logged_in_super, credit_data):
+        conference = credit_data["conference"]
+        resp = client_logged_in_super.get(_url("report-credit-export", conference))
+        content = resp.content.decode()
+        lines = content.strip().split("\n")
+        # header + 1 credit
+        assert len(lines) == 2
+
+    def test_csv_header_fields(self, client_logged_in_super, credit_data):
+        conference = credit_data["conference"]
+        resp = client_logged_in_super.get(_url("report-credit-export", conference))
+        content = resp.content.decode()
+        header = content.split("\n")[0]
+        assert "User" in header
+        assert "Amount" in header
+        assert "Status" in header
+
+
+# ---------------------------------------------------------------------------
+# Speaker Registration Report
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def speaker_data(conference, users):
+    """Create speaker records for speaker registration report testing."""
+    # Speaker with a linked user who has a paid order
+    speaker_registered = baker.make(
+        Speaker,
+        conference=conference,
+        name="Alice Speaker",
+        email="alice@example.com",
+        pretalx_code="ALICE1",
+        user=users[0],
+    )
+    # Speaker with a linked user who does NOT have a paid order
+    speaker_unregistered = baker.make(
+        Speaker,
+        conference=conference,
+        name="Bob Speaker",
+        email="bob@example.com",
+        pretalx_code="BOB2",
+        user=users[2],
+    )
+    return {
+        "conference": conference,
+        "speaker_registered": speaker_registered,
+        "speaker_unregistered": speaker_unregistered,
+    }
+
+
+@pytest.mark.django_db
+class TestSpeakerRegistrationReport:
+    """Tests for the Speaker Registration report."""
+
+    def test_returns_200(self, client_logged_in_super, speaker_data):
+        conference = speaker_data["conference"]
+        resp = client_logged_in_super.get(_url("report-speaker-registration", conference))
+        assert resp.status_code == 200
+
+    def test_contains_speakers_in_context(self, client_logged_in_super, speaker_data):
+        conference = speaker_data["conference"]
+        resp = client_logged_in_super.get(_url("report-speaker-registration", conference))
+        speakers = list(resp.context["speakers"])
+        assert len(speakers) == 2
+
+    def test_speakers_annotated_with_has_paid_order(self, client_logged_in_super, speaker_data, paid_order):
+        conference = speaker_data["conference"]
+        resp = client_logged_in_super.get(_url("report-speaker-registration", conference))
+        speakers = list(resp.context["speakers"])
+        # users[0] has paid_order, so the speaker linked to users[0] should show as registered
+        registered = next(s for s in speakers if str(s.name) == "Alice Speaker")
+        unregistered = next(s for s in speakers if str(s.name) == "Bob Speaker")
+        assert registered.has_paid_order is True
+        assert unregistered.has_paid_order is False
+
+    def test_speaker_counts(self, client_logged_in_super, speaker_data, paid_order):
+        conference = speaker_data["conference"]
+        resp = client_logged_in_super.get(_url("report-speaker-registration", conference))
+        assert resp.context["total_speakers"] == 2
+        assert resp.context["registered_count"] == 1
+        assert resp.context["unregistered_count"] == 1
+
+
+@pytest.mark.django_db
+class TestSpeakerRegistrationExport:
+    """CSV export tests for the Speaker Registration report."""
+
+    def test_csv_content_type(self, client_logged_in_super, speaker_data):
+        conference = speaker_data["conference"]
+        resp = client_logged_in_super.get(_url("report-speaker-export", conference))
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "text/csv"
+
+    def test_csv_header_fields(self, client_logged_in_super, speaker_data):
+        conference = speaker_data["conference"]
+        resp = client_logged_in_super.get(_url("report-speaker-export", conference))
+        content = resp.content.decode()
+        header = content.split("\n")[0]
+        assert "Name" in header
+        assert "Email" in header
+        assert "Registered" in header
+
+    def test_csv_has_data_rows(self, client_logged_in_super, speaker_data):
+        conference = speaker_data["conference"]
+        resp = client_logged_in_super.get(_url("report-speaker-export", conference))
+        content = resp.content.decode()
+        lines = content.strip().split("\n")
+        # header + 2 speakers
+        assert len(lines) == 3
+
+
+# ---------------------------------------------------------------------------
+# Reconciliation Report
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def reconciliation_data(conference, users, ticket_general, paid_order):
+    """Set up payment data for reconciliation report testing."""
+    payment = baker.make(
+        Payment,
+        order=paid_order,
+        method=Payment.Method.STRIPE,
+        status=Payment.Status.SUCCEEDED,
+        amount=Decimal("150.00"),
+    )
+    return {"conference": conference, "paid_order": paid_order, "payment": payment}
+
+
+@pytest.mark.django_db
+class TestReconciliationReport:
+    """Tests for the Reconciliation report."""
+
+    def test_returns_200(self, client_logged_in_super, reconciliation_data):
+        conference = reconciliation_data["conference"]
+        resp = client_logged_in_super.get(_url("report-reconciliation", conference))
+        assert resp.status_code == 200
+
+    def test_contains_recon_in_context(self, client_logged_in_super, reconciliation_data):
+        conference = reconciliation_data["conference"]
+        resp = client_logged_in_super.get(_url("report-reconciliation", conference))
+        recon = resp.context["recon"]
+        assert "sales_total" in recon
+        assert "payments_total" in recon
+        assert "refunds_total" in recon
+        assert "credits_outstanding" in recon
+        assert "discrepancy" in recon
+
+    def test_sales_total_matches_paid_orders(self, client_logged_in_super, reconciliation_data):
+        conference = reconciliation_data["conference"]
+        resp = client_logged_in_super.get(_url("report-reconciliation", conference))
+        recon = resp.context["recon"]
+        assert recon["sales_total"] == Decimal("150.00")
+
+    def test_payments_total_matches_succeeded(self, client_logged_in_super, reconciliation_data):
+        conference = reconciliation_data["conference"]
+        resp = client_logged_in_super.get(_url("report-reconciliation", conference))
+        recon = resp.context["recon"]
+        assert recon["payments_total"] == Decimal("150.00")
+
+    def test_has_payment_method_breakdown(self, client_logged_in_super, reconciliation_data):
+        conference = reconciliation_data["conference"]
+        resp = client_logged_in_super.get(_url("report-reconciliation", conference))
+        recon = resp.context["recon"]
+        assert len(recon["by_payment_method"]) >= 1
+
+
+@pytest.mark.django_db
+class TestReconciliationExport:
+    """CSV export tests for the Reconciliation report."""
+
+    def test_csv_content_type(self, client_logged_in_super, reconciliation_data):
+        conference = reconciliation_data["conference"]
+        resp = client_logged_in_super.get(_url("report-reconciliation-export", conference))
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "text/csv"
+
+    def test_csv_contains_summary_rows(self, client_logged_in_super, reconciliation_data):
+        conference = reconciliation_data["conference"]
+        resp = client_logged_in_super.get(_url("report-reconciliation-export", conference))
+        content = resp.content.decode()
+        assert "Total Sales" in content
+        assert "Total Payments" in content
+        assert "Discrepancy" in content
+
+
+# ---------------------------------------------------------------------------
+# Registration Flow Report
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestRegistrationFlowReport:
+    """Tests for the Registration Flow report."""
+
+    def test_returns_200(self, client_logged_in_super, report_data):
+        conference = report_data["conference"]
+        resp = client_logged_in_super.get(_url("report-registration-flow", conference))
+        assert resp.status_code == 200
+
+    def test_contains_flow_rows(self, client_logged_in_super, report_data):
+        conference = report_data["conference"]
+        resp = client_logged_in_super.get(_url("report-registration-flow", conference))
+        assert "flow_rows" in resp.context
+        assert "total_registrations" in resp.context
+        assert "total_cancellations" in resp.context
+
+    def test_registrations_counted(self, client_logged_in_super, report_data):
+        conference = report_data["conference"]
+        resp = client_logged_in_super.get(_url("report-registration-flow", conference))
+        # report_data creates 2 attendees
+        assert resp.context["total_registrations"] == 2
+
+    def test_date_filtering(self, client_logged_in_super, report_data):
+        conference = report_data["conference"]
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        url = _url("report-registration-flow", conference) + f"?date_from={tomorrow}"
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["total_registrations"] == 0
+
+    def test_date_until_filtering(self, client_logged_in_super, report_data):
+        conference = report_data["conference"]
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        url = _url("report-registration-flow", conference) + f"?date_until={yesterday}"
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["total_registrations"] == 0
+
+
+@pytest.mark.django_db
+class TestRegistrationFlowExport:
+    """CSV export tests for the Registration Flow report."""
+
+    def test_csv_content_type(self, client_logged_in_super, report_data):
+        conference = report_data["conference"]
+        resp = client_logged_in_super.get(_url("report-registration-flow-export", conference))
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "text/csv"
+
+    def test_csv_header_fields(self, client_logged_in_super, report_data):
+        conference = report_data["conference"]
+        resp = client_logged_in_super.get(_url("report-registration-flow-export", conference))
+        content = resp.content.decode()
+        header = content.split("\n")[0]
+        assert "Date" in header
+        assert "Registrations" in header
+        assert "Cancellations" in header
+        assert "Net" in header
+
+    def test_csv_has_data_rows(self, client_logged_in_super, report_data):
+        conference = report_data["conference"]
+        resp = client_logged_in_super.get(_url("report-registration-flow-export", conference))
+        content = resp.content.decode()
+        lines = content.strip().split("\n")
+        # header + at least 1 row (attendees created today)
+        assert len(lines) >= 2
