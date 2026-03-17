@@ -26,12 +26,12 @@ class BadgeTemplate(models.Model):
 
     # Layout config
     width_mm = models.PositiveIntegerField(
-        default=86,
-        help_text="Badge width in millimeters.",
+        default=102,
+        help_text="Badge width in millimeters (default 102mm / 4 inches).",
     )
     height_mm = models.PositiveIntegerField(
-        default=54,
-        help_text="Badge height in millimeters.",
+        default=152,
+        help_text="Badge height in millimeters (default 152mm / 6 inches, portrait).",
     )
 
     # What to show

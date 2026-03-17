@@ -759,6 +759,7 @@ class Command(BaseCommand):
             total=Decimal(0),
             billing_name="Carol Chen",
             billing_email="carol@example.com",
+            billing_company="Python Software Foundation",
             reference=f"ORD-{self._generate_voucher_code(length=6)}",
         )
         speaker = TicketType.objects.filter(conference=conference, slug="speaker").first()

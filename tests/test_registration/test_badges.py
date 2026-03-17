@@ -105,8 +105,8 @@ class TestBadgeTemplateModel:
         conf = _make_conference()
         tpl = _make_template(conf)
         assert tpl.pk is not None
-        assert tpl.width_mm == 86
-        assert tpl.height_mm == 54
+        assert tpl.width_mm == 102
+        assert tpl.height_mm == 152
         assert tpl.is_default is True
 
     def test_badge_template_str(self) -> None:

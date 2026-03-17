@@ -58,7 +58,9 @@ def _hex_to_reportlab(hex_color: str) -> tuple[float, float, float]:
 class _PDFLayout:
     """Intermediate layout parameters for PDF badge rendering."""
 
+    canvas: object
     width: float
+    height: float
     margin: float
     mm_unit: float
     accent_rgb: tuple[float, float, float]
@@ -154,106 +156,72 @@ class BadgeGenerationService:
         conference_slug = str(attendee.conference.slug)
         return f"{conference_slug}:{attendee.access_code}"
 
-    def _draw_pdf_text_fields(
-        self,
-        c: object,
-        attendee: Attendee,
-        template: BadgeTemplate,
-        layout: _PDFLayout,
-        y_cursor: float,
+    def _pdf_centered(  # noqa: PLR0913
+        self, layout: _PDFLayout, text: str, font: str, max_size: int, min_size: int, y: float
     ) -> float:
-        """Draw text fields on a PDF canvas.
+        """Draw centered text on a PDF canvas, auto-shrinking to fit.
 
         Args:
-            c: The reportlab canvas object.
-            attendee: The attendee whose info to render.
-            template: The badge template with field visibility flags.
-            layout: Layout parameters (dimensions, colors, units).
-            y_cursor: The current vertical position.
+            layout: PDF layout parameters including canvas and dimensions.
+            text: The text to draw.
+            font: The font name.
+            max_size: Starting font size.
+            min_size: Minimum font size.
+            y: Vertical position.
 
         Returns:
-            Updated y_cursor position.
+            The font size that was used.
         """
-        mm = layout.mm_unit
+        c = layout.canvas
+        max_w = layout.width - 2 * layout.margin
+        font_size = max_size
+        c.setFont(font, font_size)  # type: ignore[attr-defined]
+        tw = c.stringWidth(text, font, font_size)  # type: ignore[attr-defined]
+        while tw > max_w and font_size > min_size:
+            font_size -= 1
+            tw = c.stringWidth(text, font, font_size)  # type: ignore[attr-defined]
+        c.setFont(font, font_size)  # type: ignore[attr-defined]
+        c.drawString((layout.width - tw) / 2, y, text)  # type: ignore[attr-defined]
+        return font_size
 
-        if template.show_conference_name:
-            c.setFillColorRGB(*layout.accent_rgb)  # type: ignore[attr-defined]
-            c.setFont("Helvetica-Bold", 7)  # type: ignore[attr-defined]
-            c.drawString(layout.margin, y_cursor, str(attendee.conference.name))  # type: ignore[attr-defined]
-            y_cursor -= 4 * mm
+    def _pdf_draw_name(self, layout: _PDFLayout, attendee: Attendee, content_top: float) -> float:
+        """Draw the attendee name as the dominant badge element.
 
-        if template.show_name:
-            c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
-            display_name = self._get_attendee_display_name(attendee)
-            font_size = 12
-            c.setFont("Helvetica-Bold", font_size)  # type: ignore[attr-defined]
-            text_width = c.stringWidth(display_name, "Helvetica-Bold", font_size)  # type: ignore[attr-defined]
-            max_text_width = layout.width - 2 * layout.margin
-            while text_width > max_text_width and font_size > _MIN_FONT_SIZE:
-                font_size -= 1
-                text_width = c.stringWidth(display_name, "Helvetica-Bold", font_size)  # type: ignore[attr-defined]
-            c.setFont("Helvetica-Bold", font_size)  # type: ignore[attr-defined]
-            c.drawString(layout.margin, y_cursor, display_name)  # type: ignore[attr-defined]
-            y_cursor -= 3.5 * mm
-
-        if template.show_email:
-            c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
-            c.setFont("Helvetica", 6)  # type: ignore[attr-defined]
-            c.drawString(layout.margin, y_cursor, str(attendee.user.email))  # type: ignore[attr-defined]
-            y_cursor -= 3 * mm
-
-        if template.show_company:
-            company = self._get_company(attendee)
-            if company:
-                c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
-                c.setFont("Helvetica", 6)  # type: ignore[attr-defined]
-                c.drawString(layout.margin, y_cursor, company)  # type: ignore[attr-defined]
-                y_cursor -= 3 * mm
-
-        if template.show_ticket_type:
-            c.setFillColorRGB(*layout.accent_rgb)  # type: ignore[attr-defined]
-            c.setFont("Helvetica-Bold", 7)  # type: ignore[attr-defined]
-            c.drawString(layout.margin, y_cursor, self._get_ticket_type_label(attendee))  # type: ignore[attr-defined]
-            y_cursor -= 3 * mm
-
-        return y_cursor
-
-    def _draw_pdf_qr(self, c: object, attendee: Attendee, layout: _PDFLayout, height: float) -> None:
-        """Draw QR code and access code on a PDF canvas.
-
-        Positions the QR code in the bottom-right area of the badge,
-        sized proportionally to the badge height.
+        Splits multi-word names across lines for maximum readability.
 
         Args:
-            c: The reportlab canvas object.
-            attendee: The attendee whose QR code to render.
-            layout: Layout parameters (dimensions, colors, units).
-            height: The badge height for proportional sizing.
+            layout: PDF layout parameters.
+            attendee: The attendee.
+            content_top: Starting y position.
+
+        Returns:
+            Updated content_top position.
         """
-        from reportlab.lib.utils import ImageReader  # noqa: PLC0415
-
+        display_name = self._get_attendee_display_name(attendee)
+        name_parts = display_name.split()
         mm = layout.mm_unit
-        qr_bytes = self.generate_qr_code(self._get_qr_data(attendee), size=200)
-        qr_image = ImageReader(io.BytesIO(qr_bytes))
-        qr_size = min(14 * mm, height * 0.3)
-        qr_x = layout.width - qr_size - layout.margin
-        qr_y = layout.margin + 2 * mm
-        c.drawImage(qr_image, qr_x, qr_y, width=qr_size, height=qr_size)  # type: ignore[attr-defined]
 
-        c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
-        c.setFont("Courier", 5)  # type: ignore[attr-defined]
-        code_text = str(attendee.access_code)
-        code_width = c.stringWidth(code_text, "Courier", 5)  # type: ignore[attr-defined]
-        code_x = qr_x + (qr_size - code_width) / 2
-        c.drawString(code_x, layout.margin, code_text)  # type: ignore[attr-defined]
+        if len(name_parts) > 1:
+            first = name_parts[0]
+            last = " ".join(name_parts[1:])
+            font_size = 30.0
+            for line, y_offset in [(first, 0), (last, 1)]:
+                font_size = self._pdf_centered(
+                    layout, line, "Helvetica-Bold", 30, 14, content_top - y_offset * (font_size + 4)
+                )
+            content_top -= 2 * (font_size + 4) + 4 * mm
+        else:
+            font_size = self._pdf_centered(layout, display_name, "Helvetica-Bold", 30, 14, content_top)
+            content_top -= font_size + 6 * mm
+
+        return content_top
 
     def generate_badge_pdf(self, attendee: Attendee, template: BadgeTemplate) -> bytes:
-        """Generate a single badge as a PDF using reportlab.
+        """Generate a conference-style portrait badge as PDF.
 
-        The badge includes the conference name (top, accent color),
-        attendee full name (large, centered), ticket type label,
-        and a QR code in the bottom-right corner with the access code
-        printed below it in monospace.
+        Layout (top to bottom): accent header with conference name,
+        large centered attendee name, company/email, ticket type,
+        QR code in bottom-right corner.
 
         Args:
             attendee: The attendee to generate a badge for.
@@ -267,36 +235,91 @@ class BadgeGenerationService:
 
         width = template.width_mm * mm
         height = template.height_mm * mm
-        margin = 3 * mm
-        bar_height = 4 * mm
+        margin = 6 * mm
+        header_height = 18 * mm
 
-        layout = _PDFLayout(
-            width=width,
-            margin=margin,
-            mm_unit=mm,
-            accent_rgb=_hex_to_reportlab(str(template.accent_color)),
-            text_rgb=_hex_to_reportlab(str(template.text_color)),
-        )
+        accent_rgb = _hex_to_reportlab(str(template.accent_color))
+        text_rgb = _hex_to_reportlab(str(template.text_color))
 
         buf = io.BytesIO()
         c = canvas.Canvas(buf, pagesize=(width, height))
 
-        bg_rgb = _hex_to_reportlab(str(template.background_color))
-        c.setFillColorRGB(*bg_rgb)
+        layout = _PDFLayout(
+            canvas=c,
+            width=width,
+            height=height,
+            margin=margin,
+            mm_unit=mm,
+            accent_rgb=accent_rgb,
+            text_rgb=text_rgb,
+        )
+
+        # Background
+        c.setFillColorRGB(*_hex_to_reportlab(str(template.background_color)))
         c.rect(0, 0, width, height, fill=1, stroke=0)
 
-        c.setFillColorRGB(*layout.accent_rgb)
-        c.rect(0, height - bar_height, width, bar_height, fill=1, stroke=0)
+        # Header bar
+        c.setFillColorRGB(*accent_rgb)
+        c.rect(0, height - header_height, width, header_height, fill=1, stroke=0)
 
-        y_cursor = height - bar_height - 2 * mm
-        self._draw_pdf_text_fields(c, attendee, template, layout, y_cursor)
+        if template.show_conference_name:
+            c.setFillColorRGB(1, 1, 1)
+            conf_y = height - header_height + (header_height - 16) / 2
+            self._pdf_centered(layout, str(attendee.conference.name), "Helvetica-Bold", 16, 10, conf_y)
+
+        # Name
+        content_top = height - header_height - 8 * mm
+        if template.show_name:
+            c.setFillColorRGB(*text_rgb)
+            content_top = self._pdf_draw_name(layout, attendee, content_top)
+
+        # Company
+        if template.show_company:
+            company = self._get_company(attendee)
+            if company:
+                c.setFillColorRGB(*text_rgb)
+                self._pdf_centered(layout, company, "Helvetica", 12, 8, content_top)
+                content_top -= 6 * mm
+
+        # Email
+        if template.show_email:
+            c.setFillColorRGB(*text_rgb)
+            self._pdf_centered(layout, str(attendee.user.email), "Helvetica", 10, 7, content_top)
+            content_top -= 5 * mm
+
+        # Ticket type
+        if template.show_ticket_type:
+            c.setFillColorRGB(*accent_rgb)
+            self._pdf_centered(layout, self._get_ticket_type_label(attendee), "Helvetica-Bold", 12, 8, content_top)
 
         if template.show_qr_code:
-            self._draw_pdf_qr(c, attendee, layout, height)
+            self._pdf_draw_qr(layout, attendee)
 
         c.showPage()
         c.save()
         return buf.getvalue()
+
+    def _pdf_draw_qr(self, layout: _PDFLayout, attendee: Attendee) -> None:
+        """Draw QR code with access code in the bottom-right corner.
+
+        Args:
+            layout: PDF layout parameters.
+            attendee: The attendee whose QR code to render.
+        """
+        from reportlab.lib.utils import ImageReader  # noqa: PLC0415
+
+        mm = layout.mm_unit
+        c = layout.canvas
+        qr_size = 20 * mm
+        qr_bytes = self.generate_qr_code(self._get_qr_data(attendee), size=200)
+        qr_x = layout.width - qr_size - layout.margin
+        qr_y = layout.margin + 4 * mm
+        c.drawImage(ImageReader(io.BytesIO(qr_bytes)), qr_x, qr_y, width=qr_size, height=qr_size)  # type: ignore[attr-defined]
+        c.setFillColorRGB(*layout.text_rgb)  # type: ignore[attr-defined]
+        c.setFont("Courier", 7)  # type: ignore[attr-defined]
+        code_text = str(attendee.access_code)
+        code_width = c.stringWidth(code_text, "Courier", 7)  # type: ignore[attr-defined]
+        c.drawString(qr_x + (qr_size - code_width) / 2, layout.margin, code_text)  # type: ignore[attr-defined]
 
     def _load_png_fonts(self, px_per_mm: float) -> tuple[object, object, object, object]:
         """Load fonts for PNG badge rendering, falling back to defaults.
