@@ -91,6 +91,7 @@ class ProgramConfig:
     currency: str = "USD"
     currency_symbol: str = "$"
     max_grant_amount: int = 3000
+    attendee_profile_model: str = ""
 
 
 @functools.lru_cache(maxsize=1)
@@ -172,3 +173,21 @@ def _clear_config_cache(*, setting: str, **kwargs: object) -> None:  # noqa: ARG
 
 
 setting_changed.connect(_clear_config_cache, dispatch_uid="django_program.settings.clear_config_cache")
+
+
+def get_attendee_profile_model() -> type | None:
+    """Return the custom attendee profile model class, or None if not configured.
+
+    Reads ``attendee_profile_model`` from the ``DJANGO_PROGRAM`` configuration.
+    When set to a non-empty app-label string (e.g. ``"myapp.AttendeeProfile"``),
+    resolves and returns the model class via ``django.apps.apps.get_model``.
+
+    Returns:
+        The model class, or ``None`` if no custom profile model is configured.
+    """
+    config = get_config()
+    if not config.attendee_profile_model:
+        return None
+    from django.apps import apps  # noqa: PLC0415
+
+    return apps.get_model(config.attendee_profile_model)

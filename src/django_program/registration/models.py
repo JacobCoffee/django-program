@@ -6,6 +6,25 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from django_program.registration.attendee import Attendee, AttendeeProfileBase
+
+__all__ = [
+    "AddOn",
+    "Attendee",
+    "AttendeeProfileBase",
+    "Cart",
+    "CartItem",
+    "Credit",
+    "EventProcessingException",
+    "Order",
+    "OrderLineItem",
+    "Payment",
+    "StripeCustomer",
+    "StripeEvent",
+    "TicketType",
+    "Voucher",
+]
+
 
 class TicketType(models.Model):
     """A purchasable ticket category for a conference.
