@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
+    from django import forms
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
@@ -36,23 +37,38 @@ from django_program.manage.forms import (
     AddOnForm,
     ConferenceForm,
     DisbursementForm,
+    DiscountForCategoryForm,
+    DiscountForProductForm,
+    GroupMemberConditionForm,
     ImportFromPretalxForm,
+    IncludedProductConditionForm,
     ManualPaymentForm,
     ReceiptFlagForm,
     ReviewerMessageForm,
     RoomForm,
     ScheduleSlotForm,
     SectionForm,
+    SpeakerConditionForm,
     SponsorForm,
     SponsorLevelForm,
     TalkForm,
     TicketTypeForm,
+    TimeOrStockLimitConditionForm,
     TravelGrantForm,
     VoucherForm,
 )
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk, TalkOverride
 from django_program.pretalx.sync import PretalxSyncService
 from django_program.programs.models import Activity, ActivitySignup, Receipt, TravelGrant, TravelGrantMessage
+from django_program.registration.conditions import (
+    ConditionBase,
+    DiscountForCategory,
+    DiscountForProduct,
+    GroupMemberCondition,
+    IncludedProductCondition,
+    SpeakerCondition,
+    TimeOrStockLimitCondition,
+)
 from django_program.registration.models import AddOn, Attendee, Credit, Order, Payment, TicketType, Voucher
 from django_program.registration.services.capacity import get_global_sold_count
 from django_program.settings import get_config
@@ -2921,3 +2937,226 @@ class ManualPaymentView(ManagePermissionMixin, View):
         else:
             messages.error(request, "Invalid payment data. Please check the form.")
         return redirect("manage:order-detail", conference_slug=self.conference.slug, pk=order.pk)
+
+
+# ---------------------------------------------------------------------------
+# Conditions & Discounts
+# ---------------------------------------------------------------------------
+
+# Mapping from URL slug to (model class, form class, human label).
+_CONDITION_TYPES: dict[str, tuple[type[ConditionBase], type, str]] = {
+    "time-limit": (TimeOrStockLimitCondition, TimeOrStockLimitConditionForm, "Time/Stock Limit"),
+    "speaker": (SpeakerCondition, SpeakerConditionForm, "Speaker"),
+    "group-member": (GroupMemberCondition, GroupMemberConditionForm, "Group Member"),
+    "included-product": (IncludedProductCondition, IncludedProductConditionForm, "Included Product"),
+    "product-discount": (DiscountForProduct, DiscountForProductForm, "Product Discount"),
+    "category-discount": (DiscountForCategory, DiscountForCategoryForm, "Category Discount"),
+}
+
+# Fields that hold M2M references to conference-scoped products.
+_CONFERENCE_SCOPED_M2M: dict[str, type] = {
+    "applicable_ticket_types": TicketType,
+    "applicable_addons": AddOn,
+    "enabling_ticket_types": TicketType,
+}
+
+
+def _scope_condition_form_querysets(form: forms.ModelForm, conference: Conference) -> None:
+    """Restrict M2M product querysets on a condition form to the given conference."""
+    for field_name, model_cls in _CONFERENCE_SCOPED_M2M.items():
+        if field_name in form.fields:
+            form.fields[field_name].queryset = model_cls.objects.filter(conference=conference)
+
+
+def _describe_discount(condition: ConditionBase) -> str:
+    """Return a human-readable discount summary for a condition instance."""
+    if isinstance(condition, DiscountForCategory):
+        return f"{condition.percentage}% off"
+    if hasattr(condition, "discount_type"):
+        if condition.discount_type == "percentage":
+            return f"{condition.discount_value}% off"
+        if condition.discount_type == "fixed_amount":
+            return f"${condition.discount_value} off"
+    return "--"
+
+
+def _describe_scope(condition: ConditionBase) -> str:
+    """Return a human-readable scope summary for a condition instance."""
+    if isinstance(condition, DiscountForCategory):
+        parts = []
+        if condition.apply_to_tickets:
+            parts.append("All tickets")
+        if condition.apply_to_addons:
+            parts.append("All add-ons")
+        return ", ".join(parts) if parts else "--"
+    parts = []
+    if hasattr(condition, "applicable_ticket_types"):
+        tickets = [str(t.name) for t in condition.applicable_ticket_types.all()]
+        if tickets:
+            parts.extend(tickets)
+    if hasattr(condition, "applicable_addons"):
+        addons = [str(a.name) for a in condition.applicable_addons.all()]
+        if addons:
+            parts.extend(addons)
+    if not parts:
+        return "All products"
+    return ", ".join(parts)
+
+
+def _describe_usage(condition: ConditionBase) -> str:
+    """Return a usage string like '5 / 100' or '--' if not applicable."""
+    if hasattr(condition, "times_used") and hasattr(condition, "limit"):
+        limit_display = str(condition.limit) if condition.limit > 0 else "\u221e"
+        return f"{condition.times_used} / {limit_display}"
+    return "--"
+
+
+def _get_condition_type_slug(condition: ConditionBase) -> str:
+    """Return the URL type slug for a condition instance."""
+    for slug, (model_cls, _form_cls, _label) in _CONDITION_TYPES.items():
+        if isinstance(condition, model_cls):
+            return slug
+    return ""
+
+
+class ConditionListView(ManagePermissionMixin, TemplateView):
+    """Unified list of all condition types for the current conference.
+
+    Gathers all 6 condition types into a single priority-sorted table.
+    """
+
+    template_name = "django_program/manage/condition_list.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Build a merged list of all conditions with display metadata."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "conditions"
+
+        all_conditions: list[ConditionBase] = []
+        for model_cls, _form_cls, _label in _CONDITION_TYPES.values():
+            qs = model_cls.objects.filter(conference=self.conference)
+            if hasattr(model_cls, "applicable_ticket_types"):
+                qs = qs.prefetch_related("applicable_ticket_types", "applicable_addons")
+            all_conditions.extend(qs)
+
+        all_conditions.sort(key=lambda c: (c.priority, str(c.name)))
+
+        rows = []
+        for condition in all_conditions:
+            type_slug = _get_condition_type_slug(condition)
+            type_label = _CONDITION_TYPES.get(type_slug, (None, None, "Unknown"))[2]
+            rows.append(
+                {
+                    "condition": condition,
+                    "type_slug": type_slug,
+                    "type_label": type_label,
+                    "discount": _describe_discount(condition),
+                    "scope": _describe_scope(condition),
+                    "usage": _describe_usage(condition),
+                }
+            )
+
+        context["condition_rows"] = rows
+        context["condition_types"] = [
+            {"slug": slug, "label": label} for slug, (_cls, _form, label) in _CONDITION_TYPES.items()
+        ]
+        return context
+
+
+class ConditionCreateView(ManagePermissionMixin, CreateView):
+    """Generic create view for any condition type.
+
+    The condition type is resolved from the ``type_slug`` URL kwarg.
+    """
+
+    template_name = "django_program/manage/condition_edit.html"
+
+    def setup(self, request: HttpRequest, *args: object, **kwargs: object) -> None:
+        """Resolve the condition type from the URL."""
+        super().setup(request, *args, **kwargs)
+        type_slug: str = self.kwargs["type_slug"]
+        entry = _CONDITION_TYPES.get(type_slug)
+        if entry is None:
+            from django.http import Http404  # noqa: PLC0415
+
+            raise Http404(f"Unknown condition type: {type_slug}")
+        self._model_cls, self._form_cls, self._type_label = entry
+
+    def get_form_class(self) -> type:
+        """Return the form class for the resolved condition type."""
+        return self._form_cls
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add navigation and type label to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "conditions"
+        context["is_create"] = True
+        context["condition_type_label"] = self._type_label
+        return context
+
+    def get_form(self, form_class: type | None = None) -> forms.ModelForm:
+        """Scope M2M querysets to the current conference."""
+        form = super().get_form(form_class)
+        _scope_condition_form_querysets(form, self.conference)
+        return form
+
+    def form_valid(self, form: forms.ModelForm) -> HttpResponse:
+        """Assign the conference before saving."""
+        form.instance.conference = self.conference
+        messages.success(self.request, f"{self._type_label} condition created successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the condition list."""
+        return reverse("manage:condition-list", kwargs={"conference_slug": self.conference.slug})
+
+
+class ConditionEditView(ManagePermissionMixin, UpdateView):
+    """Generic edit view for any condition type.
+
+    The condition type is resolved from the ``type_slug`` URL kwarg.
+    """
+
+    template_name = "django_program/manage/condition_edit.html"
+    context_object_name = "condition"
+
+    def setup(self, request: HttpRequest, *args: object, **kwargs: object) -> None:
+        """Resolve the condition type from the URL."""
+        super().setup(request, *args, **kwargs)
+        type_slug: str = self.kwargs["type_slug"]
+        entry = _CONDITION_TYPES.get(type_slug)
+        if entry is None:
+            from django.http import Http404  # noqa: PLC0415
+
+            raise Http404(f"Unknown condition type: {type_slug}")
+        self._model_cls, self._form_cls, self._type_label = entry
+
+    def get_form_class(self) -> type:
+        """Return the form class for the resolved condition type."""
+        return self._form_cls
+
+    def get_queryset(self) -> QuerySet:
+        """Scope to the current conference."""
+        return self._model_cls.objects.filter(conference=self.conference)
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add navigation and type label to the template context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "conditions"
+        context["condition_type_label"] = self._type_label
+        return context
+
+    def get_form(self, form_class: type | None = None) -> forms.ModelForm:
+        """Scope M2M querysets to the current conference."""
+        form = super().get_form(form_class)
+        _scope_condition_form_querysets(form, self.conference)
+        return form
+
+    def form_valid(self, form: forms.ModelForm) -> HttpResponse:
+        """Save and flash success."""
+        messages.success(self.request, f"{self._type_label} condition updated successfully.")
+        return super().form_valid(form)
+
+    def get_success_url(self) -> str:
+        """Redirect to the condition list."""
+        return reverse("manage:condition-list", kwargs={"conference_slug": self.conference.slug})

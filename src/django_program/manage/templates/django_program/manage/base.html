@@ -1097,6 +1097,11 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 9V3a1 1 0 011-1h6l6 6-6 6z"/><circle cx="5" cy="5.5" r="1" fill="currentColor" stroke="none"/></svg></span> Vouchers
             </a>
           </li>
+          <li>
+            <a href="{% url 'manage:condition-list' conference.slug %}" class="{% if active_nav == 'conditions' %}active{% endif %}">
+              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v4M8 11v4M1 8h4M11 8h4M3.05 3.05l2.83 2.83M10.12 10.12l2.83 2.83M12.95 3.05l-2.83 2.83M5.88 10.12l-2.83 2.83"/></svg></span> Conditions
+            </a>
+          </li>
         </ul>
       </div>
       <div class="sidebar-section">

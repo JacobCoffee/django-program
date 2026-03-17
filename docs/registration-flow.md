@@ -17,6 +17,16 @@ Before getting into the flow, here are the models involved:
 | {class}`~django_program.registration.models.OrderLineItem` | Immutable snapshot of a purchased item at checkout time. |
 | {class}`~django_program.registration.models.Payment` | A financial transaction against an order. Methods: `STRIPE`, `COMP`, `CREDIT`, `MANUAL`. |
 | {class}`~django_program.registration.models.Credit` | A store credit issued from a refund, applicable to future orders. |
+| {class}`~django_program.registration.attendee.Attendee` | Links a user to a conference with an access code, check-in tracking, and order reference. Auto-created when an order is paid. |
+| {class}`~django_program.registration.attendee.AttendeeProfileBase` | Abstract base for custom attendee profile fields. Projects subclass this and point `attendee_profile_model` at the concrete model. |
+| {class}`~django_program.registration.conditions.ConditionBase` | Abstract base for all conditions that gate product eligibility or discounts. |
+| {class}`~django_program.registration.conditions.DiscountEffect` | Abstract base for discount effects: percentage or fixed-amount reductions with optional product scoping. |
+| {class}`~django_program.registration.conditions.TimeOrStockLimitCondition` | Condition met within a time window and/or stock cap. For early-bird discounts and flash sales. |
+| {class}`~django_program.registration.conditions.SpeakerCondition` | Auto-applies to users linked to a Pretalx Speaker record. |
+| {class}`~django_program.registration.conditions.GroupMemberCondition` | Applies to members of specified Django auth groups. |
+| {class}`~django_program.registration.conditions.IncludedProductCondition` | Unlocks when the user has purchased an enabling product (e.g. tutorial ticket unlocks tutorial lunch discount). |
+| {class}`~django_program.registration.conditions.DiscountForProduct` | Direct discount on specific products, optionally time/stock limited. |
+| {class}`~django_program.registration.conditions.DiscountForCategory` | Percentage discount across all tickets and/or all add-ons. |
 
 ## Global Ticket Capacity
 
@@ -405,6 +415,130 @@ payment = RefundService.apply_credit_as_refund(credit, new_order)
 Takes an available credit and applies it as payment toward a pending order. Deducts from `credit.remaining_amount`, creates a `CREDIT` payment. If the order is fully paid, transitions it to `PAID` and fires `order_paid`.
 
 Credits are scoped to a user and conference -- you cannot apply a credit from one conference to an order for a different conference.
+
+## Attendee Profiles
+
+When an order transitions to `PAID`, the `order_paid` signal fires a handler that auto-creates an {class}`~django_program.registration.attendee.Attendee` record linking the user to the conference. If an attendee already exists for that (user, conference) pair (e.g. from a previous order), the handler updates the order link and marks `completed_registration = True`.
+
+### The Attendee model
+
+Each attendee gets an 8-character uppercase alphanumeric `access_code` generated with `secrets.choice` on first save. The keyspace is 36^8 (~2.8 trillion), so collisions are effectively impossible, but the generator retries up to 10 times as a safety net.
+
+The model uses `ForeignKey` (not `OneToOneField`) for both `user` and `order`. A single user can attend multiple conferences, and replacement/upgrade orders can update the link without constraint violations. The `(user, conference)` pair is enforced as unique via `unique_together`.
+
+Key fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `user` | FK to User | The attendee's user account. |
+| `conference` | FK to Conference | The conference they are attending. |
+| `order` | FK to Order (nullable) | The paid order that created this record. |
+| `access_code` | CharField | Unique 8-character code for badge scanning and check-in. |
+| `checked_in_at` | DateTimeField (nullable) | Timestamp of on-site check-in. |
+| `completed_registration` | BooleanField | Set to `True` by the signal handler when payment completes. |
+
+### Swappable profile model
+
+For projects that need custom attendee fields (dietary restrictions, t-shirt size, etc.), subclass {class}`~django_program.registration.attendee.AttendeeProfileBase` and point the `attendee_profile_model` setting at your concrete model:
+
+```python
+DJANGO_PROGRAM = {
+    "attendee_profile_model": "myapp.CustomAttendeeProfile",
+    # ...
+}
+```
+
+`AttendeeProfileBase` provides `user` (OneToOneField), `access_code`, `completed_registration`, and timestamps. Your subclass adds whatever fields your conference needs. Retrieve the configured model class at runtime with:
+
+```python
+from django_program.settings import get_attendee_profile_model
+
+ProfileModel = get_attendee_profile_model()  # None if not configured
+```
+
+See [Configuration](configuration.md#general-settings) for details on the setting.
+
+## Conditions & Discounts
+
+The condition engine provides automatic, rule-based discounts that apply to cart items before voucher discounts. Conditions are configured per-conference through the management dashboard and evaluated at cart summary time.
+
+### How conditions integrate with pricing
+
+The cart pricing pipeline runs in this order:
+
+1. **Condition discounts** -- evaluated by `ConditionEvaluator`, applied first.
+2. **Voucher discounts** -- applied on the post-condition price.
+
+This means a 20% condition discount followed by a 10% voucher discount on a $100 item yields: $100 - $20 (condition) = $80, then $80 - $8 (voucher) = $72.
+
+### Evaluation rules
+
+- All active conditions across all types are merged into a single list sorted by `priority` (lower = first), then by `name`.
+- Each condition's `evaluate()` method checks whether the user qualifies.
+- For each cart item, the **first matching condition wins** -- no stacking. Once a condition applies a discount to an item, later conditions skip it.
+- Evaluation is **side-effect free**. The `times_used` counter is only incremented at checkout via `commit_condition_usage()`, not during cart browsing.
+
+### Condition types
+
+#### TimeOrStockLimitCondition
+
+Active within an optional time window (`start_time` / `end_time`) and/or a usage cap (`limit`). Applies to all users who happen to be shopping during the window while stock remains. Ideal for early-bird pricing and flash sales.
+
+#### SpeakerCondition
+
+Auto-applies to users linked to a {class}`~django_program.pretalx.models.Speaker` record for the same conference. Configurable flags control whether primary speakers, copresenters, or both qualify. A copresenter is identified as a speaker who appears on a talk with at least one other speaker.
+
+#### GroupMemberCondition
+
+Applies to users who belong to at least one of the specified Django auth groups. Useful for staff discounts, volunteer pricing, or any role-based discount managed through Django's built-in group system.
+
+#### IncludedProductCondition
+
+Unlocks a discount on target products when the user has a paid order containing one of the specified enabling ticket types. For example, purchasing a "Tutorial" ticket can unlock a discount on the "Tutorial Lunch" add-on.
+
+#### DiscountForProduct
+
+A direct discount on specific products (via `applicable_ticket_types` and `applicable_addons` M2M fields), optionally constrained by a time window and stock limit. Unlike user-targeted conditions, this evaluates to `True` for all users as long as the time/stock constraints are satisfied.
+
+#### DiscountForCategory
+
+A percentage discount applied broadly to all ticket types and/or all add-ons for the conference. Uses `apply_to_tickets` and `apply_to_addons` boolean flags instead of M2M scoping. Also supports time window and stock limits.
+
+### Discount calculation
+
+Conditions that inherit {class}`~django_program.registration.conditions.DiscountEffect` support two discount types:
+
+| Type | Behavior |
+|---|---|
+| `PERCENTAGE` | `(unit_price * effective_qty * discount_value / 100)`, rounded with `ROUND_HALF_UP` to the nearest cent. |
+| `FIXED_AMOUNT` | `min(discount_value * effective_qty, line_total)` -- never exceeds the line total. |
+
+The `max_quantity` field on `DiscountEffect` caps the number of items the discount applies to within a single line. A value of `0` means unlimited.
+
+{class}`~django_program.registration.conditions.DiscountForCategory` uses its own simplified calculation: a flat percentage applied to the full line total.
+
+### Service API
+
+The evaluator lives in `django_program.registration.services.conditions`:
+
+```python
+from django_program.registration.services.conditions import (
+    evaluate_for_cart,
+    commit_condition_usage,
+    get_eligible_discounts,
+)
+
+# During cart summary (side-effect free)
+discounts = evaluate_for_cart(cart)
+
+# At checkout (persists usage counts)
+commit_condition_usage(discounts)
+
+# Check what a user qualifies for
+eligible = get_eligible_discounts(user, conference)
+```
+
+`evaluate_for_cart()` returns a list of {class}`~django_program.registration.services.conditions.CartItemDiscount` dataclasses, each containing the `cart_item_id`, `condition_name`, `discount_amount`, and the condition's type and primary key.
 
 ## Concurrency
 

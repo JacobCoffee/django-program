@@ -1,4 +1,5 @@
 # Keep this repo-specific; move editor/OS/language-wide ignores to global gitignore.
+pycon-site-2027/
 
 # Local planning artifacts
 refcode/

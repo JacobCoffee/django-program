@@ -2,7 +2,7 @@
 
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -10,10 +10,18 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
+from django.utils import timezone
 
 from django_program.conference.models import Conference, Section
 from django_program.config_loader import load_conference_config
 from django_program.programs.models import Activity, TravelGrant
+from django_program.registration.conditions import (
+    DiscountForCategory,
+    DiscountForProduct,
+    GroupMemberCondition,
+    SpeakerCondition,
+    TimeOrStockLimitCondition,
+)
 from django_program.registration.models import (
     AddOn,
     Attendee,
@@ -534,6 +542,10 @@ class Command(BaseCommand):
         if individual and demo_users:
             self._seed_carts(conference, demo_users, individual, tshirt)
 
+        # -- Conditions & Discounts --
+        if individual:
+            self._seed_conditions(conference, ticket_types)
+
         # -- Credits --
         if demo_users:
             self._seed_credits(conference, demo_users)
@@ -762,6 +774,92 @@ class Command(BaseCommand):
             reference="Speaker comp",
         )
         self.stdout.write(self.style.SUCCESS(f"  Created order: {order3.reference} (Carol, speaker comp)"))
+
+    def _seed_conditions(self, conference: Conference, ticket_types: dict[str, TicketType]) -> None:
+        """Create demo discount conditions for testing the condition engine.
+
+        Args:
+            conference: The conference to create conditions for.
+            ticket_types: Mapping of slug to TicketType.
+        """
+        from django.contrib.auth.models import Group  # noqa: PLC0415
+
+        if TimeOrStockLimitCondition.objects.filter(conference=conference).exists():
+            self.stdout.write(self.style.WARNING("  Conditions already exist, skipping."))
+            return
+
+        now = timezone.now()
+
+        # Early bird: 20% off Individual and Student tickets, first 50 uses
+        individual = ticket_types.get("individual")
+        student = ticket_types.get("student")
+        early = TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Early Bird 20% Off",
+            priority=10,
+            discount_type="percentage",
+            discount_value=Decimal("20.00"),
+            start_time=now - timedelta(days=30),
+            end_time=now + timedelta(days=60),
+            limit=50,
+        )
+        if individual:
+            early.applicable_ticket_types.add(individual)
+        if student:
+            early.applicable_ticket_types.add(student)
+        self.stdout.write(self.style.SUCCESS(f"  Created condition: {early.name} (Individual, Student)"))
+
+        # Speaker comp: 100% off for speakers
+        speaker_comp = SpeakerCondition.objects.create(
+            conference=conference,
+            name="Speaker Complimentary",
+            priority=0,
+            discount_type="percentage",
+            discount_value=Decimal("100.00"),
+            is_presenter=True,
+            is_copresenter=True,
+        )
+        self.stdout.write(self.style.SUCCESS(f"  Created condition: {speaker_comp.name}"))
+
+        # Staff discount: 50% off for staff group
+        staff_group, _ = Group.objects.get_or_create(name="Conference Staff")
+        staff_disc = GroupMemberCondition.objects.create(
+            conference=conference,
+            name="Staff 50% Discount",
+            priority=5,
+            discount_type="percentage",
+            discount_value=Decimal("50.00"),
+        )
+        staff_disc.groups.add(staff_group)
+        self.stdout.write(self.style.SUCCESS(f"  Created condition: {staff_disc.name}"))
+
+        # VIP discount: $50 off corporate tickets only
+        corporate = ticket_types.get("corporate")
+        if corporate:
+            vip_disc = DiscountForProduct.objects.create(
+                conference=conference,
+                name="Corporate $50 Off",
+                priority=15,
+                discount_type="fixed_amount",
+                discount_value=Decimal("50.00"),
+                start_time=now - timedelta(days=7),
+                end_time=now + timedelta(days=90),
+            )
+            vip_disc.applicable_ticket_types.add(corporate)
+            self.stdout.write(self.style.SUCCESS(f"  Created condition: {vip_disc.name}"))
+
+        # Category discount: 10% off all add-ons
+        DiscountForCategory.objects.create(
+            conference=conference,
+            name="Add-on 10% Off",
+            priority=20,
+            percentage=Decimal("10.00"),
+            apply_to_tickets=False,
+            apply_to_addons=True,
+            start_time=now - timedelta(days=7),
+            end_time=now + timedelta(days=90),
+        )
+        self.stdout.write(self.style.SUCCESS("  Created condition: Add-on 10% Off"))
 
     def _seed_attendees(self, conference: Conference) -> None:
         """Create attendee records for all users with paid orders.

@@ -14,6 +14,14 @@ from django.core.validators import RegexValidator
 from django_program.conference.models import Conference, Section
 from django_program.pretalx.models import Room, ScheduleSlot, Talk
 from django_program.programs.models import Activity, TravelGrant, TravelGrantMessage
+from django_program.registration.conditions import (
+    DiscountForCategory,
+    DiscountForProduct,
+    GroupMemberCondition,
+    IncludedProductCondition,
+    SpeakerCondition,
+    TimeOrStockLimitCondition,
+)
 from django_program.registration.models import AddOn, Payment, TicketType, Voucher
 from django_program.sponsors.models import Sponsor, SponsorLevel
 
@@ -488,3 +496,198 @@ class ManualPaymentForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2, "placeholder": "Payment note (optional)..."}),
         help_text="Optional note about this payment.",
     )
+
+
+class TimeOrStockLimitConditionForm(forms.ModelForm):
+    """Form for creating and editing time/stock limit conditions.
+
+    Provides datetime-local widgets for the time window and checkbox widgets
+    for the M2M product fields.
+    """
+
+    class Meta:
+        model = TimeOrStockLimitCondition
+        fields = [
+            "name",
+            "description",
+            "is_active",
+            "priority",
+            "discount_type",
+            "discount_value",
+            "max_quantity",
+            "applicable_ticket_types",
+            "applicable_addons",
+            "start_time",
+            "end_time",
+            "limit",
+        ]
+        widgets = {
+            "start_time": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "end_time": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "applicable_ticket_types": forms.CheckboxSelectMultiple,
+            "applicable_addons": forms.CheckboxSelectMultiple,
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class SpeakerConditionForm(forms.ModelForm):
+    """Form for creating and editing speaker conditions.
+
+    Controls whether primary speakers and/or copresenters qualify for the
+    configured discount.
+    """
+
+    class Meta:
+        model = SpeakerCondition
+        fields = [
+            "name",
+            "description",
+            "is_active",
+            "priority",
+            "discount_type",
+            "discount_value",
+            "max_quantity",
+            "applicable_ticket_types",
+            "applicable_addons",
+            "is_presenter",
+            "is_copresenter",
+        ]
+        widgets = {
+            "applicable_ticket_types": forms.CheckboxSelectMultiple,
+            "applicable_addons": forms.CheckboxSelectMultiple,
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class GroupMemberConditionForm(forms.ModelForm):
+    """Form for creating and editing group member conditions.
+
+    Uses checkbox widgets for the groups and product M2M fields.
+    """
+
+    class Meta:
+        model = GroupMemberCondition
+        fields = [
+            "name",
+            "description",
+            "is_active",
+            "priority",
+            "discount_type",
+            "discount_value",
+            "max_quantity",
+            "applicable_ticket_types",
+            "applicable_addons",
+            "groups",
+        ]
+        widgets = {
+            "applicable_ticket_types": forms.CheckboxSelectMultiple,
+            "applicable_addons": forms.CheckboxSelectMultiple,
+            "groups": forms.CheckboxSelectMultiple,
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class IncludedProductConditionForm(forms.ModelForm):
+    """Form for creating and editing included product conditions.
+
+    Uses checkbox widgets for both the enabling and target product M2M fields.
+    """
+
+    class Meta:
+        model = IncludedProductCondition
+        fields = [
+            "name",
+            "description",
+            "is_active",
+            "priority",
+            "discount_type",
+            "discount_value",
+            "max_quantity",
+            "applicable_ticket_types",
+            "applicable_addons",
+            "enabling_ticket_types",
+        ]
+        widgets = {
+            "applicable_ticket_types": forms.CheckboxSelectMultiple,
+            "applicable_addons": forms.CheckboxSelectMultiple,
+            "enabling_ticket_types": forms.CheckboxSelectMultiple,
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class DiscountForProductForm(forms.ModelForm):
+    """Form for creating and editing direct product discounts.
+
+    Provides datetime-local widgets for the time window and checkbox widgets
+    for the M2M product fields.
+    """
+
+    class Meta:
+        model = DiscountForProduct
+        fields = [
+            "name",
+            "description",
+            "is_active",
+            "priority",
+            "discount_type",
+            "discount_value",
+            "max_quantity",
+            "applicable_ticket_types",
+            "applicable_addons",
+            "start_time",
+            "end_time",
+            "limit",
+        ]
+        widgets = {
+            "start_time": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "end_time": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "applicable_ticket_types": forms.CheckboxSelectMultiple,
+            "applicable_addons": forms.CheckboxSelectMultiple,
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class DiscountForCategoryForm(forms.ModelForm):
+    """Form for creating and editing category-wide percentage discounts.
+
+    Provides datetime-local widgets for the time window and boolean toggles
+    for ticket/add-on category targeting.
+    """
+
+    class Meta:
+        model = DiscountForCategory
+        fields = [
+            "name",
+            "description",
+            "is_active",
+            "priority",
+            "percentage",
+            "apply_to_tickets",
+            "apply_to_addons",
+            "start_time",
+            "end_time",
+            "limit",
+        ]
+        widgets = {
+            "start_time": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "end_time": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }

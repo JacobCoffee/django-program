@@ -24,6 +24,7 @@ from django_program.registration.models import (
 )
 from django_program.registration.services.capacity import validate_global_capacity
 from django_program.registration.services.cart import get_summary_from_items
+from django_program.registration.services.conditions import commit_condition_usage
 from django_program.registration.signals import order_paid
 from django_program.settings import get_config
 
@@ -50,6 +51,13 @@ def _snapshot_voucher(voucher: Voucher) -> str:
             "unlocks_hidden_tickets": voucher.unlocks_hidden_tickets,
         }
     )
+
+
+def _finalize_discount_usage(voucher: Voucher | None, summary: object, now: object) -> None:
+    """Increment usage counters for vouchers and conditions after checkout."""
+    _increment_voucher_usage(voucher=voucher, now=now)
+    if hasattr(summary, "condition_discounts") and summary.condition_discounts:
+        commit_condition_usage(summary.condition_discounts)
 
 
 class CheckoutService:
@@ -156,7 +164,7 @@ class CheckoutService:
         cart.status = Cart.Status.CHECKED_OUT
         cart.save(update_fields=["status", "updated_at"])
 
-        _increment_voucher_usage(voucher=voucher, now=now)
+        _finalize_discount_usage(voucher, summary, now)
 
         return order
 
