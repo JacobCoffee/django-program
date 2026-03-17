@@ -1,0 +1,85 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Attendees{% endblock %}
+
+{% block page_title %}
+<h1>Attendees</h1>
+<p>{{ total_count }} registered &middot; {{ checked_in_count }} checked in</p>
+{% endblock %}
+
+{% block content %}
+<div class="filter-bar" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+  <form method="get" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+    <input type="text" name="q" value="{{ search_query }}" placeholder="Search name, email, or access code" style="min-width:240px" class="form-control">
+    <select name="filter" onchange="this.form.submit()">
+      <option value="">All</option>
+      <option value="checked_in" {% if current_filter == "checked_in" %}selected{% endif %}>Checked In</option>
+      <option value="not_checked_in" {% if current_filter == "not_checked_in" %}selected{% endif %}>Not Checked In</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-primary">Search</button>
+    {% if current_filter or search_query %}
+    <a href="{% url 'manage:attendee-list' conference.slug %}" class="btn btn-sm btn-secondary">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if attendees %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>Email</th>
+      <th>Access Code</th>
+      <th>Order</th>
+      <th>Status</th>
+      <th>Registered</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for attendee in attendees %}
+    <tr>
+      <td><a href="{% url 'manage:attendee-detail' conference.slug attendee.pk %}">{{ attendee.user.username }}</a></td>
+      <td>{{ attendee.user.email|default:"—" }}</td>
+      <td class="mono">{{ attendee.access_code }}</td>
+      <td>
+        {% if attendee.order %}
+        <a href="{% url 'manage:order-detail' conference.slug attendee.order.pk %}">{{ attendee.order.reference }}</a>
+        {% else %}
+        —
+        {% endif %}
+      </td>
+      <td>
+        {% if attendee.checked_in_at %}
+        <span class="badge badge--active">Checked In</span>
+        <br><small>{{ attendee.checked_in_at|date:"M j, g:i A" }}</small>
+        {% elif attendee.completed_registration %}
+        <span class="badge badge--warning">Registered</span>
+        {% else %}
+        <span class="badge badge--inactive">Incomplete</span>
+        {% endif %}
+      </td>
+      <td>{{ attendee.created_at|date:"M j, Y" }}</td>
+      <td><a href="{% url 'manage:attendee-detail' conference.slug attendee.pk %}" class="btn btn-sm btn-secondary">View</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if is_paginated %}
+<div class="pagination">
+  {% if page_obj.has_previous %}
+  <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if current_filter %}filter={{ current_filter }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+  {% endif %}
+  <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}
+  <a href="?{% if search_query %}q={{ search_query }}&{% endif %}{% if current_filter %}filter={{ current_filter }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+{% else %}
+<div class="empty-state">
+  <p>No attendees found{% if search_query %} matching "{{ search_query }}"{% endif %}{% if current_filter %} with filter "{{ current_filter }}"{% endif %}.</p>
+</div>
+{% endif %}
+{% endblock %}

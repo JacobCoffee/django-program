@@ -10,3 +10,13 @@ class DjangoProgramRegistrationConfig(AppConfig):
     name = "django_program.registration"
     label = "program_registration"
     verbose_name = "Registration"
+
+    def ready(self) -> None:
+        """Connect signal handlers."""
+        from django_program.registration.signal_handlers import create_attendee_on_order_paid  # noqa: PLC0415
+        from django_program.registration.signals import order_paid  # noqa: PLC0415
+
+        order_paid.connect(
+            create_attendee_on_order_paid,
+            dispatch_uid="registration.create_attendee_on_order_paid",
+        )

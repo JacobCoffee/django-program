@@ -5,6 +5,7 @@ from django.http import HttpRequest  # noqa: TC002
 
 from django_program.registration.models import (
     AddOn,
+    Attendee,
     Cart,
     CartItem,
     Credit,
@@ -17,6 +18,16 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
+
+
+@admin.register(Attendee)
+class AttendeeAdmin(admin.ModelAdmin):
+    """Admin interface for viewing and managing conference attendees."""
+
+    list_display = ("user", "conference", "access_code", "completed_registration", "checked_in_at")
+    list_filter = ("conference", "completed_registration")
+    search_fields = ("user__username", "user__email", "access_code")
+    readonly_fields = ("access_code",)
 
 
 @admin.register(TicketType)

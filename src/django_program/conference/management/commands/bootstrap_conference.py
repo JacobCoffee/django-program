@@ -16,6 +16,7 @@ from django_program.config_loader import load_conference_config
 from django_program.programs.models import Activity, TravelGrant
 from django_program.registration.models import (
     AddOn,
+    Attendee,
     Cart,
     CartItem,
     Credit,
@@ -525,6 +526,10 @@ class Command(BaseCommand):
         if individual and demo_users:
             self._seed_orders(conference, demo_users, individual, corporate, tshirt)
 
+        # -- Attendees (from paid orders) --
+        if demo_users:
+            self._seed_attendees(conference)
+
         # -- Active cart --
         if individual and demo_users:
             self._seed_carts(conference, demo_users, individual, tshirt)
@@ -757,6 +762,32 @@ class Command(BaseCommand):
             reference="Speaker comp",
         )
         self.stdout.write(self.style.SUCCESS(f"  Created order: {order3.reference} (Carol, speaker comp)"))
+
+    def _seed_attendees(self, conference: Conference) -> None:
+        """Create attendee records for all users with paid orders.
+
+        Args:
+            conference: The conference to create attendees for.
+        """
+        if Attendee.objects.filter(conference=conference).exists():
+            self.stdout.write(self.style.WARNING("  Attendees already exist, skipping."))
+            return
+
+        paid_orders = Order.objects.filter(
+            conference=conference,
+            status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED],
+        ).select_related("user")
+
+        for order in paid_orders:
+            attendee, created = Attendee.objects.get_or_create(
+                user=order.user,
+                conference=conference,
+                defaults={"order": order, "completed_registration": True},
+            )
+            if created:
+                self.stdout.write(
+                    self.style.SUCCESS(f"  Created attendee: {order.user.username} [{attendee.access_code}]")
+                )
 
     def _seed_carts(
         self,
