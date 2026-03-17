@@ -9,7 +9,7 @@ Access to the standard management views is restricted to users who meet at least
 
 The financial overview dashboard at `/manage/<conference-slug>/financial/` additionally allows access to users who belong to the "Program: Finance & Accounting" group.
 
-The sidebar organizes features into sections: **Content** (sections, rooms, speakers, talks, schedule, overrides), **Registration** (financial overview, orders, ticket types, add-ons, vouchers), **Sponsors** (levels, sponsors), and **Programs** (activities, travel grants).
+The sidebar organizes features into sections: **Content** (sections, rooms, speakers, talks, schedule, overrides), **Registration** (financial overview, orders, attendees, ticket types, add-ons, vouchers, conditions), **Sponsors** (levels, sponsors), and **Programs** (activities, travel grants).
 
 ---
 
@@ -121,9 +121,11 @@ The management sidebar exposes several additional views beyond financial reporti
 **Registration**
 
 - **Orders** -- Full order list with filtering, detail views, and manual payment recording.
+- **Attendees** -- List and detail views for attendee records (see below).
 - **Ticket Types** -- Create and edit ticket types with pricing, availability windows, and stock limits.
 - **Add-ons** -- Manage conference add-ons (t-shirts, tutorials, etc.).
 - **Vouchers** -- Individual voucher CRUD alongside the bulk generation tool.
+- **Conditions** -- Create and manage discount conditions across all 6 types (see below).
 
 **Sponsors**
 
@@ -134,3 +136,66 @@ The management sidebar exposes several additional views beyond financial reporti
 
 - **Activities** -- Create sprints, tutorials, and open spaces with signup caps. Includes per-activity dashboards with attendee export and waitlist promotion.
 - **Travel Grants** -- Review applications, send messages, and record disbursements. Includes receipt review queue with approve/flag workflow.
+
+---
+
+## Attendees
+
+The attendee management views provide a read-only dossier of each person registered for the conference.
+
+### Attendee List
+
+**URL**: `/manage/<conference-slug>/attendees/`
+
+A table of all attendees for the current conference, showing user identity, access code, check-in status, and registration completion. Navigate to it from the sidebar under **Registration > Attendees**.
+
+### Attendee Detail (Dossier)
+
+**URL**: `/manage/<conference-slug>/attendees/<pk>/`
+
+A single-page view of everything related to one attendee at this conference:
+
+- **Profile** -- user info, access code, check-in timestamp, registration status.
+- **Orders** -- all orders placed by this user for this conference, with status and totals.
+- **Payments** -- payment records across all orders.
+- **Credits** -- any store credits issued to or used by this user.
+- **Vouchers** -- vouchers redeemed by this user.
+- **Activity Signups** -- activities the attendee has signed up for (from the programs app).
+- **Travel Grants** -- any travel grant applications submitted by this user.
+
+This dossier gives organizers a complete picture of an attendee's conference activity without jumping between multiple admin pages.
+
+---
+
+## Conditions & Discounts
+
+The conditions management views let organizers create, edit, and monitor automatic discount rules for the conference.
+
+### Condition List
+
+**URL**: `/manage/<conference-slug>/conditions/`
+
+A unified list of all condition types for the current conference. Conditions are displayed in a single table regardless of type, sorted by priority. Each row shows the condition name, type, discount details, active status, and usage count. Navigate to it from the sidebar under **Registration > Conditions**.
+
+### Creating a Condition
+
+**URL**: `/manage/<conference-slug>/conditions/<type-slug>/add/`
+
+Select the condition type first, then fill in the type-specific form. The `<type-slug>` values correspond to the six condition types:
+
+| Type Slug | Condition Type | Use Case |
+|---|---|---|
+| `time-stock` | TimeOrStockLimitCondition | Early-bird discounts, flash sales |
+| `speaker` | SpeakerCondition | Automatic speaker discounts |
+| `group` | GroupMemberCondition | Staff/volunteer pricing |
+| `included-product` | IncludedProductCondition | Bundle discounts (buy X, get Y% off) |
+| `product` | DiscountForProduct | Direct product discounts |
+| `category` | DiscountForCategory | Broad percentage off tickets and/or add-ons |
+
+All condition forms share the base fields (name, description, priority, active toggle) plus the type-specific fields (time windows, group selectors, product M2Ms, etc.).
+
+### Editing a Condition
+
+**URL**: `/manage/<conference-slug>/conditions/<type-slug>/<pk>/edit/`
+
+Edit an existing condition. The form is identical to the create form, pre-populated with current values. Changes take effect on the next cart evaluation.

@@ -103,6 +103,40 @@ Most conferences can ignore this section entirely.
 | `currency` | `str` | `"USD"` | ISO 4217 currency code used throughout the system. |
 | `currency_symbol` | `str` | `"$"` | Display symbol for the currency. |
 | `max_grant_amount` | `int` | `3000` | Maximum travel grant amount in the configured currency. |
+| `attendee_profile_model` | `str` | `""` | Dotted `app_label.ModelName` path to a custom attendee profile model. When set, `get_attendee_profile_model()` resolves and returns the model class. Leave empty to use the built-in {class}`~django_program.registration.attendee.Attendee` model only. |
+
+#### Custom attendee profiles
+
+If your conference needs extra attendee fields beyond what the built-in {class}`~django_program.registration.attendee.Attendee` model provides, create a model that subclasses {class}`~django_program.registration.attendee.AttendeeProfileBase` and point the setting at it:
+
+```python
+# myapp/models.py
+from django_program.registration.attendee import AttendeeProfileBase
+
+
+class CustomAttendeeProfile(AttendeeProfileBase):
+    dietary_restrictions = models.TextField(blank=True, default="")
+    tshirt_size = models.CharField(max_length=10, blank=True, default="")
+
+    class Meta:
+        verbose_name = "attendee profile"
+```
+
+```python
+# settings.py
+DJANGO_PROGRAM = {
+    "attendee_profile_model": "myapp.CustomAttendeeProfile",
+    # ...
+}
+```
+
+Retrieve the model class at runtime:
+
+```python
+from django_program.settings import get_attendee_profile_model
+
+ProfileModel = get_attendee_profile_model()  # returns myapp.CustomAttendeeProfile, or None
+```
 
 ### Feature toggles
 
