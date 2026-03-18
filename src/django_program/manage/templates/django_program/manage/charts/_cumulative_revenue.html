@@ -1,0 +1,208 @@
+{# _cumulative_revenue.html -- Cumulative Revenue dual-axis line + bar chart #}
+{# Usage: {% include "django_program/manage/charts/_cumulative_revenue.html" with chart_data=chart_cumulative_json %} #}
+
+<div class="card card--static" style="padding: 1.25rem 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+    <div>
+      <strong style="font-size: 0.95rem;">Cumulative Revenue</strong><br>
+      <small style="color: var(--color-text-muted); font-size: 0.78rem;">Running total over time</small>
+    </div>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <span style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: var(--color-text-muted);"><span style="width: 10px; height: 10px; border-radius: 2px; background: #4338ca; display: inline-block;"></span> Cumulative</span>
+      <span style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: var(--color-text-muted);"><span style="width: 10px; height: 10px; border-radius: 2px; background: #e2e4e9; display: inline-block;"></span> Daily</span>
+    </div>
+  </div>
+  <canvas id="chart-cumulative-revenue" width="400" height="220" style="width: 100%; height: 220px;"></canvas>
+</div>
+
+<script>
+(function() {
+  var canvas = document.getElementById('chart-cumulative-revenue');
+  if (!canvas) return;
+  var u = window._chartUtils;
+  if (!u) return;
+  var data = JSON.parse('{{ chart_data|escapejs }}');
+
+  function drawChart() {
+    var s = u.setupCanvas(canvas);
+    var ctx = s.ctx, w = s.w, h = s.h;
+    if (!data || !data.length) { u.drawEmpty(ctx, w, h, 'No revenue data available'); return; }
+
+    var padL = 60, padR = 60, padT = 16, padB = 36;
+    var chartW = w - padL - padR;
+    var chartH = h - padT - padB;
+
+    var maxCum = Math.max.apply(null, data.map(function(d) { return d.cumulative; })) || 1;
+    var maxDaily = Math.max.apply(null, data.map(function(d) { return d.daily; })) || 1;
+
+    var niceCum = Math.ceil(maxCum / Math.pow(10, Math.floor(Math.log10(maxCum || 1)))) * Math.pow(10, Math.floor(Math.log10(maxCum || 1)));
+    if (niceCum === 0) niceCum = 100;
+    var niceDaily = Math.ceil(maxDaily / Math.pow(10, Math.floor(Math.log10(maxDaily || 1)))) * Math.pow(10, Math.floor(Math.log10(maxDaily || 1)));
+    if (niceDaily === 0) niceDaily = 100;
+    var gridLines = 4;
+
+    var barW = Math.max(4, (chartW / data.length) * 0.5);
+
+    var points = data.map(function(d, i) {
+      var x = padL + (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW);
+      var y = padT + chartH - (d.cumulative / niceCum) * chartH;
+      return { x: x, y: y };
+    });
+
+    function draw(t) {
+      var progress = u.easeOutCubic(t);
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 1;
+      for (var i = 0; i <= gridLines; i++) {
+        var gy = padT + chartH - (chartH * i / gridLines);
+        ctx.beginPath();
+        ctx.moveTo(padL, gy);
+        ctx.lineTo(w - padR, gy);
+        ctx.stroke();
+
+        ctx.fillStyle = u.COLORS.textMuted;
+        ctx.font = '500 10px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(u.formatCurrency(niceCum * i / gridLines), padL - 8, gy);
+
+        ctx.textAlign = 'left';
+        ctx.fillText(u.formatCurrency(niceDaily * i / gridLines), w - padR + 8, gy);
+      }
+      ctx.restore();
+
+      var skip = Math.max(1, Math.ceil(data.length / 8));
+      for (var i = 0; i < data.length; i++) {
+        if (i % skip === 0) {
+          ctx.save();
+          ctx.fillStyle = u.COLORS.textMuted;
+          ctx.font = '500 10px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(u.formatDateShort(data[i].date), points[i].x, padT + chartH + 8);
+          ctx.restore();
+        }
+      }
+
+      for (var i = 0; i < data.length; i++) {
+        var bx = points[i].x - barW / 2;
+        var barH = (data[i].daily / niceDaily) * chartH * progress;
+        var by = padT + chartH - barH;
+        ctx.save();
+        ctx.fillStyle = u.hexToRgba(u.COLORS.gray, 0.8);
+        u.roundRect(ctx, bx, by, barW, barH, [2, 2, 0, 0]);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      var drawCount = Math.floor(points.length * progress);
+      if (drawCount < 1) return;
+
+      var grad = ctx.createLinearGradient(0, padT, 0, padT + chartH);
+      grad.addColorStop(0, u.hexToRgba(u.COLORS.indigo, 0.22));
+      grad.addColorStop(1, u.hexToRgba(u.COLORS.indigo, 0.02));
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, padT + chartH);
+      for (var i = 0; i <= drawCount && i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      var lastIdx = Math.min(drawCount, points.length - 1);
+      ctx.lineTo(points[lastIdx].x, padT + chartH);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.strokeStyle = u.COLORS.indigo;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      for (var i = 0; i <= drawCount && i < points.length; i++) {
+        if (i === 0) ctx.moveTo(points[i].x, points[i].y);
+        else ctx.lineTo(points[i].x, points[i].y);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      if (progress > 0.8) {
+        var dotAlpha = Math.min(1, (progress - 0.8) / 0.2);
+        ctx.save();
+        ctx.globalAlpha = dotAlpha;
+        var lastPt = points[points.length - 1];
+        ctx.beginPath();
+        ctx.arc(lastPt.x, lastPt.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = u.COLORS.surface;
+        ctx.fill();
+        ctx.strokeStyle = u.COLORS.indigo;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    u.animate(800, draw, function() {
+      canvas.addEventListener('mousemove', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var hit = null;
+        var minDist = Infinity;
+        for (var i = 0; i < points.length; i++) {
+          var dx = Math.abs(mx - points[i].x);
+          if (dx < minDist && dx < 30) { minDist = dx; hit = i; }
+        }
+        if (hit !== null) {
+          canvas.style.cursor = 'pointer';
+          var d = data[hit];
+          u.showTooltip(e,
+            '<div style="font-weight:700;margin-bottom:2px;">' + d.date + '</div>' +
+            '<div>Daily: <strong>' + u.formatCurrencyFull(d.daily) + '</strong></div>' +
+            '<div>Cumulative: <strong>' + u.formatCurrencyFull(d.cumulative) + '</strong></div>'
+          );
+          draw(1);
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(points[hit].x, padT);
+          ctx.lineTo(points[hit].x, padT + chartH);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(points[hit].x, points[hit].y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = u.COLORS.surface;
+          ctx.fill();
+          ctx.strokeStyle = u.COLORS.indigo;
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([]);
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          canvas.style.cursor = 'default';
+          u.hideTooltip();
+          draw(1);
+        }
+      });
+      canvas.addEventListener('mouseleave', function() {
+        u.hideTooltip();
+        canvas.style.cursor = 'default';
+        draw(1);
+      });
+    });
+  }
+
+  requestAnimationFrame(drawChart);
+  window.addEventListener('resize', (function() {
+    var timer;
+    return function() { clearTimeout(timer); timer = setTimeout(drawChart, 200); };
+  })());
+})();
+</script>

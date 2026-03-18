@@ -55,6 +55,24 @@
   {% include "django_program/manage/charts/_payment_methods.html" with chart_data=chart_payments_json %}
 </div>
 
+{# Row 3: AOV + Revenue by type #}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_aov_line.html" with chart_data=chart_aov_json %}
+  {% include "django_program/manage/charts/_revenue_stacked.html" with chart_data=chart_rev_by_type_json %}
+</div>
+
+{# Row 4: Waterfall + Cumulative #}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_waterfall.html" with chart_data=chart_waterfall_json %}
+  {% include "django_program/manage/charts/_cumulative_revenue.html" with chart_data=chart_cumulative_json %}
+</div>
+
+{# Row 5: Discount impact + Refund gauge #}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_discount_impact.html" with chart_data=chart_discount_json %}
+  {% include "django_program/manage/charts/_refund_gauge.html" with chart_data=chart_refund_json %}
+</div>
+
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
   <!-- Orders by Status -->
   <div>

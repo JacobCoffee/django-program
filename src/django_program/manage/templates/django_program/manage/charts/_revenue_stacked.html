@@ -1,0 +1,202 @@
+{# _revenue_stacked.html -- Revenue by Ticket Type stacked area chart #}
+{# Usage: {% include "django_program/manage/charts/_revenue_stacked.html" with chart_data=chart_rev_by_type_json %} #}
+
+<div class="card card--static" style="padding: 1.25rem 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+    <div>
+      <strong style="font-size: 0.95rem;">Revenue by Product</strong><br>
+      <small style="color: var(--color-text-muted); font-size: 0.78rem;">Daily revenue breakdown by ticket type</small>
+    </div>
+    <div id="chart-rev-stacked-legend" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;"></div>
+  </div>
+  <canvas id="chart-rev-stacked" width="400" height="200" style="width: 100%; height: 200px;"></canvas>
+</div>
+
+<script>
+(function() {
+  var canvas = document.getElementById('chart-rev-stacked');
+  var legendEl = document.getElementById('chart-rev-stacked-legend');
+  if (!canvas) return;
+  var u = window._chartUtils;
+  if (!u) return;
+  var rawData = JSON.parse('{{ chart_data|escapejs }}');
+
+  function drawChart() {
+    var s = u.setupCanvas(canvas);
+    var ctx = s.ctx, w = s.w, h = s.h;
+    if (!rawData || !rawData.length) { u.drawEmpty(ctx, w, h, 'No revenue data available'); if (legendEl) legendEl.innerHTML = ''; return; }
+
+    var typeSet = {};
+    var dateSet = {};
+    for (var i = 0; i < rawData.length; i++) {
+      typeSet[rawData[i].ticket_type] = true;
+      if (!dateSet[rawData[i].date]) dateSet[rawData[i].date] = {};
+      dateSet[rawData[i].date][rawData[i].ticket_type] = { revenue: rawData[i].revenue, count: rawData[i].count };
+    }
+    var types = Object.keys(typeSet).sort();
+    var dates = Object.keys(dateSet).sort();
+
+    if (!dates.length || !types.length) { u.drawEmpty(ctx, w, h, 'No revenue data available'); return; }
+
+    var stacked = [];
+    var maxStack = 0;
+    for (var di = 0; di < dates.length; di++) {
+      var entry = { date: dates[di], layers: [], total: 0 };
+      for (var ti = 0; ti < types.length; ti++) {
+        var val = (dateSet[dates[di]][types[ti]] || {}).revenue || 0;
+        entry.layers.push(val);
+        entry.total += val;
+      }
+      if (entry.total > maxStack) maxStack = entry.total;
+      stacked.push(entry);
+    }
+
+    var niceMax = Math.ceil(maxStack / Math.pow(10, Math.floor(Math.log10(maxStack || 1)))) * Math.pow(10, Math.floor(Math.log10(maxStack || 1)));
+    if (niceMax === 0) niceMax = 100;
+
+    var padL = 60, padR = 16, padT = 16, padB = 36;
+    var chartW = w - padL - padR;
+    var chartH = h - padT - padB;
+    var gridLines = 4;
+    var colors = types.map(function(_, i) { return u.CHART_PALETTE[i % u.CHART_PALETTE.length]; });
+
+    if (legendEl) {
+      var html = '';
+      for (var i = 0; i < types.length; i++) {
+        html += '<span style="display:flex;align-items:center;gap:0.35rem;font-size:0.72rem;color:var(--color-text-muted);">' +
+          '<span style="width:10px;height:10px;border-radius:2px;background:' + colors[i] + ';display:inline-block;"></span> ' +
+          types[i] + '</span>';
+      }
+      legendEl.innerHTML = html;
+    }
+
+    function getX(idx) {
+      return padL + (stacked.length === 1 ? chartW / 2 : (idx / (stacked.length - 1)) * chartW);
+    }
+
+    function draw(t) {
+      var progress = u.easeOutCubic(t);
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 1;
+      for (var i = 0; i <= gridLines; i++) {
+        var gy = padT + chartH - (chartH * i / gridLines);
+        ctx.beginPath();
+        ctx.moveTo(padL, gy);
+        ctx.lineTo(w - padR, gy);
+        ctx.stroke();
+        ctx.fillStyle = u.COLORS.textMuted;
+        ctx.font = '500 10px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(u.formatCurrency(niceMax * i / gridLines), padL - 8, gy);
+      }
+      ctx.restore();
+
+      var skip = Math.max(1, Math.ceil(stacked.length / 8));
+      for (var i = 0; i < stacked.length; i++) {
+        if (i % skip === 0) {
+          ctx.save();
+          ctx.fillStyle = u.COLORS.textMuted;
+          ctx.font = '500 10px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(u.formatDateShort(stacked[i].date), getX(i), padT + chartH + 8);
+          ctx.restore();
+        }
+      }
+
+      for (var ti = types.length - 1; ti >= 0; ti--) {
+        var cumBase = [];
+        for (var di = 0; di < stacked.length; di++) {
+          var base = 0;
+          for (var k = 0; k < ti; k++) base += stacked[di].layers[k];
+          cumBase.push(base);
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        for (var di = 0; di < stacked.length; di++) {
+          var cumTop = cumBase[di] + stacked[di].layers[ti];
+          var x = getX(di);
+          var y = padT + chartH - (cumTop / niceMax) * chartH * progress;
+          if (di === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        for (var di = stacked.length - 1; di >= 0; di--) {
+          var x = getX(di);
+          var y = padT + chartH - (cumBase[di] / niceMax) * chartH * progress;
+          ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = u.hexToRgba(colors[ti], 0.55);
+        ctx.fill();
+        ctx.strokeStyle = colors[ti];
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (var di = 0; di < stacked.length; di++) {
+          var cumTop = cumBase[di] + stacked[di].layers[ti];
+          var x = getX(di);
+          var y = padT + chartH - (cumTop / niceMax) * chartH * progress;
+          if (di === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    u.animate(800, draw, function() {
+      canvas.addEventListener('mousemove', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var hit = null;
+        var minDist = Infinity;
+        for (var i = 0; i < stacked.length; i++) {
+          var dx = Math.abs(mx - getX(i));
+          if (dx < minDist && dx < 30) { minDist = dx; hit = i; }
+        }
+        if (hit !== null) {
+          canvas.style.cursor = 'pointer';
+          var entry = stacked[hit];
+          var html = '<div style="font-weight:700;margin-bottom:2px;">' + entry.date + '</div>';
+          for (var ti = 0; ti < types.length; ti++) {
+            html += '<div><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + colors[ti] + ';margin-right:4px;"></span>' +
+              types[ti] + ': <strong>' + u.formatCurrencyFull(entry.layers[ti]) + '</strong></div>';
+          }
+          html += '<div style="border-top:1px solid rgba(255,255,255,0.2);margin-top:3px;padding-top:3px;">Total: <strong>' + u.formatCurrencyFull(entry.total) + '</strong></div>';
+          u.showTooltip(e, html);
+          draw(1);
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(getX(hit), padT);
+          ctx.lineTo(getX(hit), padT + chartH);
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          canvas.style.cursor = 'default';
+          u.hideTooltip();
+          draw(1);
+        }
+      });
+      canvas.addEventListener('mouseleave', function() {
+        u.hideTooltip();
+        canvas.style.cursor = 'default';
+        draw(1);
+      });
+    });
+  }
+
+  requestAnimationFrame(drawChart);
+  window.addEventListener('resize', (function() {
+    var timer;
+    return function() { clearTimeout(timer); timer = setTimeout(drawChart, 200); };
+  })());
+})();
+</script>

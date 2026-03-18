@@ -10,7 +10,7 @@ a specific conference.
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Count, Exists, F, OuterRef, Q, QuerySet, Sum, Value
+from django.db.models import Avg, Count, Exists, F, OuterRef, Q, QuerySet, Sum, Value
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
@@ -25,6 +25,7 @@ from django_program.registration.models import (
     Attendee,
     Credit,
     Order,
+    OrderLineItem,
     Payment,
     TicketType,
     Voucher,
@@ -636,3 +637,297 @@ def get_registration_flow(
         }
         for date, vals in sorted(merged.items())
     ]
+
+
+def get_aov_by_date(
+    conference: Conference,
+    *,
+    date_from: datetime.date | None = None,
+    date_until: datetime.date | None = None,
+) -> list[dict[str, Any]]:
+    """Return daily average order value for paid orders.
+
+    Groups paid orders by date, computes avg(total) per day.
+
+    Args:
+        conference: The conference to scope the query to.
+        date_from: Optional lower bound (inclusive) for order date.
+        date_until: Optional upper bound (inclusive) for order date.
+
+    Returns:
+        A list of dicts with ``date``, ``aov``, and ``count`` keys,
+        ordered chronologically.
+    """
+    qs = Order.objects.filter(
+        conference=conference,
+        status__in=_PAID_STATUSES,
+    )
+
+    if date_from is not None:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_until is not None:
+        qs = qs.filter(created_at__date__lte=date_until)
+
+    rows = (
+        qs.annotate(date=TruncDate("created_at"))
+        .values("date")
+        .annotate(
+            aov=Coalesce(Avg("total"), Value(_ZERO)),
+            count=Count("id"),
+        )
+        .order_by("date")
+    )
+
+    return [{"date": row["date"], "aov": row["aov"], "count": row["count"]} for row in rows]
+
+
+def get_revenue_by_ticket_type(
+    conference: Conference,
+    *,
+    date_from: datetime.date | None = None,
+    date_until: datetime.date | None = None,
+) -> list[dict[str, Any]]:
+    """Return daily revenue broken down by ticket type.
+
+    Joins OrderLineItem -> Order (paid), groups by date and ticket type name.
+
+    Args:
+        conference: The conference to scope the query to.
+        date_from: Optional lower bound (inclusive) for order date.
+        date_until: Optional upper bound (inclusive) for order date.
+
+    Returns:
+        A list of dicts with ``date``, ``ticket_type``, ``revenue``, and
+        ``count`` keys, ordered chronologically then by ticket type.
+    """
+    qs = OrderLineItem.objects.filter(
+        order__conference=conference,
+        order__status__in=_PAID_STATUSES,
+        ticket_type__isnull=False,
+    )
+
+    if date_from is not None:
+        qs = qs.filter(order__created_at__date__gte=date_from)
+    if date_until is not None:
+        qs = qs.filter(order__created_at__date__lte=date_until)
+
+    rows = (
+        qs.annotate(date=TruncDate("order__created_at"))
+        .values("date", "ticket_type__name")
+        .annotate(
+            revenue=Coalesce(Sum("line_total"), Value(_ZERO)),
+            count=Coalesce(Sum("quantity"), Value(0)),
+        )
+        .order_by("date", "ticket_type__name")
+    )
+
+    return [
+        {
+            "date": row["date"],
+            "ticket_type": row["ticket_type__name"],
+            "revenue": row["revenue"],
+            "count": row["count"],
+        }
+        for row in rows
+    ]
+
+
+def get_discount_impact(conference: Conference) -> dict[str, Any]:
+    """Return discount impact metrics for paid orders.
+
+    Computes total gross sales, net revenue, discount amounts, the discount
+    rate as a percentage, and a per-voucher breakdown.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with ``total_discount``, ``total_gross``, ``total_net``,
+        ``discount_rate``, ``by_voucher``, ``orders_with_discount``, and
+        ``orders_without_discount``.
+    """
+    paid_orders = Order.objects.filter(
+        conference=conference,
+        status__in=_PAID_STATUSES,
+    )
+
+    agg = paid_orders.aggregate(
+        total_discount=Coalesce(Sum("discount_amount"), Value(_ZERO)),
+        total_gross=Coalesce(Sum("subtotal"), Value(_ZERO)),
+        total_net=Coalesce(Sum("total"), Value(_ZERO)),
+        orders_with_discount=Count("id", filter=Q(discount_amount__gt=0)),
+        orders_without_discount=Count("id", filter=Q(discount_amount=0)),
+    )
+
+    total_gross = agg["total_gross"]
+    total_discount = agg["total_discount"]
+    discount_rate = (total_discount / total_gross * 100) if total_gross else _ZERO
+
+    by_voucher = list(
+        paid_orders.filter(voucher_code__gt="")
+        .values("voucher_code")
+        .annotate(
+            discount_total=Coalesce(Sum("discount_amount"), Value(_ZERO)),
+            order_count=Count("id"),
+        )
+        .order_by("-discount_total")
+        .values("voucher_code", "discount_total", "order_count")
+    )
+
+    by_voucher_serializable = [
+        {
+            "code": row["voucher_code"],
+            "discount_total": float(row["discount_total"]),
+            "order_count": row["order_count"],
+        }
+        for row in by_voucher
+    ]
+
+    return {
+        "total_discount": total_discount,
+        "total_gross": total_gross,
+        "total_net": agg["total_net"],
+        "discount_rate": discount_rate,
+        "by_voucher": by_voucher_serializable,
+        "orders_with_discount": agg["orders_with_discount"],
+        "orders_without_discount": agg["orders_without_discount"],
+    }
+
+
+def get_refund_metrics(conference: Conference) -> dict[str, Any]:
+    """Return refund and credit metrics for the conference.
+
+    Computes total refunded amount (credits issued from source orders),
+    total revenue, refund rate, and credit counts grouped by status.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with ``total_refunded``, ``total_revenue``, ``refund_rate``,
+        ``refund_count``, and ``by_status``.
+    """
+    refund_agg = Credit.objects.filter(
+        conference=conference,
+        source_order__isnull=False,
+    ).aggregate(
+        total_refunded=Coalesce(Sum("amount"), Value(_ZERO)),
+        refund_count=Count("id"),
+    )
+
+    revenue_agg = Order.objects.filter(
+        conference=conference,
+        status__in=_PAID_STATUSES,
+    ).aggregate(
+        total_revenue=Coalesce(Sum("total"), Value(_ZERO)),
+    )
+
+    total_refunded = refund_agg["total_refunded"]
+    total_revenue = revenue_agg["total_revenue"]
+    refund_rate = (total_refunded / total_revenue * 100) if total_revenue else _ZERO
+
+    status_rows = Credit.objects.filter(conference=conference).values("status").annotate(count=Count("id"))
+    by_status: dict[str, int] = {
+        Credit.Status.AVAILABLE: 0,
+        Credit.Status.APPLIED: 0,
+        Credit.Status.EXPIRED: 0,
+    }
+    for row in status_rows:
+        by_status[row["status"]] = row["count"]
+
+    return {
+        "total_refunded": total_refunded,
+        "total_revenue": total_revenue,
+        "refund_rate": refund_rate,
+        "refund_count": refund_agg["refund_count"],
+        "by_status": by_status,
+    }
+
+
+def get_cashflow_waterfall(conference: Conference) -> list[dict[str, Any]]:
+    """Return waterfall chart data for cash flow visualization.
+
+    Computes gross sales, discount deductions, refund deductions, credits
+    applied as an inflow, and the resulting net revenue.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A list of dicts with ``label``, ``value``, and ``type`` keys
+        representing waterfall steps.
+    """
+    paid_orders = Order.objects.filter(
+        conference=conference,
+        status__in=_PAID_STATUSES,
+    )
+
+    order_agg = paid_orders.aggregate(
+        gross=Coalesce(Sum("subtotal"), Value(_ZERO)),
+        discounts=Coalesce(Sum("discount_amount"), Value(_ZERO)),
+        net=Coalesce(Sum("total"), Value(_ZERO)),
+    )
+
+    refund_agg = Credit.objects.filter(
+        conference=conference,
+        source_order__isnull=False,
+    ).aggregate(
+        total_refunded=Coalesce(Sum("amount"), Value(_ZERO)),
+    )
+
+    credits_applied_agg = Credit.objects.filter(
+        conference=conference,
+        status=Credit.Status.APPLIED,
+    ).aggregate(
+        total_applied=Coalesce(Sum("amount"), Value(_ZERO)),
+    )
+
+    gross = order_agg["gross"]
+    discounts = order_agg["discounts"]
+    refunds = refund_agg["total_refunded"]
+    credits_applied = credits_applied_agg["total_applied"]
+    net_revenue = gross - discounts - refunds + credits_applied
+
+    return [
+        {"label": "Gross Sales", "value": gross, "type": "total"},
+        {"label": "Discounts", "value": -discounts, "type": "decrease"},
+        {"label": "Refunds", "value": -refunds, "type": "decrease"},
+        {"label": "Credits Applied", "value": credits_applied, "type": "increase"},
+        {"label": "Net Revenue", "value": net_revenue, "type": "total"},
+    ]
+
+
+def get_cumulative_revenue(
+    conference: Conference,
+    *,
+    date_from: datetime.date | None = None,
+    date_until: datetime.date | None = None,
+) -> list[dict[str, Any]]:
+    """Return cumulative revenue over time.
+
+    Computes daily revenue from paid orders and a running total.
+
+    Args:
+        conference: The conference to scope the query to.
+        date_from: Optional lower bound (inclusive) for order date.
+        date_until: Optional upper bound (inclusive) for order date.
+
+    Returns:
+        A list of dicts with ``date``, ``daily``, and ``cumulative`` keys,
+        ordered chronologically.
+    """
+    daily = get_sales_by_date(conference, date_from=date_from, date_until=date_until)
+
+    cumulative = _ZERO
+    result: list[dict[str, Any]] = []
+    for row in daily:
+        cumulative += row["revenue"]
+        result.append(
+            {
+                "date": row["date"],
+                "daily": row["revenue"],
+                "cumulative": cumulative,
+            }
+        )
+
+    return result

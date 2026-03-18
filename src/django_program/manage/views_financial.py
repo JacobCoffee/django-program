@@ -19,7 +19,15 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from django_program.conference.models import Conference
-from django_program.manage.reports import get_sales_by_date
+from django_program.manage.reports import (
+    get_aov_by_date,
+    get_cashflow_waterfall,
+    get_cumulative_revenue,
+    get_discount_impact,
+    get_refund_metrics,
+    get_revenue_by_ticket_type,
+    get_sales_by_date,
+)
 from django_program.registration.models import (
     Cart,
     Credit,
@@ -54,6 +62,24 @@ def _build_chart_context(
     sixty_days_ago = timezone.now().date() - datetime.timedelta(days=60)
     sales_data = get_sales_by_date(conference, date_from=sixty_days_ago)
 
+    # -- AOV over time --
+    aov_data = get_aov_by_date(conference, date_from=sixty_days_ago)
+
+    # -- Revenue by ticket type --
+    rev_by_type = get_revenue_by_ticket_type(conference, date_from=sixty_days_ago)
+
+    # -- Discount impact --
+    discount_data = get_discount_impact(conference)
+
+    # -- Refund metrics --
+    refund_data = get_refund_metrics(conference)
+
+    # -- Cash flow waterfall --
+    waterfall = get_cashflow_waterfall(conference)
+
+    # -- Cumulative revenue --
+    cumulative = get_cumulative_revenue(conference, date_from=sixty_days_ago)
+
     return {
         "chart_sales_json": json.dumps(
             [
@@ -81,6 +107,49 @@ def _build_chart_context(
                     "total": tt.total_quantity,
                 }
                 for tt in ticket_sales
+            ]
+        ),
+        "chart_aov_json": json.dumps(
+            [{"date": row["date"].isoformat(), "aov": float(row["aov"]), "count": row["count"]} for row in aov_data]
+        ),
+        "chart_rev_by_type_json": json.dumps(
+            [
+                {
+                    "date": row["date"].isoformat(),
+                    "ticket_type": row["ticket_type"],
+                    "revenue": float(row["revenue"]),
+                    "count": row["count"],
+                }
+                for row in rev_by_type
+            ]
+        ),
+        "chart_discount_json": json.dumps(
+            {
+                "total_discount": float(discount_data["total_discount"]),
+                "total_gross": float(discount_data["total_gross"]),
+                "total_net": float(discount_data["total_net"]),
+                "discount_rate": float(discount_data["discount_rate"]),
+                "by_voucher": discount_data["by_voucher"],
+                "orders_with_discount": discount_data["orders_with_discount"],
+                "orders_without_discount": discount_data["orders_without_discount"],
+            }
+        ),
+        "chart_refund_json": json.dumps(
+            {
+                "total_refunded": float(refund_data["total_refunded"]),
+                "total_revenue": float(refund_data["total_revenue"]),
+                "refund_rate": float(refund_data["refund_rate"]),
+                "refund_count": refund_data["refund_count"],
+                "by_status": refund_data["by_status"],
+            }
+        ),
+        "chart_waterfall_json": json.dumps(
+            [{"label": step["label"], "value": float(step["value"]), "type": step["type"]} for step in waterfall]
+        ),
+        "chart_cumulative_json": json.dumps(
+            [
+                {"date": row["date"].isoformat(), "daily": float(row["daily"]), "cumulative": float(row["cumulative"])}
+                for row in cumulative
             ]
         ),
     }
