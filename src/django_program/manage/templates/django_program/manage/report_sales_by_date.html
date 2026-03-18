@@ -35,17 +35,18 @@
 </div>
 
 <form method="get" class="filter-bar">
-  <label for="date_from">From</label>
-  <input type="date" name="date_from" id="date_from" value="{{ current_date_from }}" onchange="this.form.submit()">
-  <label for="date_until">Until</label>
-  <input type="date" name="date_until" id="date_until" value="{{ current_date_until }}" onchange="this.form.submit()">
+  <label for="date_from" style="font-size: 0.82rem; font-weight: 600; color: var(--color-text-secondary);">From</label>
+  <input type="date" name="date_from" id="date_from" value="{{ current_date_from }}">
+  <label for="date_until" style="font-size: 0.82rem; font-weight: 600; color: var(--color-text-secondary);">Until</label>
+  <input type="date" name="date_until" id="date_until" value="{{ current_date_until }}">
+  <button type="submit" class="btn btn-primary btn-sm">Filter</button>
   {% if current_date_from or current_date_until %}
   <a href="{% url 'manage:report-sales-by-date' conference.slug %}" class="btn btn-sm btn-secondary">Clear</a>
   {% endif %}
 </form>
 
 {% if sales_rows %}
-<table class="data-table">
+<table class="data-table" style="max-width: 600px;">
   <thead>
     <tr>
       <th>Date</th>
