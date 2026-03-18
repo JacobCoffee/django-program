@@ -1294,9 +1294,10 @@ class TestSeedReportsCommand:
         call_command("seed_reports")
 
         assert Conference.objects.filter(slug="pycon-2027").exists()
-        assert Order.objects.filter(reference="ORD-SEED-001").exists()
+        assert Order.objects.filter(conference__slug="pycon-2027").count() >= 50
         assert Credit.objects.filter(conference__slug="pycon-2027").count() >= 1
-        assert Speaker.objects.filter(conference__slug="pycon-2027").count() >= 1
+        assert Speaker.objects.filter(conference__slug="pycon-2027").count() >= 10
+        assert Attendee.objects.filter(conference__slug="pycon-2027").count() >= 30
 
     @pytest.mark.django_db
     def test_seed_reports_idempotent(self):
