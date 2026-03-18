@@ -78,9 +78,9 @@
           {% widthratio voucher.times_used voucher.max_uses 100 as redemption_pct %}
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <div style="flex: 1; max-width: 80px; height: 6px; background: var(--color-border-light); border-radius: 3px; overflow: hidden;">
-              <div style="width: {% widthratio voucher.times_used voucher.max_uses 100 %}%; height: 100%; background: {% if voucher.times_used == voucher.max_uses %}var(--color-text-muted){% else %}var(--color-success){% endif %}; border-radius: 3px;"></div>
+              <div style="width: {{ redemption_pct }}%; height: 100%; background: {% if voucher.times_used == voucher.max_uses %}var(--color-text-muted){% else %}var(--color-success){% endif %}; border-radius: 3px;"></div>
             </div>
-            <span class="mono" style="font-size: 0.78rem; color: var(--color-text-secondary);">{% widthratio voucher.times_used voucher.max_uses 100 %}%</span>
+            <span class="mono" style="font-size: 0.78rem; color: var(--color-text-secondary);">{{ redemption_pct }}%</span>
           </div>
         {% else %}
           <span style="color: var(--color-text-muted); font-size: 0.82rem;">Unlimited</span>

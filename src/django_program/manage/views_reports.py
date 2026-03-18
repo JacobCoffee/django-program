@@ -171,6 +171,16 @@ class AttendeeManifestView(ReportPermissionMixin, ListView):
         context["current_ticket_type"] = self.request.GET.get("ticket_type", "")
         context["current_checked_in"] = self.request.GET.get("checked_in", "")
         context["current_completed"] = self.request.GET.get("completed", "")
+
+        # Precompute ticket descriptions to avoid trailing-comma issues in template
+        attendees = context.get("attendees") or []
+        for attendee in attendees:  # type: ignore[union-attr]
+            if attendee.order:
+                ticket_items = [li for li in attendee.order.line_items.all() if li.ticket_type_id is not None]
+                attendee.ticket_descriptions = ", ".join(li.description for li in ticket_items)  # type: ignore[attr-defined]
+            else:
+                attendee.ticket_descriptions = ""  # type: ignore[attr-defined]
+
         return context
 
 

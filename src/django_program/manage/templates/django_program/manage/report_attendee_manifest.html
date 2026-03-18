@@ -67,12 +67,10 @@
       </td>
       <td>{{ attendee.user.email|default:"--" }}</td>
       <td>
-        {% if attendee.order %}
-          {% for li in attendee.order.line_items.all %}
-            {% if li.ticket_type_id %}
-              {{ li.description }}{% if not forloop.last %}, {% endif %}
-            {% endif %}
-          {% endfor %}
+        {% if attendee.ticket_descriptions %}
+          {{ attendee.ticket_descriptions }}
+        {% elif attendee.order %}
+          --
         {% else %}
           <span class="badge badge--inactive">None</span>
         {% endif %}
