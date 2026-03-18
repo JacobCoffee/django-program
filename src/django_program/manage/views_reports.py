@@ -490,7 +490,7 @@ def _parse_date_param(value: str | None) -> datetime.date | None:
         return None
     try:
         return datetime.date.fromisoformat(value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
