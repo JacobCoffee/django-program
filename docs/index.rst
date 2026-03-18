@@ -59,6 +59,12 @@ Built for PyCon US but designed to work for any conference that uses Django.
 
       Financial overview, voucher bulk generation, and organizer tools.
 
+   .. grid-item-card:: Admin Reports
+      :link: admin-reports
+      :link-type: doc
+
+      Nine report types with charts, filtering, CSV exports, and budget tracking for organizers and finance staff.
+
    .. grid-item-card:: API Reference
       :link: api/index
       :link-type: doc
@@ -75,6 +81,7 @@ Key Features
 - **Sponsors** -- Sponsor levels, benefits, comp vouchers auto-generated on sponsor creation
 - **Program Activities** -- Sprints, tutorials, open spaces with signup caps, waitlisting, and travel grants
 - **Management Dashboard** -- Organizer-facing SSE-powered import/sync UI
+- **Admin Reports** -- Nine report types with interactive charts, CSV exports, and budget-vs-actuals tracking
 - **TOML Bootstrap** -- Define an entire conference (sections, tickets, add-ons, sponsor levels) in a single file
 
 
@@ -124,6 +131,7 @@ Quick Start
    badge-generation
    programs-activities
    management-dashboard
+   admin-reports
 
 .. toctree::
    :maxdepth: 2
