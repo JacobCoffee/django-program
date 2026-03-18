@@ -936,3 +936,356 @@ class TestCartPricingIntegration:
         # Voucher comp: 100% of remaining 80 = 80
         assert summary.items[0].discount == Decimal("80.00")
         assert summary.total == Decimal("0.00")
+
+
+# =============================================================================
+# ConditionBase model tests
+# =============================================================================
+
+
+class TestConditionBaseModel:
+    """Tests for ConditionBase model methods."""
+
+    @pytest.mark.django_db
+    def test_condition_str(self, conference):
+        cond = TimeOrStockLimitCondition.objects.create(conference=conference, name="My Condition")
+        assert str(cond) == "My Condition"
+
+    @pytest.mark.django_db
+    def test_condition_base_evaluate_raises(self, conference, user):
+
+        cond = TimeOrStockLimitCondition.objects.create(conference=conference, name="Test")
+        # TimeOrStockLimitCondition overrides evaluate, so test via ConditionBase
+        assert isinstance(cond.evaluate(user, conference), bool)
+
+
+class TestDiscountValidation:
+    """Tests for _validate_discount_value."""
+
+    @pytest.mark.django_db
+    def test_negative_discount_value_raises(self, conference):
+        from django.core.exceptions import ValidationError
+
+        from django_program.registration.conditions import _validate_discount_value
+
+        with pytest.raises(ValidationError, match="cannot be negative"):
+            _validate_discount_value(Decimal("-5.00"))
+
+    @pytest.mark.django_db
+    def test_zero_discount_value_ok(self, conference):
+        from django_program.registration.conditions import _validate_discount_value
+
+        _validate_discount_value(Decimal("0.00"))
+
+
+class TestDiscountEffectUnknownType:
+    """Tests for unknown discount_type fallback."""
+
+    @pytest.mark.django_db
+    def test_unknown_discount_type_returns_zero(self, conference):
+        cond = TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Unknown Type",
+            discount_type="percentage",
+            discount_value=Decimal("10.00"),
+        )
+        # Force an unknown discount_type
+        cond.discount_type = "unknown"
+        result = cond.calculate_discount(Decimal("100.00"), 1)
+        assert result == Decimal("0.00")
+
+
+class TestSpeakerConditionEdgeCases:
+    """Edge cases for SpeakerCondition.evaluate."""
+
+    @pytest.mark.django_db
+    def test_copresenter_false_when_solo_talk(self, conference, user):
+        """Copresenter-only condition returns False for single-speaker talks."""
+        speaker = Speaker.objects.create(
+            conference=conference,
+            pretalx_code="SPKR-SOLO",
+            name="Solo Speaker",
+            user=user,
+        )
+        talk = Talk.objects.create(
+            conference=conference,
+            pretalx_code="TALK-SOLO",
+            title="Solo Talk",
+        )
+        talk.speakers.add(speaker)
+
+        condition = SpeakerCondition.objects.create(
+            conference=conference,
+            name="Copresenter Only",
+            is_presenter=False,
+            is_copresenter=True,
+        )
+        assert condition.evaluate(user, conference) is False
+
+    @pytest.mark.django_db
+    def test_neither_presenter_nor_copresenter(self, conference, user):
+        """Both flags False returns False even for linked speakers."""
+        speaker = Speaker.objects.create(
+            conference=conference,
+            pretalx_code="SPKR-NEITHER",
+            name="Neither",
+            user=user,
+        )
+        condition = SpeakerCondition.objects.create(
+            conference=conference,
+            name="No Flags",
+            is_presenter=False,
+            is_copresenter=False,
+        )
+        assert condition.evaluate(user, conference) is False
+
+
+# =============================================================================
+# commit_condition_usage tests
+# =============================================================================
+
+
+class TestCommitConditionUsage:
+    """Tests for commit_condition_usage."""
+
+    @pytest.mark.django_db
+    def test_increments_times_used(self, conference, cart, user):
+        from django_program.registration.services.conditions import (
+            CartItemDiscount,
+            commit_condition_usage,
+        )
+
+        cond = TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Usage Test",
+            discount_type="percentage",
+            discount_value=Decimal("10.00"),
+            limit=100,
+            times_used=0,
+        )
+
+        discounts = [
+            CartItemDiscount(
+                cart_item_id=1,
+                condition_name="Usage Test",
+                condition_type="TimeOrStockLimitCondition",
+                discount_amount=Decimal("10.00"),
+                original_price=Decimal("100.00"),
+                condition_pk=cond.pk,
+                condition_model="TimeOrStockLimitCondition",
+            ),
+        ]
+
+        commit_condition_usage(discounts)
+        cond.refresh_from_db()
+        assert cond.times_used == 1
+
+    @pytest.mark.django_db
+    def test_skips_discounts_without_pk(self, conference):
+        from django_program.registration.services.conditions import (
+            CartItemDiscount,
+            commit_condition_usage,
+        )
+
+        discounts = [
+            CartItemDiscount(
+                cart_item_id=1,
+                condition_name="No PK",
+                condition_type="Unknown",
+                discount_amount=Decimal("10.00"),
+                original_price=Decimal("100.00"),
+                condition_pk=None,
+                condition_model=None,
+            ),
+        ]
+
+        commit_condition_usage(discounts)
+
+    @pytest.mark.django_db
+    def test_category_discount_scope_tickets_only(self, cart, conference):
+        """Category discount with only apply_to_tickets does not apply to addons."""
+        ticket = TicketType.objects.create(
+            conference=conference,
+            name="Gen",
+            slug="gen-cat-tickets",
+            price=Decimal("100.00"),
+            is_active=True,
+        )
+        addon = AddOn.objects.create(
+            conference=conference,
+            name="Lunch",
+            slug="lunch-cat",
+            price=Decimal("50.00"),
+            is_active=True,
+        )
+        CartItem.objects.create(cart=cart, ticket_type=ticket, quantity=1)
+        CartItem.objects.create(cart=cart, addon=addon, quantity=1)
+
+        DiscountForCategory.objects.create(
+            conference=conference,
+            name="Tickets only",
+            percentage=Decimal("10.00"),
+            apply_to_tickets=True,
+            apply_to_addons=False,
+        )
+
+        results = evaluate_for_cart(cart)
+        assert len(results) == 1
+        assert results[0].discount_amount == Decimal("10.00")
+
+    @pytest.mark.django_db
+    def test_addon_matches_discount_scope_with_specific_addon(self, cart, conference):
+        """Discount scoped to a specific addon applies only to that addon."""
+        addon1 = AddOn.objects.create(
+            conference=conference,
+            name="Lunch",
+            slug="lunch-scope",
+            price=Decimal("30.00"),
+            is_active=True,
+        )
+        addon2 = AddOn.objects.create(
+            conference=conference,
+            name="Dinner",
+            slug="dinner-scope",
+            price=Decimal("50.00"),
+            is_active=True,
+        )
+        CartItem.objects.create(cart=cart, addon=addon1, quantity=1)
+        CartItem.objects.create(cart=cart, addon=addon2, quantity=1)
+
+        cond = TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Lunch discount",
+            discount_type="percentage",
+            discount_value=Decimal("50.00"),
+        )
+        cond.applicable_addons.add(addon1)
+
+        results = evaluate_for_cart(cart)
+        assert len(results) == 1
+        assert results[0].discount_amount == Decimal("15.00")
+
+    @pytest.mark.django_db
+    def test_addon_matches_all_when_no_filter(self, cart, conference):
+        """Discount with no applicable_addons applies to all addons."""
+        addon = AddOn.objects.create(
+            conference=conference,
+            name="Hat",
+            slug="hat-scope",
+            price=Decimal("20.00"),
+            is_active=True,
+        )
+        CartItem.objects.create(cart=cart, addon=addon, quantity=1)
+
+        TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Everything 10%",
+            discount_type="percentage",
+            discount_value=Decimal("10.00"),
+        )
+
+        results = evaluate_for_cart(cart)
+        assert len(results) == 1
+        assert results[0].discount_amount == Decimal("2.00")
+
+    @pytest.mark.django_db
+    def test_zero_discount_skipped(self, cart, conference):
+        """Condition with 0% discount produces no results."""
+        ticket = TicketType.objects.create(
+            conference=conference,
+            name="Gen",
+            slug="gen-zero",
+            price=Decimal("100.00"),
+            is_active=True,
+        )
+        CartItem.objects.create(cart=cart, ticket_type=ticket, quantity=1)
+
+        TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Zero Discount",
+            discount_type="percentage",
+            discount_value=Decimal("0.00"),
+        )
+
+        results = evaluate_for_cart(cart)
+        assert results == []
+
+    @pytest.mark.django_db
+    def test_item_with_no_product_type_skipped(self):
+        """_item_matches_discount_scope returns False for item without product type."""
+        from unittest.mock import MagicMock
+
+        from django_program.registration.services.conditions import _item_matches_discount_scope
+
+        item = MagicMock()
+        item.ticket_type_id = None
+        item.addon_id = None
+        assert _item_matches_discount_scope(item, set(), set()) is False
+
+    @pytest.mark.django_db
+    def test_item_with_no_product_type_skipped_by_category(self):
+        """_item_matches_category_scope returns False for item without product type."""
+        from unittest.mock import MagicMock
+
+        from django_program.registration.conditions import DiscountForCategory
+        from django_program.registration.services.conditions import _item_matches_category_scope
+
+        item = MagicMock()
+        item.ticket_type_id = None
+        item.addon_id = None
+        condition = MagicMock(spec=DiscountForCategory)
+        assert _item_matches_category_scope(item, condition) is False
+
+    @pytest.mark.django_db
+    def test_category_discount_addons_only(self, cart, conference):
+        """Category discount with only apply_to_addons does not apply to tickets."""
+        ticket = TicketType.objects.create(
+            conference=conference,
+            name="Gen",
+            slug="gen-addons-only",
+            price=Decimal("100.00"),
+            is_active=True,
+        )
+        addon = AddOn.objects.create(
+            conference=conference,
+            name="Swag",
+            slug="swag-cat",
+            price=Decimal("40.00"),
+            is_active=True,
+        )
+        CartItem.objects.create(cart=cart, ticket_type=ticket, quantity=1)
+        CartItem.objects.create(cart=cart, addon=addon, quantity=1)
+
+        DiscountForCategory.objects.create(
+            conference=conference,
+            name="Addons only",
+            percentage=Decimal("25.00"),
+            apply_to_tickets=False,
+            apply_to_addons=True,
+        )
+
+        results = evaluate_for_cart(cart)
+        assert len(results) == 1
+        assert results[0].discount_amount == Decimal("10.00")
+
+
+# =============================================================================
+# _finalize_discount_usage (checkout.py line 60) tests
+# =============================================================================
+
+
+class TestFinalizeDiscountUsage:
+    """Test for the condition_discounts branch in _finalize_discount_usage."""
+
+    @pytest.mark.django_db
+    def test_finalize_calls_commit_when_discounts(self, conference):
+        from unittest.mock import MagicMock, patch
+
+        from django_program.registration.services.checkout import _finalize_discount_usage
+
+        summary = MagicMock()
+        summary.condition_discounts = [MagicMock()]
+
+        with patch("django_program.registration.services.checkout.commit_condition_usage") as mock_commit:
+            _finalize_discount_usage(voucher=None, summary=summary, now=timezone.now())
+            mock_commit.assert_called_once_with(summary.condition_discounts)

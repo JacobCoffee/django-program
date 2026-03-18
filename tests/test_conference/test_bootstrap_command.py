@@ -495,3 +495,47 @@ end = 2027-05-02
 
     conference = Conference.objects.get(slug="pycon-no-cap")
     assert conference.total_capacity == 0
+
+
+@pytest.mark.django_db
+def test_seed_conditions_with_student_ticket():
+    """Ensure _seed_conditions adds the student ticket type to the early bird condition."""
+    from datetime import date
+
+    from django_program.conference.management.commands.bootstrap_conference import Command
+    from django_program.conference.models import Conference
+    from django_program.registration.conditions import TimeOrStockLimitCondition
+    from django_program.registration.models import TicketType
+
+    conference = Conference.objects.create(
+        name="Seed Test",
+        slug="seed-cond-test",
+        start_date=date(2027, 6, 1),
+        end_date=date(2027, 6, 3),
+        timezone="UTC",
+    )
+    individual = TicketType.objects.create(
+        conference=conference,
+        name="Individual",
+        slug="individual",
+        price=100,
+        total_quantity=100,
+    )
+    student = TicketType.objects.create(
+        conference=conference,
+        name="Student",
+        slug="student",
+        price=50,
+        total_quantity=50,
+    )
+
+    cmd = Command()
+    cmd.stdout = __import__("io").StringIO()
+    from django.core.management.color import no_style
+
+    cmd.style = no_style()
+    cmd._seed_conditions(conference, {"individual": individual, "student": student})
+
+    early = TimeOrStockLimitCondition.objects.get(conference=conference, name="Early Bird 20% Off")
+    assert student in early.applicable_ticket_types.all()
+    assert individual in early.applicable_ticket_types.all()
