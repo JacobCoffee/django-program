@@ -189,6 +189,13 @@
 </a>
 {% endif %}
 
+{% if budget %}
+{% include "django_program/manage/charts/_chart_utils.html" %}
+<div style="margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_budget_gauge.html" with chart_data=chart_budget_json %}
+</div>
+{% endif %}
+
 <!-- Directory -->
 <div class="card card--static" style="margin-bottom: 1.5rem;">
   <div class="card-body">

@@ -202,6 +202,14 @@ class Seeder:
         # Use whatever conference bootstrap_conference created
         conference = Conference.objects.first()
         if conference:
+            # Ensure budget fields are populated
+            if not conference.revenue_budget:
+                Conference.objects.filter(pk=conference.pk).update(
+                    revenue_budget=Decimal("50000.00"),
+                    target_attendance=150,
+                    grant_budget=Decimal("15000.00"),
+                )
+                conference.refresh_from_db()
             return conference
         # Fallback: create one if bootstrap wasn't run
         conference, _ = Conference.objects.get_or_create(
@@ -215,6 +223,9 @@ class Seeder:
                 "address": "1000 Fort Duquesne Blvd, Pittsburgh, PA 15222",
                 "website_url": "https://python2077.dev/",
                 "is_active": True,
+                "revenue_budget": Decimal("50000.00"),
+                "target_attendance": 150,
+                "grant_budget": Decimal("15000.00"),
             },
         )
         return conference

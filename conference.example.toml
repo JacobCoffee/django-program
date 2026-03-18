@@ -7,6 +7,9 @@ venue = "Pittsburgh Convention Center"
 pretalx_event_slug = "python-2077"
 website_url = "https://python2077.dev/"
 total_capacity = 2500
+revenue_budget = 50_000.00
+target_attendance = 150
+grant_budget = 15_000.00
 
 [[conference.sections]]
 name = "Tutorials"

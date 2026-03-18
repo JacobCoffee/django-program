@@ -73,6 +73,16 @@
   {% include "django_program/manage/charts/_refund_gauge.html" with chart_data=chart_refund_json %}
 </div>
 
+{# Row 6: Stripe fees + Budget gauge #}
+{% if chart_stripe_json %}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_stripe_fees.html" with chart_data=chart_stripe_json %}
+  {% if chart_budget_json %}
+  {% include "django_program/manage/charts/_budget_gauge.html" with chart_data=chart_budget_json %}
+  {% endif %}
+</div>
+{% endif %}
+
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
   <!-- Orders by Status -->
   <div>

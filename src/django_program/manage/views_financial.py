@@ -28,7 +28,9 @@ from django_program.manage.reports import (
     get_revenue_by_ticket_type,
     get_sales_by_date,
 )
+from django_program.programs.models import TravelGrant
 from django_program.registration.models import (
+    Attendee,
     Cart,
     Credit,
     Order,
@@ -155,6 +157,60 @@ def _build_chart_context(
     }
 
 
+def _build_financial_budget_context(conference: Conference, total_revenue: Decimal) -> dict[str, object]:
+    """Build budget-vs-actuals data for the financial dashboard.
+
+    Uses the already-computed ``total_revenue`` for the revenue budget
+    comparison instead of re-querying.
+
+    Args:
+        conference: The conference to compute budget data for.
+        total_revenue: Pre-computed total paid revenue.
+
+    Returns:
+        A dict with budget metrics, empty if no budget fields are configured.
+    """
+    budget: dict[str, object] = {}
+
+    if conference.revenue_budget:
+        budget["revenue_target"] = conference.revenue_budget
+        budget["revenue_actual"] = total_revenue
+        budget["revenue_pct"] = (
+            float(total_revenue / conference.revenue_budget * 100) if conference.revenue_budget else 0
+        )
+
+    if conference.target_attendance:
+        actual_attendance = Attendee.objects.filter(conference=conference).count()
+        budget["attendance_target"] = conference.target_attendance
+        budget["attendance_actual"] = actual_attendance
+        budget["attendance_pct"] = round(actual_attendance / conference.target_attendance * 100, 1)
+
+    if conference.grant_budget:
+        granted = (
+            TravelGrant.objects.filter(
+                conference=conference,
+                status__in=[
+                    TravelGrant.GrantStatus.ACCEPTED,
+                    TravelGrant.GrantStatus.OFFERED,
+                ],
+            ).aggregate(total=Sum("approved_amount"))["total"]
+            or _ZERO
+        )
+        disbursed = (
+            TravelGrant.objects.filter(
+                conference=conference,
+                status=TravelGrant.GrantStatus.DISBURSED,
+            ).aggregate(total=Sum("disbursed_amount"))["total"]
+            or _ZERO
+        )
+        budget["grant_target"] = conference.grant_budget
+        budget["grant_committed"] = granted
+        budget["grant_disbursed"] = disbursed
+        budget["grant_pct"] = float(granted / conference.grant_budget * 100) if conference.grant_budget else 0
+
+    return budget
+
+
 class FinancePermissionMixin(LoginRequiredMixin):
     """Permission mixin for finance-scoped management views.
 
@@ -230,7 +286,7 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/financial_dashboard.html"
 
-    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:  # noqa: PLR0915
         """Build context with all financial metrics for the dashboard.
 
         Args:
@@ -387,6 +443,14 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
 
         # --- Chart JSON data for template partials ---
         context.update(_build_chart_context(conference, orders_by_status, payments_by_method, ticket_sales))
+
+        # Budget vs actuals
+        budget = _build_financial_budget_context(conference, total_revenue)
+        if budget:
+            context["budget"] = budget
+            context["chart_budget_json"] = json.dumps(
+                {k: float(v) if isinstance(v, Decimal) else v for k, v in budget.items()}
+            )
 
         context["active_nav"] = "financial"
         return context

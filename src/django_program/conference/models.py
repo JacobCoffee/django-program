@@ -31,6 +31,26 @@ class Conference(models.Model):
         help_text="Maximum total tickets across all types. 0 means unlimited.",
     )
 
+    revenue_budget = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Target revenue budget for this conference.",
+    )
+    target_attendance = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Target number of attendees.",
+    )
+    grant_budget = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Budget allocated for travel grants.",
+    )
+
     is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

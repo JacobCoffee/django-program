@@ -11,6 +11,7 @@ import itertools
 import json
 import logging
 import time
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -675,6 +676,57 @@ class ImportPretalxStreamView(LoginRequiredMixin, View):
         )
 
 
+def _build_dashboard_budget_context(conference: Conference) -> dict[str, object]:
+    """Build budget-vs-actuals data for the main dashboard.
+
+    Computes revenue progress, attendance progress, and grant budget
+    utilization when the conference has the corresponding budget fields set.
+
+    Args:
+        conference: The conference to compute budget data for.
+
+    Returns:
+        A dict with budget metrics, empty if no budget fields are configured.
+    """
+    budget: dict[str, object] = {}
+
+    if conference.revenue_budget:
+        paid_revenue = Order.objects.filter(
+            conference=conference,
+            status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED],
+        ).aggregate(total=Sum("total"))["total"] or Decimal("0.00")
+        budget["revenue_target"] = conference.revenue_budget
+        budget["revenue_actual"] = paid_revenue
+        budget["revenue_pct"] = (
+            float(paid_revenue / conference.revenue_budget * 100) if conference.revenue_budget else 0
+        )
+
+    if conference.target_attendance:
+        actual_attendance = Attendee.objects.filter(conference=conference).count()
+        budget["attendance_target"] = conference.target_attendance
+        budget["attendance_actual"] = actual_attendance
+        budget["attendance_pct"] = round(actual_attendance / conference.target_attendance * 100, 1)
+
+    if conference.grant_budget:
+        granted = TravelGrant.objects.filter(
+            conference=conference,
+            status__in=[
+                TravelGrant.GrantStatus.ACCEPTED,
+                TravelGrant.GrantStatus.OFFERED,
+            ],
+        ).aggregate(total=Sum("approved_amount"))["total"] or Decimal("0.00")
+        disbursed = TravelGrant.objects.filter(
+            conference=conference,
+            status=TravelGrant.GrantStatus.DISBURSED,
+        ).aggregate(total=Sum("disbursed_amount"))["total"] or Decimal("0.00")
+        budget["grant_target"] = conference.grant_budget
+        budget["grant_committed"] = granted
+        budget["grant_disbursed"] = disbursed
+        budget["grant_pct"] = float(granted / conference.grant_budget * 100) if conference.grant_budget else 0
+
+    return budget
+
+
 class DashboardView(ManagePermissionMixin, TemplateView):
     """Conference dashboard with summary statistics.
 
@@ -711,6 +763,13 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             "orders": Order.objects.filter(conference=conference).count(),
             "paid_orders": Order.objects.filter(conference=conference, status=Order.Status.PAID).count(),
         }
+
+        budget = _build_dashboard_budget_context(conference)
+        if budget:
+            context["budget"] = budget
+            context["chart_budget_json"] = json.dumps(
+                {k: float(v) if isinstance(v, Decimal) else v for k, v in budget.items()}
+            )
 
         sponsor_profile = resolve_sponsor_profile(
             event_slug=conference.pretalx_event_slug or "",
@@ -1756,7 +1815,7 @@ class TravelGrantManageListView(ManagePermissionMixin, ListView):
     paginate_by = 50
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add summary stats, status filter, and active nav to context."""
+        """Add summary stats, chart data, budget tracking, and status filter to context."""
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "travel-grants"
         context["current_status"] = self.request.GET.get("status", "")
@@ -1766,16 +1825,58 @@ class TravelGrantManageListView(ManagePermissionMixin, ListView):
             total_requested=Sum("requested_amount"),
             total_approved=Sum("approved_amount"),
         )
+
+        requested_total = totals["total_requested"] or 0
+        approved_total = totals["total_approved"] or 0
+
+        disbursed_total = (
+            all_grants.filter(disbursed_amount__gt=0).aggregate(total=Sum("disbursed_amount"))["total"] or 0
+        )
+
         context["grant_stats"] = {
             "total": all_grants.count(),
             "pending": all_grants.filter(status=TravelGrant.GrantStatus.SUBMITTED).count(),
             "approved": all_grants.filter(status=TravelGrant.GrantStatus.ACCEPTED).count(),
+            "offered": all_grants.filter(status=TravelGrant.GrantStatus.OFFERED).count(),
             "rejected": all_grants.filter(status=TravelGrant.GrantStatus.REJECTED).count(),
             "withdrawn": all_grants.filter(status=TravelGrant.GrantStatus.WITHDRAWN).count(),
             "disbursed": all_grants.filter(status=TravelGrant.GrantStatus.DISBURSED).count(),
-            "total_requested": totals["total_requested"] or 0,
-            "total_approved": totals["total_approved"] or 0,
+            "total_requested": requested_total,
+            "total_approved": approved_total,
+            "total_disbursed": disbursed_total,
         }
+
+        # Status breakdown for donut chart
+        status_counts = list(all_grants.values("status").annotate(count=Count("id")).order_by("status"))
+        context["chart_grant_status_json"] = json.dumps(
+            [{"status": row["status"], "count": row["count"]} for row in status_counts]
+        )
+
+        # Financial summary for donut chart
+        context["chart_grant_financial_json"] = json.dumps(
+            {
+                "requested": float(requested_total),
+                "approved": float(approved_total),
+                "disbursed": float(disbursed_total),
+            }
+        )
+
+        # Budget tracking (if conference has grant_budget field)
+        grant_budget = getattr(self.conference, "grant_budget", None)
+        if grant_budget:
+            budget = float(grant_budget)
+            committed = float(approved_total)
+            disbursed = float(disbursed_total)
+            context["grant_budget"] = {
+                "budget": budget,
+                "committed": committed,
+                "disbursed": disbursed,
+                "remaining": budget - committed,
+                "pct_committed": committed / budget * 100 if budget else 0,
+                "pct_disbursed": disbursed / budget * 100 if budget else 0,
+            }
+            context["chart_grant_budget_json"] = json.dumps(context["grant_budget"])
+
         return context
 
     def get_queryset(self) -> QuerySet[TravelGrant]:

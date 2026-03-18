@@ -9,6 +9,7 @@ are scoped to the current conference and gated by report-level permissions.
 import csv
 import datetime
 import json
+from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
@@ -42,9 +43,61 @@ from django_program.manage.reports import (
 )
 from django_program.manage.views import _safe_csv_cell
 from django_program.pretalx.models import Speaker
+from django_program.programs.models import TravelGrant
 from django_program.registration.models import Attendee, Order, Payment, TicketType
 
 _REPORTS_GROUP_NAME = "Program: Reports"
+
+
+def _build_budget_context(conference: Conference) -> dict[str, object]:
+    """Build budget-vs-actuals data for a conference.
+
+    Computes revenue progress, attendance progress, and grant budget
+    utilization when the conference has the corresponding budget fields set.
+
+    Args:
+        conference: The conference to compute budget data for.
+
+    Returns:
+        A dict with budget metrics, empty if no budget fields are configured.
+    """
+    budget: dict[str, object] = {}
+
+    if conference.revenue_budget:
+        paid_revenue = Order.objects.filter(
+            conference=conference,
+            status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED],
+        ).aggregate(total=Sum("total"))["total"] or Decimal("0.00")
+        budget["revenue_target"] = conference.revenue_budget
+        budget["revenue_actual"] = paid_revenue
+        budget["revenue_pct"] = (
+            float(paid_revenue / conference.revenue_budget * 100) if conference.revenue_budget else 0
+        )
+
+    if conference.target_attendance:
+        actual_attendance = Attendee.objects.filter(conference=conference).count()
+        budget["attendance_target"] = conference.target_attendance
+        budget["attendance_actual"] = actual_attendance
+        budget["attendance_pct"] = round(actual_attendance / conference.target_attendance * 100, 1)
+
+    if conference.grant_budget:
+        granted = TravelGrant.objects.filter(
+            conference=conference,
+            status__in=[
+                TravelGrant.GrantStatus.ACCEPTED,
+                TravelGrant.GrantStatus.OFFERED,
+            ],
+        ).aggregate(total=Sum("approved_amount"))["total"] or Decimal("0.00")
+        disbursed = TravelGrant.objects.filter(
+            conference=conference,
+            status=TravelGrant.GrantStatus.DISBURSED,
+        ).aggregate(total=Sum("disbursed_amount"))["total"] or Decimal("0.00")
+        budget["grant_target"] = conference.grant_budget
+        budget["grant_committed"] = granted
+        budget["grant_disbursed"] = disbursed
+        budget["grant_pct"] = float(granted / conference.grant_budget * 100) if conference.grant_budget else 0
+
+    return budget
 
 
 class ReportPermissionMixin(LoginRequiredMixin):
@@ -230,6 +283,14 @@ class ReportsDashboardView(ReportPermissionMixin, TemplateView):
                 "total": len(speakers),
             }
         )
+
+        # Budget vs actuals
+        budget = _build_budget_context(conference)
+        if budget:
+            context["budget"] = budget
+            context["chart_budget_json"] = json.dumps(
+                {k: float(v) if isinstance(v, Decimal) else v for k, v in budget.items()}
+            )
 
         return context
 
