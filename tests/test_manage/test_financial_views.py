@@ -147,7 +147,7 @@ class TestFinancialDashboardEmptyConference:
         assert revenue["credits_applied"] == Decimal("0.00")
 
         assert ctx["total_orders"] == 0
-        assert all(v == 0 for v in ctx["orders_by_status"].values())
+        assert all(v["count"] == 0 for v in ctx["orders_by_status"].values())
 
         assert ctx["carts_by_status"]["active"] == 0
         assert ctx["carts_by_status"]["expired"] == 0
@@ -319,11 +319,11 @@ class TestFinancialDashboardOrdersByStatus:
         )
         resp = client_logged_in_super.get(_dashboard_url(conference))
         ctx = resp.context
-        assert ctx["orders_by_status"]["paid"] == 2
-        assert ctx["orders_by_status"]["pending"] == 1
-        assert ctx["orders_by_status"]["cancelled"] == 1
-        assert ctx["orders_by_status"]["refunded"] == 0
-        assert ctx["orders_by_status"]["partially_refunded"] == 0
+        assert ctx["orders_by_status"]["paid"]["count"] == 2
+        assert ctx["orders_by_status"]["pending"]["count"] == 1
+        assert ctx["orders_by_status"]["cancelled"]["count"] == 1
+        assert ctx["orders_by_status"]["refunded"]["count"] == 0
+        assert ctx["orders_by_status"]["partially_refunded"]["count"] == 0
         assert ctx["total_orders"] == 4
 
 

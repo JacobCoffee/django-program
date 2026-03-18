@@ -27,8 +27,8 @@
   <div class="stat-card">
     <div class="stat-card-value">{{ total_orders }}</div>
     <div class="stat-card-label">Total Orders</div>
-    {% if orders_by_status.paid %}
-    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-success); font-weight: 500;">{{ orders_by_status.paid }} paid</div>
+    {% if orders_by_status.paid.count %}
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-success); font-weight: 500;">{{ orders_by_status.paid.count }} paid</div>
     {% endif %}
   </div>
   <div class="stat-card">
@@ -95,7 +95,7 @@
         </tr>
       </thead>
       <tbody>
-        {% for status, count in orders_by_status.items %}
+        {% for status, data in orders_by_status.items %}
         <tr>
           <td>
             {% if status == "paid" %}
@@ -112,7 +112,7 @@
             <span class="badge badge--other">{{ status }}</span>
             {% endif %}
           </td>
-          <td style="text-align: right; font-family: var(--font-mono);">{{ count }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ data.count }}</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -172,7 +172,6 @@ DJANGO_SETTINGS_MODULE = "tests.settings"
 filterwarnings = [
   "error",
   "ignore:The default scheme will be changed:DeprecationWarning",
-  "ignore:Exception ignored while finalizing file:pytest.PytestUnraisableExceptionWarning",
 ]
 markers = [
   "unit: mark test as unit test",

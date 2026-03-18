@@ -953,10 +953,12 @@ class TestConditionBaseModel:
 
     @pytest.mark.django_db
     def test_condition_base_evaluate_raises(self, conference, user):
+        from django_program.registration.conditions import ConditionBase
 
         cond = TimeOrStockLimitCondition.objects.create(conference=conference, name="Test")
-        # TimeOrStockLimitCondition overrides evaluate, so test via ConditionBase
-        assert isinstance(cond.evaluate(user, conference), bool)
+        # TimeOrStockLimitCondition overrides evaluate; call ConditionBase.evaluate directly
+        with pytest.raises(NotImplementedError):
+            ConditionBase.evaluate(cond, user, conference)
 
 
 class TestDiscountValidation:

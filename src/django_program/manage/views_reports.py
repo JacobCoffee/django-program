@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count, Sum
+from django.db.models import Count, QuerySet, Sum
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -302,7 +302,7 @@ class AttendeeManifestView(ReportPermissionMixin, ListView):
     context_object_name = "attendees"
     paginate_by = 50
 
-    def get_queryset(self) -> object:
+    def get_queryset(self) -> QuerySet[Attendee]:
         """Return the filtered attendee queryset.
 
         Returns:
@@ -861,8 +861,8 @@ class CreditNotesExportView(ReportPermissionMixin, View):
                     str(credit.amount),
                     str(credit.remaining_amount),
                     credit.get_status_display(),
-                    credit.source_order.reference if credit.source_order else "",
-                    credit.applied_to_order.reference if credit.applied_to_order else "",
+                    _safe_csv_cell(credit.source_order.reference) if credit.source_order else "",
+                    _safe_csv_cell(credit.applied_to_order.reference) if credit.applied_to_order else "",
                     _safe_csv_cell(credit.note),
                     credit.created_at.isoformat(),
                 ]

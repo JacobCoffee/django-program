@@ -620,7 +620,7 @@ class Seeder:
 
                 hold_expires = None
                 if status == Order.Status.PENDING:
-                    hold_expires = now + datetime.timedelta(hours=24)
+                    hold_expires = created_at + datetime.timedelta(hours=24)
 
                 order = Order.objects.create(
                     conference=conference,

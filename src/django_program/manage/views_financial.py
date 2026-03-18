@@ -27,6 +27,7 @@ from django_program.manage.reports import (
     get_refund_metrics,
     get_revenue_by_ticket_type,
     get_sales_by_date,
+    get_ticket_inventory,
 )
 from django_program.programs.models import TravelGrant
 from django_program.registration.models import (
@@ -45,17 +46,15 @@ _FINANCE_GROUP_NAME = "Program: Finance & Accounting"
 
 def _build_chart_context(
     conference: Conference,
-    orders_by_status: dict[str, int],
+    orders_by_status: dict[str, dict[str, object]],
     payments_by_method: dict[str, dict[str, object]],
-    ticket_sales: QuerySet[TicketType],
 ) -> dict[str, str]:
     """Build JSON chart data for the financial dashboard template partials.
 
     Args:
         conference: The conference to scope queries to.
-        orders_by_status: Order counts keyed by status string.
+        orders_by_status: Order counts and totals keyed by status string.
         payments_by_method: Payment aggregation keyed by method string.
-        ticket_sales: Annotated TicketType queryset with ``sold_count``.
 
     Returns:
         Dict of JSON-encoded chart data strings, ready to inject into
@@ -90,7 +89,11 @@ def _build_chart_context(
             ]
         ),
         "chart_orders_json": json.dumps(
-            [{"status": status, "count": count, "total": 0} for status, count in orders_by_status.items() if count > 0]
+            [
+                {"status": status, "count": data["count"], "total": float(data["total"])}
+                for status, data in orders_by_status.items()
+                if data["count"] > 0
+            ]
         ),
         "chart_payments_json": json.dumps(
             [
@@ -104,11 +107,13 @@ def _build_chart_context(
                 {
                     "name": str(tt.name),
                     "sold": tt.sold_count,
-                    "reserved": 0,
-                    "remaining": max(0, tt.total_quantity - tt.sold_count) if tt.total_quantity > 0 else 0,
+                    "reserved": tt.reserved_count,
+                    "remaining": (
+                        max(0, tt.total_quantity - tt.sold_count - tt.reserved_count) if tt.total_quantity > 0 else 0
+                    ),
                     "total": tt.total_quantity,
                 }
-                for tt in ticket_sales
+                for tt in get_ticket_inventory(conference)
             ]
         ),
         "chart_aov_json": json.dumps(
@@ -350,11 +355,15 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
 
         # --- Orders by status (Comment 7: single aggregated query) ---
         order_qs = Order.objects.filter(conference=conference)
-        order_status_rows = order_qs.values("status").annotate(count=Count("id"))
-        orders_by_status: dict[str, int] = {status_value: 0 for status_value, _label in Order.Status.choices}
+        order_status_rows = order_qs.values("status").annotate(
+            count=Count("id"), total=Coalesce(Sum("total"), Value(_ZERO))
+        )
+        orders_by_status: dict[str, dict[str, object]] = {
+            status_value: {"count": 0, "total": _ZERO} for status_value, _label in Order.Status.choices
+        }
         for row in order_status_rows:
-            orders_by_status[row["status"]] = row["count"]
-        total_orders = sum(orders_by_status.values())
+            orders_by_status[row["status"]] = {"count": row["count"], "total": row["total"] or _ZERO}
+        total_orders = sum(d["count"] for d in orders_by_status.values())  # type: ignore[arg-type]
         context["orders_by_status"] = orders_by_status
         context["total_orders"] = total_orders
 
@@ -442,7 +451,7 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
         context["active_carts"] = active_carts
 
         # --- Chart JSON data for template partials ---
-        context.update(_build_chart_context(conference, orders_by_status, payments_by_method, ticket_sales))
+        context.update(_build_chart_context(conference, orders_by_status, payments_by_method))
 
         # Budget vs actuals
         budget = _build_financial_budget_context(conference, total_revenue)

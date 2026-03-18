@@ -14,6 +14,10 @@ from django_program.registration.badge import Badge, BadgeTemplate
 from django_program.registration.models import Order, OrderLineItem, TicketType
 from django_program.registration.services.badge import BadgeGenerationService
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Exception ignored while finalizing file:pytest.PytestUnraisableExceptionWarning"
+)
+
 User = get_user_model()
 
 pytestmark = pytest.mark.django_db
@@ -530,20 +534,21 @@ class TestBadgeHelperMethods:
         service = BadgeGenerationService()
         assert service._register_pdf_font("NoSuchFont123.ttf", "TestFont") is None
 
+    @pytest.mark.skipif(
+        not __import__("pathlib").Path("/System/Library/Fonts/Geneva.ttf").exists(),
+        reason="macOS-only font (Geneva.ttf)",
+    )
     def test_register_pdf_font_success(self) -> None:
-        import os
+        from unittest.mock import patch
 
         service = BadgeGenerationService()
         font_path = "/System/Library/Fonts/Geneva.ttf"
-        if os.path.isfile(font_path):
-            from unittest.mock import patch
-
-            with patch(
-                "django_program.registration.services.badge._resolve_font_path",
-                return_value=font_path,
-            ):
-                result = service._register_pdf_font("Geneva.ttf", "TestGeneva")
-                assert result == "TestGeneva"
+        with patch(
+            "django_program.registration.services.badge._resolve_font_path",
+            return_value=font_path,
+        ):
+            result = service._register_pdf_font("Geneva.ttf", "TestGeneva")
+            assert result == "TestGeneva"
 
     def test_register_pdf_font_register_fails(self) -> None:
         from unittest.mock import patch

@@ -75,10 +75,15 @@ def get_attendee_manifest(
         qs = qs.filter(completed_registration=False)
 
     if ticket_type_id:
-        qs = qs.filter(
-            order__line_items__ticket_type_id=ticket_type_id,
-            order__status__in=_PAID_STATUSES,
-        )
+        try:
+            tt_id = int(ticket_type_id)
+        except ValueError, TypeError:
+            tt_id = None
+        if tt_id:
+            qs = qs.filter(
+                order__line_items__ticket_type_id=tt_id,
+                order__status__in=_PAID_STATUSES,
+            ).distinct()
 
     return qs
 
