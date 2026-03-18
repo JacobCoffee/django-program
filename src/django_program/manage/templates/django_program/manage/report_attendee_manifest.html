@@ -23,6 +23,13 @@
 
 {% block content %}
 
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_checkin_progress.html" with chart_data=chart_checkin_json %}
+  {% include "django_program/manage/charts/_donut.html" with chart_data=chart_ticket_dist_json chart_title="Ticket Distribution" chart_subtitle="Attendees by ticket type" chart_center="ATTENDEES" chart_id="ticket-dist" %}
+</div>
+
 <form method="get" class="filter-bar">
   <select name="ticket_type" onchange="this.form.submit()">
     <option value="">All Ticket Types</option>

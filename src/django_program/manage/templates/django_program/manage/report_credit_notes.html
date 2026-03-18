@@ -23,6 +23,12 @@
 
 {% block content %}
 
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="max-width: 600px; margin: 0 auto 1.5rem auto;">
+  {% include "django_program/manage/charts/_refund_gauge.html" with chart_data=chart_refund_json %}
+</div>
+
 <div class="stat-grid">
   <div class="stat-card">
     <div class="stat-card-value">{{ credit_summary.count }}</div>

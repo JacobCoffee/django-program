@@ -24,11 +24,15 @@ from django_program.manage.reports import (
     get_addon_inventory,
     get_attendee_manifest,
     get_attendee_summary,
+    get_cashflow_waterfall,
     get_credit_notes,
     get_credit_summary,
+    get_cumulative_revenue,
     get_discount_conditions,
+    get_discount_impact,
     get_discount_summary,
     get_reconciliation,
+    get_refund_metrics,
     get_registration_flow,
     get_sales_by_date,
     get_speaker_registrations,
@@ -38,7 +42,7 @@ from django_program.manage.reports import (
 )
 from django_program.manage.views import _safe_csv_cell
 from django_program.pretalx.models import Speaker
-from django_program.registration.models import Order, Payment, TicketType
+from django_program.registration.models import Attendee, Order, Payment, TicketType
 
 _REPORTS_GROUP_NAME = "Program: Reports"
 
@@ -135,14 +139,6 @@ class ReportsDashboardView(ReportPermissionMixin, TemplateView):
         thirty_days_ago = timezone.now().date() - datetime.timedelta(days=30)
         recent_sales = get_sales_by_date(conference, date_from=thirty_days_ago)
         context["recent_sales_total"] = sum(row["revenue"] for row in recent_sales)
-
-        # Chart data: Sales by date (last 30 days)
-        context["chart_sales_json"] = json.dumps(
-            [
-                {"date": row["date"].isoformat(), "count": row["count"], "revenue": float(row["revenue"])}
-                for row in recent_sales
-            ]
-        )
 
         # Chart data: Ticket inventory breakdown
         ticket_chart = [
@@ -274,6 +270,25 @@ class AttendeeManifestView(ReportPermissionMixin, ListView):
         context["current_checked_in"] = self.request.GET.get("checked_in", "")
         context["current_completed"] = self.request.GET.get("completed", "")
 
+        summary = context["attendee_summary"]
+        context["chart_checkin_json"] = json.dumps(
+            {"checked_in": summary["checked_in"], "total": summary["total"]}  # type: ignore[index]
+        )
+
+        ticket_dist = list(
+            Attendee.objects.filter(conference=self.conference, order__isnull=False)
+            .values("order__line_items__ticket_type__name")
+            .annotate(count=Count("id"))
+            .exclude(order__line_items__ticket_type__name__isnull=True)
+            .order_by("-count")
+        )
+        context["chart_ticket_dist_json"] = json.dumps(
+            [
+                {"status": row["order__line_items__ticket_type__name"], "count": row["count"], "total": 0}
+                for row in ticket_dist
+            ]
+        )
+
         # Precompute ticket descriptions to avoid trailing-comma issues in template
         attendees = context.get("attendees") or []
         for attendee in attendees:  # type: ignore[union-attr]
@@ -361,6 +376,23 @@ class InventoryReportView(ReportPermissionMixin, TemplateView):
         context: dict[str, object] = super().get_context_data(**kwargs)
         context["ticket_types"] = get_ticket_inventory(self.conference)
         context["addons"] = get_addon_inventory(self.conference)
+
+        ticket_types = list(context["ticket_types"])  # type: ignore[arg-type]
+        context["chart_tickets_json"] = json.dumps(
+            [
+                {
+                    "name": str(tt.name),
+                    "sold": tt.sold_count,
+                    "reserved": tt.reserved_count,
+                    "remaining": (
+                        max(0, tt.total_quantity - tt.sold_count - tt.reserved_count) if tt.total_quantity > 0 else 0
+                    ),
+                    "total": tt.total_quantity,
+                }
+                for tt in ticket_types
+            ]
+        )
+
         return context
 
 
@@ -455,6 +487,20 @@ class VoucherUsageReportView(ReportPermissionMixin, TemplateView):
         context: dict[str, object] = super().get_context_data(**kwargs)
         context["vouchers"] = get_voucher_usage(self.conference)
         context["voucher_summary"] = get_voucher_summary(self.conference)
+
+        vouchers_list = list(context["vouchers"])  # type: ignore[arg-type]
+        context["chart_vouchers_json"] = json.dumps(
+            [
+                {
+                    "code": str(v.code),
+                    "used": v.times_used,
+                    "max": v.max_uses,
+                    "impact": float(v.revenue_impact),
+                }
+                for v in vouchers_list
+            ]
+        )
+
         return context
 
 
@@ -526,6 +572,20 @@ class DiscountEffectivenessView(ReportPermissionMixin, TemplateView):
         context: dict[str, object] = super().get_context_data(**kwargs)
         context["conditions_by_type"] = get_discount_conditions(self.conference)
         context["discount_summary"] = get_discount_summary(self.conference)
+
+        discount_data = get_discount_impact(self.conference)
+        context["chart_discount_json"] = json.dumps(
+            {
+                "total_discount": float(discount_data["total_discount"]),
+                "total_gross": float(discount_data["total_gross"]),
+                "total_net": float(discount_data["total_net"]),
+                "discount_rate": float(discount_data["discount_rate"]),
+                "by_voucher": discount_data["by_voucher"],
+                "orders_with_discount": discount_data["orders_with_discount"],
+                "orders_without_discount": discount_data["orders_without_discount"],
+            }
+        )
+
         return context
 
 
@@ -620,6 +680,19 @@ class SalesByDateView(ReportPermissionMixin, TemplateView):
         context["total_revenue"] = sum(r["revenue"] for r in rows)
         context["current_date_from"] = self.request.GET.get("date_from", "")
         context["current_date_until"] = self.request.GET.get("date_until", "")
+
+        context["chart_sales_json"] = json.dumps(
+            [{"date": row["date"].isoformat(), "count": row["count"], "revenue": float(row["revenue"])} for row in rows]
+        )
+
+        cumulative = get_cumulative_revenue(self.conference, date_from=date_from, date_until=date_until)
+        context["chart_cumulative_json"] = json.dumps(
+            [
+                {"date": row["date"].isoformat(), "daily": float(row["daily"]), "cumulative": float(row["cumulative"])}
+                for row in cumulative
+            ]
+        )
+
         return context
 
 
@@ -674,6 +747,18 @@ class CreditNotesView(ReportPermissionMixin, TemplateView):
         context: dict[str, object] = super().get_context_data(**kwargs)
         context["credits"] = get_credit_notes(self.conference)
         context["credit_summary"] = get_credit_summary(self.conference)
+
+        refund_data = get_refund_metrics(self.conference)
+        context["chart_refund_json"] = json.dumps(
+            {
+                "total_refunded": float(refund_data["total_refunded"]),
+                "total_revenue": float(refund_data["total_revenue"]),
+                "refund_rate": float(refund_data["refund_rate"]),
+                "refund_count": refund_data["refund_count"],
+                "by_status": refund_data["by_status"],
+            }
+        )
+
         return context
 
 
@@ -747,6 +832,15 @@ class SpeakerRegistrationView(ReportPermissionMixin, TemplateView):
         context["total_speakers"] = total
         context["registered_count"] = registered
         context["unregistered_count"] = total - registered
+
+        context["chart_speakers_json"] = json.dumps(
+            {
+                "registered": registered,
+                "unregistered": total - registered,
+                "total": total,
+            }
+        )
+
         return context
 
 
@@ -797,6 +891,29 @@ class ReconciliationView(ReportPermissionMixin, TemplateView):
         """
         context: dict[str, object] = super().get_context_data(**kwargs)
         context["recon"] = get_reconciliation(self.conference)
+
+        recon = context["recon"]
+        context["chart_waterfall_json"] = json.dumps(
+            [
+                {"label": step["label"], "value": float(step["value"]), "type": step["type"]}
+                for step in get_cashflow_waterfall(self.conference)
+            ]
+        )
+
+        context["chart_payments_json"] = json.dumps(
+            [
+                {"method": row["method"], "count": row["count"], "total": float(row["total"])}
+                for row in recon["by_payment_method"]  # type: ignore[index]
+            ]
+        )
+
+        context["chart_orders_json"] = json.dumps(
+            [
+                {"status": row["status"], "count": row["count"], "total": float(row["total"])}
+                for row in recon["by_order_status"]  # type: ignore[index]
+            ]
+        )
+
         return context
 
 
@@ -864,6 +981,18 @@ class RegistrationFlowView(ReportPermissionMixin, TemplateView):
         context["total_cancellations"] = sum(r["cancellations"] for r in rows)
         context["current_date_from"] = self.request.GET.get("date_from", "")
         context["current_date_until"] = self.request.GET.get("date_until", "")
+
+        context["chart_flow_json"] = json.dumps(
+            [
+                {
+                    "date": row["date"].isoformat(),
+                    "registrations": row["registrations"],
+                    "cancellations": row["cancellations"],
+                }
+                for row in rows
+            ]
+        )
+
         return context
 
 

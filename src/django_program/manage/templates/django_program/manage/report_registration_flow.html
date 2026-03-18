@@ -23,6 +23,12 @@
 
 {% block content %}
 
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_registration_pulse.html" with chart_data=chart_flow_json %}
+</div>
+
 <div class="stat-grid">
   <div class="stat-card">
     <div class="stat-card-value">{{ total_registrations }}</div>

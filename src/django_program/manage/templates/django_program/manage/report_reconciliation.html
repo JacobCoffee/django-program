@@ -23,6 +23,17 @@
 
 {% block content %}
 
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_waterfall.html" with chart_data=chart_waterfall_json %}
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_payment_methods.html" with chart_data=chart_payments_json %}
+  {% include "django_program/manage/charts/_order_status.html" with chart_data=chart_orders_json %}
+</div>
+
 <div class="stat-grid">
   <div class="stat-card">
     <div class="stat-card-value">${{ recon.sales_total|floatformat:2 }}</div>

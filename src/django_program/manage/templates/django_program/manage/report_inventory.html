@@ -23,6 +23,12 @@
 
 {% block content %}
 
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_ticket_inventory.html" with chart_data=chart_tickets_json %}
+</div>
+
 <h2 class="section-heading" style="margin-top: 0;">Ticket Types</h2>
 {% if ticket_types %}
 <table class="data-table" style="margin-bottom: 2rem;">

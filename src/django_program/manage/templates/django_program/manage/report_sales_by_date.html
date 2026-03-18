@@ -23,6 +23,13 @@
 
 {% block content %}
 
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_revenue_bar.html" with chart_data=chart_sales_json %}
+  {% include "django_program/manage/charts/_cumulative_revenue.html" with chart_data=chart_cumulative_json %}
+</div>
+
 <div class="stat-grid">
   <div class="stat-card">
     <div class="stat-card-value">{{ total_orders }}</div>
