@@ -241,6 +241,7 @@ class Command(BaseCommand):
             (11, "ORD-SEED-012", Order.Status.CANCELLED, 1, [], None, 7),
             (0, "ORD-SEED-013", Order.Status.PAID, 1, [3], None, 2),
             (3, "ORD-SEED-014", Order.Status.PAID, 2, [1], 4, 1),
+            (4, "ORD-SEED-015", Order.Status.PAID, 1, [0], 2, 6),
         ]
 
         checked_in_refs = {"ORD-SEED-001", "ORD-SEED-002", "ORD-SEED-004", "ORD-SEED-008", "ORD-SEED-011"}
@@ -320,7 +321,7 @@ class Command(BaseCommand):
             return (subtotal * v.discount_value / Decimal(100)).quantize(Decimal("0.01")), v.code
         if v.voucher_type == Voucher.VoucherType.FIXED_AMOUNT:
             return min(v.discount_value, subtotal), v.code
-        return Decimal("0.00"), v.code
+        return Decimal("0.00"), v.code  # pragma: no cover
 
     def _create_payment(self, order: Order, ref: str, total: Decimal) -> None:
         """Create a payment record for a paid order."""

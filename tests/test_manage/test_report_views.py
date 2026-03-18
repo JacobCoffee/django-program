@@ -5,14 +5,16 @@ from decimal import Decimal
 
 import pytest
 from django.contrib.auth.models import Group, User
+from django.core.management import call_command
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
 from django_program.conference.models import Conference
+from django_program.manage.views_reports import _parse_date_param
 from django_program.pretalx.models import Speaker
-from django_program.registration.conditions import TimeOrStockLimitCondition
+from django_program.registration.conditions import DiscountForCategory, TimeOrStockLimitCondition
 from django_program.registration.models import (
     AddOn,
     Attendee,
@@ -1181,3 +1183,115 @@ class TestRegistrationFlowExport:
         lines = content.strip().split("\n")
         # header + at least 1 row (attendees created today)
         assert len(lines) >= 2
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseDateParam:
+    """Tests for the _parse_date_param helper."""
+
+    def test_returns_none_for_empty(self):
+        assert _parse_date_param("") is None
+        assert _parse_date_param(None) is None
+
+    def test_returns_date_for_valid_iso(self):
+        result = _parse_date_param("2027-05-14")
+        assert result == date(2027, 5, 14)
+
+    def test_returns_none_for_invalid(self):
+        assert _parse_date_param("not-a-date") is None
+        assert _parse_date_param("2027/05/14") is None
+
+
+class TestDiscountCategoryReport:
+    """Tests for DiscountForCategory coverage in reports."""
+
+    @pytest.mark.django_db
+    def test_category_discount_shows_percentage_and_apply_flags(self, client, superuser):
+        client.force_login(superuser)
+        conf = baker.make(Conference, slug="cat-disc-test")
+        baker.make(
+            DiscountForCategory,
+            conference=conf,
+            name="Holiday Sale",
+            percentage=Decimal("15.00"),
+            apply_to_tickets=True,
+            apply_to_addons=True,
+            is_active=True,
+            priority=5,
+        )
+        url = reverse("manage:report-discount-effectiveness", kwargs={"conference_slug": conf.slug})
+        resp = client.get(url)
+        assert resp.status_code == 200
+        conditions_by_type = resp.context["conditions_by_type"]
+        assert "Category Discount" in conditions_by_type
+        cond = conditions_by_type["Category Discount"][0]
+        assert cond["discount_type"] == "Percentage"
+        assert cond["discount_value"] == Decimal("15.00")
+        assert "All ticket types" in cond["applicable_products"]
+        assert "All add-ons" in cond["applicable_products"]
+
+
+class TestAttendeeWithoutOrder:
+    """Test attendee manifest when attendee has no order."""
+
+    @pytest.mark.django_db
+    def test_attendee_without_order_shows_empty_ticket(self, client, superuser):
+        client.force_login(superuser)
+        conf = baker.make(Conference, slug="no-order-test")
+        user = User.objects.create_user(username="orphan", password="pass")
+        baker.make(Attendee, user=user, conference=conf, order=None)
+        url = reverse("manage:report-attendee-manifest", kwargs={"conference_slug": conf.slug})
+        resp = client.get(url)
+        assert resp.status_code == 200
+        attendees = list(resp.context["attendees"])
+        assert len(attendees) == 1
+        assert attendees[0].ticket_descriptions == ""
+
+
+class TestRegistrationFlowCancellations:
+    """Test that cancellation rows are counted in registration flow."""
+
+    @pytest.mark.django_db
+    def test_cancelled_orders_appear_in_flow(self, client, superuser):
+        client.force_login(superuser)
+        conf = baker.make(Conference, slug="cancel-flow-test")
+        user = User.objects.create_user(username="canceller", password="pass")
+        baker.make(
+            Order,
+            conference=conf,
+            user=user,
+            status=Order.Status.CANCELLED,
+            reference="ORD-CANCEL-001",
+            subtotal=Decimal("100.00"),
+            total=Decimal("100.00"),
+        )
+        url = reverse("manage:report-registration-flow", kwargs={"conference_slug": conf.slug})
+        resp = client.get(url)
+        assert resp.status_code == 200
+        flow_rows = resp.context["flow_rows"]
+        total_cancellations = sum(r["cancellations"] for r in flow_rows)
+        assert total_cancellations >= 1
+
+
+class TestSeedReportsCommand:
+    """Test that the seed_reports management command runs without errors."""
+
+    @pytest.mark.django_db
+    def test_seed_reports_runs_successfully(self):
+        call_command("seed_reports")
+
+        assert Conference.objects.filter(slug="pycon-2027").exists()
+        assert Order.objects.filter(reference="ORD-SEED-001").exists()
+        assert Credit.objects.filter(conference__slug="pycon-2027").count() >= 1
+        assert Speaker.objects.filter(conference__slug="pycon-2027").count() >= 1
+
+    @pytest.mark.django_db
+    def test_seed_reports_idempotent(self):
+        call_command("seed_reports")
+        call_command("seed_reports")
+
+        assert Conference.objects.filter(slug="pycon-2027").count() == 1
