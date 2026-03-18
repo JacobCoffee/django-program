@@ -23,6 +23,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import models, transaction
 from django.db.models import Case, Count, F, Prefetch, Q, QuerySet, Sum, Value, When
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -32,7 +33,7 @@ from django.utils.timezone import localdate
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
-from django_program.conference.models import Conference, Section
+from django_program.conference.models import Conference, Expense, ExpenseCategory, Section
 from django_program.manage.forms import (
     ActivityForm,
     AddOnForm,
@@ -41,6 +42,8 @@ from django_program.manage.forms import (
     DisbursementForm,
     DiscountForCategoryForm,
     DiscountForProductForm,
+    ExpenseCategoryForm,
+    ExpenseForm,
     GroupMemberConditionForm,
     ImportFromPretalxForm,
     IncludedProductConditionForm,
@@ -3573,3 +3576,183 @@ class BadgePreviewView(ManagePermissionMixin, View):
         response = HttpResponse(content, content_type="application/pdf")
         response["Content-Disposition"] = f'inline; filename="preview-{template.slug}.pdf"'
         return response
+
+
+# ---------------------------------------------------------------------------
+# Expense Management Views
+# ---------------------------------------------------------------------------
+
+
+class ExpenseCategoryListView(ManagePermissionMixin, ListView):
+    """List all expense categories for a conference."""
+
+    template_name = "django_program/manage/expense_category_list.html"
+    context_object_name = "categories"
+
+    def get_queryset(self) -> QuerySet[ExpenseCategory]:
+        """Return expense categories annotated with expense count and total spent."""
+        return (
+            ExpenseCategory.objects.filter(conference=self.conference)
+            .annotate(
+                expense_count=Count("expenses"),
+                total_spent=Coalesce(Sum("expenses__amount"), Value(Decimal("0.00"))),
+            )
+            .order_by("order", "name")
+        )
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add budget summary and active nav to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "expenses"
+        categories = context["categories"]
+        context["total_budget"] = sum(c.budget_amount or Decimal("0.00") for c in categories)
+        context["total_spent"] = sum(c.total_spent for c in categories)
+        return context
+
+
+class ExpenseCategoryCreateView(ManagePermissionMixin, CreateView):
+    """Create a new expense category."""
+
+    template_name = "django_program/manage/expense_category_edit.html"
+    form_class = ExpenseCategoryForm
+
+    def get_success_url(self) -> str:
+        """Redirect to the expense category list."""
+        return reverse("manage:expense-category-list", kwargs={"conference_slug": self.conference.slug})
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add active nav and create flag to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "expenses"
+        context["is_create"] = True
+        return context
+
+    def form_valid(self, form: ExpenseCategoryForm) -> HttpResponse:
+        """Assign the conference before saving."""
+        form.instance.conference = self.conference
+        messages.success(self.request, "Expense category created successfully.")
+        return super().form_valid(form)
+
+
+class ExpenseCategoryEditView(ManagePermissionMixin, UpdateView):
+    """Edit an existing expense category."""
+
+    template_name = "django_program/manage/expense_category_edit.html"
+    form_class = ExpenseCategoryForm
+    context_object_name = "category"
+
+    def get_queryset(self) -> QuerySet[ExpenseCategory]:
+        """Scope to the current conference."""
+        return ExpenseCategory.objects.filter(conference=self.conference)
+
+    def get_success_url(self) -> str:
+        """Redirect to the expense category list."""
+        return reverse("manage:expense-category-list", kwargs={"conference_slug": self.conference.slug})
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add active nav and create flag to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "expenses"
+        context["is_create"] = False
+        return context
+
+    def form_valid(self, form: ExpenseCategoryForm) -> HttpResponse:
+        """Flash success after saving."""
+        messages.success(self.request, "Expense category updated successfully.")
+        return super().form_valid(form)
+
+
+class ExpenseListView(ManagePermissionMixin, ListView):
+    """List all expenses for a conference, optionally filtered by category."""
+
+    template_name = "django_program/manage/expense_list.html"
+    context_object_name = "expenses"
+    paginate_by = 50
+
+    def get_queryset(self) -> QuerySet[Expense]:
+        """Return expenses, optionally filtered by category query param."""
+        qs = Expense.objects.filter(conference=self.conference).select_related("category", "created_by")
+        category_id = self.request.GET.get("category")
+        if category_id:
+            qs = qs.filter(category_id=category_id)
+        return qs.order_by("-date", "-created_at")
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add filter controls and summary stats to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "expenses"
+        context["categories"] = ExpenseCategory.objects.filter(conference=self.conference).order_by("order", "name")
+        context["current_category"] = self.request.GET.get("category", "")
+
+        qs = Expense.objects.filter(conference=self.conference)
+        category_id = self.request.GET.get("category")
+        if category_id:
+            qs = qs.filter(category_id=category_id)
+        context["total_expenses"] = qs.aggregate(total=Coalesce(Sum("amount"), Value(Decimal("0.00"))))["total"]
+        context["expense_count"] = qs.count()
+        return context
+
+
+class ExpenseCreateView(ManagePermissionMixin, CreateView):
+    """Create a new expense."""
+
+    template_name = "django_program/manage/expense_edit.html"
+    form_class = ExpenseForm
+
+    def get_form_kwargs(self) -> dict[str, object]:
+        """Pass the conference to scope category choices."""
+        kwargs = super().get_form_kwargs()
+        kwargs["conference"] = self.conference
+        return kwargs
+
+    def get_success_url(self) -> str:
+        """Redirect to the expense list."""
+        return reverse("manage:expense-list", kwargs={"conference_slug": self.conference.slug})
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add active nav and create flag to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "expenses"
+        context["is_create"] = True
+        return context
+
+    def form_valid(self, form: ExpenseForm) -> HttpResponse:
+        """Assign the conference and creator before saving."""
+        form.instance.conference = self.conference
+        form.instance.created_by = self.request.user
+        messages.success(self.request, "Expense recorded successfully.")
+        return super().form_valid(form)
+
+
+class ExpenseEditView(ManagePermissionMixin, UpdateView):
+    """Edit an existing expense."""
+
+    template_name = "django_program/manage/expense_edit.html"
+    form_class = ExpenseForm
+    context_object_name = "expense"
+
+    def get_queryset(self) -> QuerySet[Expense]:
+        """Scope to the current conference."""
+        return Expense.objects.filter(conference=self.conference)
+
+    def get_form_kwargs(self) -> dict[str, object]:
+        """Pass the conference to scope category choices."""
+        kwargs = super().get_form_kwargs()
+        kwargs["conference"] = self.conference
+        return kwargs
+
+    def get_success_url(self) -> str:
+        """Redirect to the expense list."""
+        return reverse("manage:expense-list", kwargs={"conference_slug": self.conference.slug})
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add active nav and create flag to context."""
+        context = super().get_context_data(**kwargs)
+        context["active_nav"] = "expenses"
+        context["is_create"] = False
+        return context
+
+    def form_valid(self, form: ExpenseForm) -> HttpResponse:
+        """Flash success after saving."""
+        messages.success(self.request, "Expense updated successfully.")
+        return super().form_valid(form)

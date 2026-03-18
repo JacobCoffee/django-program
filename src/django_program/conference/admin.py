@@ -3,7 +3,7 @@
 from django import forms
 from django.contrib import admin
 
-from django_program.conference.models import Conference, FeatureFlags, Section
+from django_program.conference.models import Conference, Expense, ExpenseCategory, FeatureFlags, KPITargets, Section
 
 SECRET_PLACEHOLDER = "\u2022" * 12
 
@@ -148,6 +148,38 @@ class FeatureFlagsInline(admin.StackedInline):
     )
 
 
+class KPITargetsInline(admin.StackedInline):
+    """Inline editor for per-conference KPI target thresholds.
+
+    Allows setting analytics dashboard targets directly from the conference
+    admin change form. At most one row per conference.
+    """
+
+    model = KPITargets
+    extra = 0
+    max_num = 1
+    fieldsets = (
+        (
+            "Rate Targets (%)",
+            {
+                "fields": (
+                    "target_conversion_rate",
+                    "target_refund_rate",
+                    "target_checkin_rate",
+                    "target_fulfillment_rate",
+                    "target_room_utilization",
+                ),
+            },
+        ),
+        (
+            "Revenue Targets",
+            {
+                "fields": ("target_revenue_per_attendee",),
+            },
+        ),
+    )
+
+
 @admin.register(Conference)
 class ConferenceAdmin(admin.ModelAdmin):
     """Admin interface for managing conferences.
@@ -162,7 +194,7 @@ class ConferenceAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
-    inlines = (SectionInline, FeatureFlagsInline)
+    inlines = (SectionInline, FeatureFlagsInline, KPITargetsInline)
 
     fieldsets = (
         (
@@ -256,3 +288,48 @@ class FeatureFlagsAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+
+class ExpenseInline(admin.TabularInline):
+    """Inline editor for expenses within the expense category admin."""
+
+    model = Expense
+    extra = 0
+    fields = ("description", "amount", "vendor", "date", "receipt_reference", "created_by")
+
+
+@admin.register(ExpenseCategory)
+class ExpenseCategoryAdmin(admin.ModelAdmin):
+    """Admin interface for managing expense categories."""
+
+    list_display = ("name", "conference", "budget_amount", "order")
+    list_filter = ("conference",)
+    search_fields = ("name", "slug")
+    prepopulated_fields = {"slug": ("name",)}
+    inlines = (ExpenseInline,)
+
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    """Admin interface for managing individual expenses."""
+
+    list_display = ("description", "category", "conference", "amount", "vendor", "date", "created_by")
+    list_filter = ("conference", "category", "date")
+    search_fields = ("description", "vendor", "receipt_reference")
+    raw_id_fields = ("created_by",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(KPITargets)
+class KPITargetsAdmin(admin.ModelAdmin):
+    """Standalone admin for per-conference KPI targets."""
+
+    list_display = (
+        "conference",
+        "target_conversion_rate",
+        "target_refund_rate",
+        "target_checkin_rate",
+        "target_fulfillment_rate",
+        "updated_at",
+    )
+    list_filter = ("conference",)

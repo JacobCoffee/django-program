@@ -19,10 +19,12 @@ if TYPE_CHECKING:
 
     from django_program.conference.models import Conference
 
-from django_program.pretalx.models import Speaker
+from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
+from django_program.programs.models import Activity, ActivitySignup, TravelGrant
 from django_program.registration.models import (
     AddOn,
     Attendee,
+    Cart,
     Credit,
     Order,
     OrderLineItem,
@@ -30,6 +32,7 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
+from django_program.sponsors.models import Sponsor, SponsorBenefit, SponsorLevel
 
 _ZERO = Decimal("0.00")
 
@@ -936,3 +939,516 @@ def get_cumulative_revenue(
         )
 
     return result
+
+
+def get_revenue_per_attendee(conference: Conference) -> dict[str, Any]:
+    """Return net revenue divided by total attendee count.
+
+    Net revenue is the sum of paid order totals minus credits issued from
+    refunds (source_order is not null).
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with net_revenue, attendee_count, and revenue_per_attendee.
+    """
+    revenue_agg = Order.objects.filter(
+        conference=conference,
+        status__in=_PAID_STATUSES,
+    ).aggregate(
+        gross=Coalesce(Sum("total"), Value(_ZERO)),
+    )
+
+    refund_agg = Credit.objects.filter(
+        conference=conference,
+        source_order__isnull=False,
+    ).aggregate(
+        total_refunded=Coalesce(Sum("amount"), Value(_ZERO)),
+    )
+
+    net_revenue = revenue_agg["gross"] - refund_agg["total_refunded"]
+    attendee_count = Attendee.objects.filter(conference=conference).count()
+    revenue_per_attendee = (net_revenue / attendee_count) if attendee_count else _ZERO
+
+    return {
+        "net_revenue": net_revenue,
+        "attendee_count": attendee_count,
+        "revenue_per_attendee": revenue_per_attendee,
+    }
+
+
+def get_revenue_breakdown(conference: Conference) -> dict[str, Any]:
+    """Return revenue breakdown by ticket, add-on, and sponsor sources.
+
+    Ticket and add-on revenue come from paid order line items. Sponsor
+    revenue is estimated from SponsorLevel cost multiplied by the number
+    of active sponsors at each level.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with ticket_revenue, addon_revenue, sponsor_revenue,
+        total_revenue, and percentage breakdowns for each source.
+    """
+    ticket_agg = OrderLineItem.objects.filter(
+        order__conference=conference,
+        order__status__in=_PAID_STATUSES,
+        ticket_type__isnull=False,
+    ).aggregate(
+        total=Coalesce(Sum("line_total"), Value(_ZERO)),
+    )
+    ticket_revenue: Decimal = ticket_agg["total"]
+
+    addon_agg = OrderLineItem.objects.filter(
+        order__conference=conference,
+        order__status__in=_PAID_STATUSES,
+        addon__isnull=False,
+    ).aggregate(
+        total=Coalesce(Sum("line_total"), Value(_ZERO)),
+    )
+    addon_revenue: Decimal = addon_agg["total"]
+
+    sponsor_levels = SponsorLevel.objects.filter(conference=conference).annotate(
+        active_count=Count("sponsors", filter=Q(sponsors__is_active=True)),
+    )
+    sponsor_revenue = _ZERO
+    for level in sponsor_levels:
+        sponsor_revenue += level.cost * level.active_count
+
+    total_revenue = ticket_revenue + addon_revenue + sponsor_revenue
+
+    def _pct(part: Decimal, whole: Decimal) -> Decimal:
+        return (part / whole * 100) if whole else _ZERO
+
+    return {
+        "ticket_revenue": ticket_revenue,
+        "addon_revenue": addon_revenue,
+        "sponsor_revenue": sponsor_revenue,
+        "total_revenue": total_revenue,
+        "ticket_pct": _pct(ticket_revenue, total_revenue),
+        "addon_pct": _pct(addon_revenue, total_revenue),
+        "sponsor_pct": _pct(sponsor_revenue, total_revenue),
+    }
+
+
+def get_cart_funnel(conference: Conference) -> dict[str, Any]:
+    """Return cart conversion funnel metrics.
+
+    Counts carts by status and computes abandonment and conversion rates.
+    Completed carts are those with CHECKED_OUT status.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with total_carts, completed, abandoned, expired, open,
+        abandonment_rate, and conversion_rate.
+    """
+    qs = Cart.objects.filter(conference=conference)
+    agg = qs.aggregate(
+        total_carts=Count("id"),
+        completed=Count("id", filter=Q(status=Cart.Status.CHECKED_OUT)),
+        abandoned=Count("id", filter=Q(status=Cart.Status.ABANDONED)),
+        expired=Count("id", filter=Q(status=Cart.Status.EXPIRED)),
+        open=Count("id", filter=Q(status=Cart.Status.OPEN)),
+    )
+
+    total = agg["total_carts"] or 0
+    completed = agg["completed"] or 0
+    abandoned = agg["abandoned"] or 0
+    expired = agg["expired"] or 0
+    open_count = agg["open"] or 0
+
+    abandonment_rate = Decimal(abandoned + expired) / Decimal(total) * 100 if total else _ZERO
+    conversion_rate = Decimal(completed) / Decimal(total) * 100 if total else _ZERO
+
+    return {
+        "total_carts": total,
+        "completed": completed,
+        "abandoned": abandoned,
+        "expired": expired,
+        "open": open_count,
+        "abandonment_rate": abandonment_rate,
+        "conversion_rate": conversion_rate,
+    }
+
+
+def get_ticket_sales_ratio(conference: Conference) -> list[dict[str, Any]]:
+    """Return per-ticket-type sales data with availability windows.
+
+    For each ticket type, reports the number sold, revenue generated,
+    whether it is an early-bird ticket (time-limited availability), and
+    the availability window as a human-readable string.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A list of dicts per ticket type with name, sold, revenue,
+        is_early_bird, and availability_window.
+    """
+    ticket_types = (
+        TicketType.objects.filter(conference=conference)
+        .annotate(
+            sold=Coalesce(
+                Sum(
+                    "order_line_items__quantity",
+                    filter=Q(order_line_items__order__status__in=_PAID_STATUSES),
+                ),
+                Value(0),
+            ),
+            revenue=Coalesce(
+                Sum(
+                    "order_line_items__line_total",
+                    filter=Q(order_line_items__order__status__in=_PAID_STATUSES),
+                ),
+                Value(_ZERO),
+            ),
+        )
+        .order_by("order", "name")
+    )
+
+    total_revenue = sum((tt.revenue for tt in ticket_types), _ZERO)
+
+    result: list[dict[str, Any]] = []
+    for tt in ticket_types:
+        is_early_bird = tt.available_from is not None and tt.available_until is not None
+        window = f"{tt.available_from} - {tt.available_until}" if is_early_bird else "Always available"
+        capacity = tt.total_quantity if tt.total_quantity > 0 else None
+        fill_rate = (Decimal(tt.sold) / Decimal(capacity) * 100) if capacity else None
+        revenue_pct = (tt.revenue / total_revenue * 100) if total_revenue else _ZERO
+
+        result.append(
+            {
+                "name": str(tt.name),
+                "sold": tt.sold,
+                "revenue": tt.revenue,
+                "is_early_bird": is_early_bird,
+                "availability_window": window,
+                "capacity": capacity,
+                "fill_rate": fill_rate,
+                "revenue_pct": revenue_pct,
+            }
+        )
+
+    return result
+
+
+def get_checkin_throughput(
+    conference: Conference,
+    *,
+    bucket_minutes: int = 15,
+) -> list[dict[str, Any]]:
+    """Return time-bucketed check-in counts.
+
+    Groups attendee check-in timestamps into fixed-width time buckets
+    and returns the count per bucket, ordered chronologically.
+
+    Args:
+        conference: The conference to scope the query to.
+        bucket_minutes: Width of each time bucket in minutes.
+
+    Returns:
+        A list of dicts with bucket_start, bucket_end, and count keys.
+    """
+    from datetime import timedelta  # noqa: PLC0415
+
+    checkins = (
+        Attendee.objects.filter(
+            conference=conference,
+            checked_in_at__isnull=False,
+        )
+        .values_list("checked_in_at", flat=True)
+        .order_by("checked_in_at")
+    )
+
+    bucket_delta = timedelta(minutes=bucket_minutes)
+    buckets: dict[Any, int] = {}
+
+    for ts in checkins:
+        # Truncate to the nearest bucket boundary
+        epoch_seconds = int(ts.timestamp())
+        bucket_seconds = bucket_minutes * 60
+        truncated_epoch = (epoch_seconds // bucket_seconds) * bucket_seconds
+        bucket_start = ts.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        ) + timedelta(seconds=truncated_epoch - int(ts.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()))
+        buckets[bucket_start] = buckets.get(bucket_start, 0) + 1
+
+    return [
+        {
+            "bucket_start": start,
+            "bucket_end": start + bucket_delta,
+            "count": count,
+        }
+        for start, count in sorted(buckets.items())
+    ]
+
+
+def get_room_utilization(conference: Conference) -> list[dict[str, Any]]:
+    """Return per-room schedule utilization metrics.
+
+    For each room, counts the total number of schedule slots and the
+    number of slots that have an assigned talk.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A list of dicts with room_name, room_capacity, total_slots,
+        talk_slots, and utilization_pct.
+    """
+    rooms = (
+        Room.objects.filter(conference=conference)
+        .annotate(
+            total_slots=Count("schedule_slots"),
+            talk_slots=Count("schedule_slots", filter=Q(schedule_slots__talk__isnull=False)),
+        )
+        .order_by("position", "name")
+    )
+
+    return [
+        {
+            "room_id": room.pk,
+            "room_name": str(room.name),
+            "room_capacity": room.capacity,
+            "total_slots": room.total_slots,
+            "talk_slots": room.talk_slots,
+            "utilization_pct": (
+                Decimal(room.talk_slots) / Decimal(room.total_slots) * 100 if room.total_slots else _ZERO
+            ),
+        }
+        for room in rooms
+    ]
+
+
+def get_sponsor_benefit_fulfillment(conference: Conference) -> dict[str, Any]:
+    """Return sponsor benefit fulfillment metrics.
+
+    Aggregates benefit completion status across all sponsors and provides
+    a per-sponsor breakdown with level information.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with total_benefits, completed, pending, fulfillment_rate,
+        and a by_sponsor list of per-sponsor details.
+    """
+    benefits = SponsorBenefit.objects.filter(sponsor__conference=conference)
+    agg = benefits.aggregate(
+        total_benefits=Count("id"),
+        completed=Count("id", filter=Q(is_complete=True)),
+        pending=Count("id", filter=Q(is_complete=False)),
+    )
+
+    total = agg["total_benefits"] or 0
+    completed = agg["completed"] or 0
+    pending = agg["pending"] or 0
+    fulfillment_rate = Decimal(completed) / Decimal(total) * 100 if total else _ZERO
+
+    by_sponsor_qs = (
+        Sponsor.objects.filter(conference=conference)
+        .select_related("level")
+        .annotate(
+            benefit_total=Count("benefits"),
+            benefit_completed=Count("benefits", filter=Q(benefits__is_complete=True)),
+            benefit_pending=Count("benefits", filter=Q(benefits__is_complete=False)),
+        )
+        .filter(benefit_total__gt=0)
+        .order_by("level__order", "name")
+    )
+
+    by_sponsor = [
+        {
+            "sponsor_name": str(s.name),
+            "level": str(s.level.name),
+            "total": s.benefit_total,
+            "completed": s.benefit_completed,
+            "pending": s.benefit_pending,
+        }
+        for s in by_sponsor_qs
+    ]
+
+    return {
+        "total_benefits": total,
+        "completed": completed,
+        "pending": pending,
+        "fulfillment_rate": fulfillment_rate,
+        "by_sponsor": by_sponsor,
+    }
+
+
+def get_travel_grant_analytics(conference: Conference) -> dict[str, Any]:
+    """Return comprehensive travel grant application analytics.
+
+    Aggregates grant applications by status, type, and amounts across
+    the requested, approved, and disbursed lifecycle stages.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with total_applications, by_status, approval_rate,
+        disbursement_rate, average and total amounts for each stage,
+        by_type breakdown, international_count, and first_time_count.
+    """
+    grants = TravelGrant.objects.filter(conference=conference)
+
+    total_applications = grants.count()
+
+    # By status
+    by_status: dict[str, int] = {}
+    status_rows = grants.values("status").annotate(count=Count("id"))
+    for row in status_rows:
+        by_status[row["status"]] = row["count"]
+
+    # Approval and disbursement counts
+    approved_statuses = {
+        TravelGrant.GrantStatus.OFFERED,
+        TravelGrant.GrantStatus.ACCEPTED,
+        TravelGrant.GrantStatus.DISBURSED,
+    }
+    approved_count = sum(by_status.get(s, 0) for s in approved_statuses)
+    disbursed_count = by_status.get(TravelGrant.GrantStatus.DISBURSED, 0)
+
+    approval_rate = Decimal(approved_count) / Decimal(total_applications) * 100 if total_applications else _ZERO
+    disbursement_rate = Decimal(disbursed_count) / Decimal(total_applications) * 100 if total_applications else _ZERO
+
+    # Amount aggregations
+    amount_agg = grants.aggregate(
+        avg_requested=Coalesce(Avg("requested_amount"), Value(_ZERO)),
+        avg_approved=Coalesce(Avg("approved_amount"), Value(_ZERO)),
+        avg_disbursed=Coalesce(Avg("disbursed_amount"), Value(_ZERO)),
+        total_requested=Coalesce(Sum("requested_amount"), Value(_ZERO)),
+        total_approved=Coalesce(Sum("approved_amount"), Value(_ZERO)),
+        total_disbursed=Coalesce(Sum("disbursed_amount"), Value(_ZERO)),
+    )
+
+    # By application type
+    by_type: dict[str, int] = {}
+    type_rows = grants.values("application_type").annotate(count=Count("id"))
+    for row in type_rows:
+        by_type[row["application_type"]] = row["count"]
+
+    international_count = grants.filter(international=True).count()
+    first_time_count = grants.filter(first_time=True).count()
+
+    return {
+        "total_applications": total_applications,
+        "by_status": by_status,
+        "approval_rate": approval_rate,
+        "disbursement_rate": disbursement_rate,
+        "avg_requested": amount_agg["avg_requested"],
+        "avg_approved": amount_agg["avg_approved"],
+        "avg_disbursed": amount_agg["avg_disbursed"],
+        "total_requested": amount_agg["total_requested"],
+        "total_approved": amount_agg["total_approved"],
+        "total_disbursed": amount_agg["total_disbursed"],
+        "by_type": by_type,
+        "international_count": international_count,
+        "first_time_count": first_time_count,
+    }
+
+
+def get_activity_utilization(conference: Conference) -> list[dict[str, Any]]:
+    """Return per-activity signup utilization metrics.
+
+    For each activity, counts confirmed, waitlisted, and cancelled
+    signups and computes utilization as a percentage of max_participants.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A list of dicts per activity with name, activity_type,
+        max_participants, confirmed, waitlisted, cancelled, and
+        utilization_pct (None if max_participants is not set).
+    """
+    activities = (
+        Activity.objects.filter(conference=conference)
+        .annotate(
+            confirmed=Count(
+                "signups",
+                filter=Q(signups__status=ActivitySignup.SignupStatus.CONFIRMED),
+            ),
+            waitlisted=Count(
+                "signups",
+                filter=Q(signups__status=ActivitySignup.SignupStatus.WAITLISTED),
+            ),
+            cancelled=Count(
+                "signups",
+                filter=Q(signups__status=ActivitySignup.SignupStatus.CANCELLED),
+            ),
+        )
+        .order_by("start_time", "name")
+    )
+
+    return [
+        {
+            "activity_id": a.pk,
+            "name": str(a.name),
+            "activity_type": str(a.activity_type),
+            "max_participants": a.max_participants,
+            "confirmed": a.confirmed,
+            "waitlisted": a.waitlisted,
+            "cancelled": a.cancelled,
+            "utilization_pct": (
+                Decimal(a.confirmed) / Decimal(a.max_participants) * 100 if a.max_participants else None
+            ),
+        }
+        for a in activities
+    ]
+
+
+def get_content_analytics(conference: Conference) -> dict[str, Any]:
+    """Return content and schedule analytics for talks, rooms, and slots.
+
+    Aggregates talk counts by state and submission type, room totals,
+    and schedule slot counts by slot type.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with total_talks, by_state, by_type, by_track,
+        total_rooms, total_schedule_slots, and slot_types.
+    """
+    talks = Talk.objects.filter(conference=conference)
+    total_talks = talks.count()
+
+    by_state: dict[str, int] = {}
+    for row in talks.values("state").annotate(count=Count("id")):
+        by_state[row["state"]] = row["count"]
+
+    by_type: dict[str, int] = {}
+    for row in talks.values("submission_type").annotate(count=Count("id")):
+        by_type[row["submission_type"]] = row["count"]
+
+    by_track: dict[str, int] = {}
+    for row in talks.values("track").annotate(count=Count("id")):
+        by_track[row["track"]] = row["count"]
+
+    total_rooms = Room.objects.filter(conference=conference).count()
+
+    slots = ScheduleSlot.objects.filter(conference=conference)
+    total_schedule_slots = slots.count()
+
+    slot_types: dict[str, int] = {}
+    for row in slots.values("slot_type").annotate(count=Count("id")):
+        slot_types[row["slot_type"]] = row["count"]
+
+    return {
+        "total_talks": total_talks,
+        "by_state": by_state,
+        "by_type": by_type,
+        "by_track": by_track,
+        "total_rooms": total_rooms,
+        "total_schedule_slots": total_schedule_slots,
+        "slot_types": slot_types,
+    }

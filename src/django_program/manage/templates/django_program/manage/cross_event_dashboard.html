@@ -1,0 +1,648 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Cross-Event Intelligence{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Cross-Event Intelligence
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Cross-Event Intelligence</h1>
+<p>Multi-conference trends, retention, and lifetime value analysis</p>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero KPI Row -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem;">
+  <div style="background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%); border-radius: 10px; padding: 1.5rem; color: #fff; box-shadow: 0 4px 20px rgba(67,56,202,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(67,56,202,0.35)'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='0 4px 20px rgba(67,56,202,0.25)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; margin-bottom: 0.5rem;">Retention Rate</div>
+    <div style="font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;">
+      {% if retention.retention_rate != None %}{{ retention.retention_rate|floatformat:1 }}%{% else %}--{% endif %}
+    </div>
+    {% if retention.returning_count %}
+    <div style="font-size: 0.75rem; opacity: 0.8; font-weight: 500; margin-top: 0.4rem;">{{ retention.returning_count }} returning of {{ retention.current_attendee_count }}</div>
+    {% endif %}
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Average LTV</div>
+    <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      {% if ltv.avg_ltv != None %}${{ ltv.avg_ltv|floatformat:2 }}{% else %}--{% endif %}
+    </div>
+    {% if ltv.max_ltv %}
+    <div style="font-size: 0.75rem; color: var(--color-text-muted); font-weight: 500; margin-top: 0.4rem;">Max: ${{ ltv.max_ltv|floatformat:2 }}</div>
+    {% endif %}
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Sponsor Renewal Rate</div>
+    <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      {% if sponsor_renewal.renewal_rate != None %}{{ sponsor_renewal.renewal_rate|floatformat:1 }}%{% else %}--{% endif %}
+    </div>
+    {% if sponsor_renewal.returning_count %}
+    <div style="font-size: 0.75rem; color: var(--color-success); font-weight: 600; margin-top: 0.4rem;">{{ sponsor_renewal.returning_count }} renewed</div>
+    {% endif %}
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Speaker Return Rate</div>
+    <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      {% if speaker_return.return_rate != None %}{{ speaker_return.return_rate|floatformat:1 }}%{% else %}--{% endif %}
+    </div>
+    {% if speaker_return.returning_count %}
+    <div style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; margin-top: 0.4rem;">{{ speaker_return.returning_count }} returning</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Charts Section -->
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2.5rem;">
+  <!-- Multi-metric YoY Line Chart -->
+  <div class="card card--static">
+    <div style="padding: 1.25rem 1.5rem 0.75rem; border-bottom: 1px solid var(--color-border-light);">
+      <div style="font-weight: 700; font-size: 0.95rem; color: var(--color-text);">YoY Growth Trends</div>
+      <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.1rem;">Attendance and revenue across conferences</div>
+    </div>
+    <div style="padding: 1rem 1.5rem 1.25rem;">
+      <canvas id="chart-yoy-multi" style="width: 100%; height: 260px; display: block;"></canvas>
+      <div id="chart-yoy-multi-legend" style="display: flex; gap: 1.5rem; justify-content: center; margin-top: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--color-text-muted);">
+          <span style="width: 12px; height: 3px; background: #4338ca; border-radius: 2px;"></span> Attendance
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--color-text-muted);">
+          <span style="width: 12px; height: 3px; background: #059669; border-radius: 2px;"></span> Revenue
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Retention Funnel Donut -->
+  <div class="card card--static">
+    <div style="padding: 1.25rem 1.5rem 0.75rem; border-bottom: 1px solid var(--color-border-light);">
+      <div style="font-weight: 700; font-size: 0.95rem; color: var(--color-text);">Retention Funnel</div>
+      <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.1rem;">Returning vs new attendees</div>
+    </div>
+    <div style="padding: 1.25rem 1.5rem; display: flex; align-items: center; justify-content: center;">
+      <canvas id="chart-retention-funnel" style="width: 220px; height: 220px; display: block;"></canvas>
+      <div id="chart-retention-funnel-legend" style="margin-left: 1.5rem;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- YoY Metric Comparison Cards -->
+{% if yoy_growth.history %}
+<h2 class="section-heading">Year-over-Year Breakdown</h2>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2.5rem;">
+
+  <!-- Attendance Trend Card -->
+  <div class="card card--static" style="padding: 1.25rem 1.5rem;">
+    <div style="font-weight: 700; font-size: 0.9rem; color: var(--color-text); margin-bottom: 1rem;">Attendance Trend</div>
+    <div id="metric-attendance" class="metric-bars"></div>
+  </div>
+
+  <!-- Revenue Trend Card -->
+  <div class="card card--static" style="padding: 1.25rem 1.5rem;">
+    <div style="font-weight: 700; font-size: 0.9rem; color: var(--color-text); margin-bottom: 1rem;">Revenue Trend</div>
+    <div id="metric-revenue" class="metric-bars"></div>
+  </div>
+
+  <!-- Sponsor Growth Card -->
+  <div class="card card--static" style="padding: 1.25rem 1.5rem;">
+    <div style="font-weight: 700; font-size: 0.9rem; color: var(--color-text); margin-bottom: 1rem;">Sponsor Growth</div>
+    <div id="metric-sponsors" class="metric-bars"></div>
+  </div>
+
+  <!-- Content Volume Card -->
+  <div class="card card--static" style="padding: 1.25rem 1.5rem;">
+    <div style="font-weight: 700; font-size: 0.9rem; color: var(--color-text); margin-bottom: 1rem;">Content Volume</div>
+    <div id="metric-talks" class="metric-bars"></div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Data Tables -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+  <!-- Top Attendees by LTV -->
+  <div>
+    <h2 class="section-heading" style="margin-top: 0;">Top Attendees by LTV</h2>
+    {% if ltv.top_users %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Attendee</th>
+          <th style="text-align: right;">Events</th>
+          <th style="text-align: right;">Orders</th>
+          <th style="text-align: right;">Lifetime Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in ltv.top_users %}
+        <tr>
+          <td>{{ user.username }}<div style="font-size:0.75rem;color:var(--color-text-muted);">{{ user.email }}</div></td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ user.conferences_attended }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ user.order_count }}</td>
+          <td style="text-align: right; font-family: var(--font-mono); font-weight: 600;">${{ user.total_spent|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <p>Not enough data to calculate LTV rankings.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Retention by Previous Conference -->
+  <div>
+    <h2 class="section-heading" style="margin-top: 0;">Retention by Previous Conference</h2>
+    {% if retention.previous_conferences %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Conference</th>
+          <th style="text-align: right;">Shared Attendees</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pc in retention.previous_conferences %}
+        <tr>
+          <td>{{ pc.name }}</td>
+          <td style="text-align: right; font-family: var(--font-mono); font-weight: 600;">{{ pc.shared_attendee_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <p>No previous conferences found for retention comparison.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Sponsor Renewal by Level -->
+{% if sponsor_renewal.by_level %}
+<h2 class="section-heading">Sponsor Renewal by Level</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Level</th>
+      <th style="text-align: right;">Total</th>
+      <th style="text-align: right;">Returning</th>
+      <th style="text-align: right;">New</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for lvl in sponsor_renewal.by_level %}
+    <tr>
+      <td style="font-weight: 600;">{{ lvl.level_name }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ lvl.total }}</td>
+      <td style="text-align: right; font-family: var(--font-mono); color: var(--color-success);">{{ lvl.returning }}</td>
+      <td style="text-align: right; font-family: var(--font-mono); color: var(--color-primary);">{{ lvl.new }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<style>
+  .metric-bars .metric-row {
+    display: grid;
+    grid-template-columns: 130px 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+  }
+  .metric-bars .metric-row .bar-track {
+    height: 22px;
+    background: var(--color-border-light);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .metric-bars .metric-row .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.8s ease;
+  }
+  .metric-bars .metric-row .metric-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .metric-bars .metric-row .metric-value {
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    text-align: right;
+    min-width: 120px;
+  }
+  .metric-bars .metric-row .growth-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+  }
+  .growth-up { color: #059669; background: #ecfdf5; }
+  .growth-down { color: #dc2626; background: #fef2f2; }
+
+  @media (max-width: 900px) {
+    div[style*="grid-template-columns: repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
+    div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  }
+  @media (max-width: 520px) {
+    div[style*="grid-template-columns: repeat(4"] { grid-template-columns: 1fr !important; }
+  }
+</style>
+
+<script>
+(function() {
+  var u = window._chartUtils;
+  if (!u) return;
+
+  // ---- Parse chart data ----
+  var growthRaw = '{{ chart_growth_json|escapejs }}';
+  var growthData;
+  try { growthData = JSON.parse(growthRaw); } catch(e) { growthData = null; }
+
+  var retRaw = '{{ chart_retention_json|escapejs }}';
+  var retData;
+  try { retData = JSON.parse(retRaw); } catch(e) { retData = null; }
+
+  // ---- Multi-metric YoY Line Chart (dual axis: attendance + revenue) ----
+  var multiCanvas = document.getElementById('chart-yoy-multi');
+  if (multiCanvas && growthData && growthData.history && growthData.history.length > 1) {
+    function drawMultiYoY() {
+      var s = u.setupCanvas(multiCanvas);
+      var ctx = s.ctx, w = s.w, h = s.h;
+      var history = growthData.history;
+
+      var padL = 55, padR = 60, padT = 20, padB = 40;
+      var chartW = w - padL - padR;
+      var chartH = h - padT - padB;
+
+      var maxAtt = Math.max.apply(null, history.map(function(d) { return d.attendance || 0; }));
+      var maxRev = Math.max.apply(null, history.map(function(d) { return d.revenue || 0; }));
+      if (maxAtt === 0) maxAtt = 1;
+      if (maxRev === 0) maxRev = 1;
+      maxAtt = Math.ceil(maxAtt * 1.15);
+      maxRev = Math.ceil(maxRev * 1.15);
+
+      var attPoints = [];
+      var revPoints = [];
+      for (var i = 0; i < history.length; i++) {
+        var px = padL + (history.length > 1 ? i / (history.length - 1) * chartW : chartW / 2);
+        var attY = padT + chartH - ((history[i].attendance || 0) / maxAtt) * chartH;
+        var revY = padT + chartH - ((history[i].revenue || 0) / maxRev) * chartH;
+        attPoints.push({ x: px, y: attY, data: history[i] });
+        revPoints.push({ x: px, y: revY, data: history[i] });
+      }
+
+      function drawLine(pts, color, progress) {
+        if (pts.length < 2) return;
+        // Area
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, padT + chartH);
+        for (var i = 0; i < pts.length; i++) {
+          var animY = padT + chartH - (padT + chartH - pts[i].y) * progress;
+          ctx.lineTo(pts[i].x, animY);
+        }
+        ctx.lineTo(pts[pts.length - 1].x, padT + chartH);
+        ctx.closePath();
+        ctx.fillStyle = u.hexToRgba(color, 0.08);
+        ctx.fill();
+        ctx.restore();
+
+        // Line
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (var i = 0; i < pts.length; i++) {
+          var animY = padT + chartH - (padT + chartH - pts[i].y) * progress;
+          if (i === 0) ctx.moveTo(pts[i].x, animY);
+          else ctx.lineTo(pts[i].x, animY);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        // Dots
+        if (progress > 0.6) {
+          var dotAlpha = Math.min(1, (progress - 0.6) / 0.3);
+          for (var i = 0; i < pts.length; i++) {
+            var animY = padT + chartH - (padT + chartH - pts[i].y) * progress;
+            ctx.save();
+            ctx.globalAlpha = dotAlpha;
+            ctx.beginPath();
+            ctx.arc(pts[i].x, animY, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+      }
+
+      function draw(t) {
+        var progress = u.easeOutCubic(t);
+        ctx.clearRect(0, 0, w, h);
+
+        // Grid lines
+        ctx.save();
+        ctx.strokeStyle = '#f0f1f4';
+        ctx.lineWidth = 1;
+        var gridLines = 4;
+        for (var g = 0; g <= gridLines; g++) {
+          var gy = padT + (g / gridLines) * chartH;
+          ctx.beginPath();
+          ctx.moveTo(padL, gy);
+          ctx.lineTo(padL + chartW, gy);
+          ctx.stroke();
+
+          // Left axis (attendance)
+          var attVal = Math.round(maxAtt * (1 - g / gridLines));
+          ctx.fillStyle = '#4338ca';
+          ctx.font = '500 10px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(u.formatNumber(attVal), padL - 8, gy);
+
+          // Right axis (revenue)
+          var revVal = Math.round(maxRev * (1 - g / gridLines));
+          ctx.fillStyle = '#059669';
+          ctx.textAlign = 'left';
+          ctx.fillText(u.formatCurrency(revVal), padL + chartW + 8, gy);
+        }
+        ctx.restore();
+
+        // Draw lines
+        drawLine(attPoints, '#4338ca', progress);
+        drawLine(revPoints, '#059669', progress);
+
+        // X-axis labels
+        if (progress > 0.6) {
+          var labelAlpha = Math.min(1, (progress - 0.6) / 0.3);
+          ctx.save();
+          ctx.globalAlpha = labelAlpha;
+          ctx.fillStyle = u.COLORS.textMuted;
+          ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          for (var i = 0; i < attPoints.length; i++) {
+            var label = attPoints[i].data.label || attPoints[i].data.name || '';
+            ctx.fillText(label, attPoints[i].x, padT + chartH + 10);
+          }
+          ctx.restore();
+        }
+      }
+
+      u.animate(800, draw, function() {
+        multiCanvas.addEventListener('mousemove', function(e) {
+          var rect = multiCanvas.getBoundingClientRect();
+          var mx = e.clientX - rect.left;
+          var hit = null, minDist = 40;
+          for (var i = 0; i < attPoints.length; i++) {
+            var dx = Math.abs(mx - attPoints[i].x);
+            if (dx < minDist) { minDist = dx; hit = attPoints[i].data; }
+          }
+          if (hit) {
+            multiCanvas.style.cursor = 'pointer';
+            var ttHtml = '<div style="font-weight:700;margin-bottom:2px;">' + (hit.label || hit.name || '') + '</div>' +
+              '<div>Attendance: <strong>' + u.formatNumber(hit.attendance || 0) + '</strong></div>' +
+              '<div>Revenue: <strong>' + u.formatCurrencyFull(hit.revenue || 0) + '</strong></div>' +
+              '<div>Sponsors: <strong>' + u.formatNumber(hit.sponsors || 0) + '</strong></div>' +
+              '<div>Talks: <strong>' + u.formatNumber(hit.talks || 0) + '</strong></div>';
+            if (hit.attendance_growth_pct != null) {
+              var g = hit.attendance_growth_pct;
+              var gc = g > 0 ? u.COLORS.emerald : (g < 0 ? u.COLORS.red : u.COLORS.textMuted);
+              ttHtml += '<div>Attendance growth: <strong style="color:' + gc + ';">' + (g > 0 ? '+' : '') + g.toFixed(1) + '%</strong></div>';
+            }
+            u.showTooltip(e, ttHtml);
+          } else {
+            multiCanvas.style.cursor = 'default';
+            u.hideTooltip();
+          }
+        });
+        multiCanvas.addEventListener('mouseleave', function() { u.hideTooltip(); multiCanvas.style.cursor = 'default'; });
+      });
+    }
+
+    requestAnimationFrame(drawMultiYoY);
+    window.addEventListener('resize', (function() {
+      var timer;
+      return function() { clearTimeout(timer); timer = setTimeout(drawMultiYoY, 200); };
+    })());
+  } else if (multiCanvas) {
+    var s = u.setupCanvas(multiCanvas);
+    u.drawEmpty(s.ctx, s.w, s.h, 'Not enough historical data for trend chart');
+  }
+
+  // ---- Retention Funnel Donut ----
+  var retCanvas = document.getElementById('chart-retention-funnel');
+  var retLegend = document.getElementById('chart-retention-funnel-legend');
+  if (retCanvas) {
+    function drawRetention() {
+      var s = u.setupCanvas(retCanvas);
+      var ctx = s.ctx, w = s.w, h = s.h;
+
+      var returning = retData ? (retData.returning || 0) : 0;
+      var newCount = retData ? (retData.new || 0) : 0;
+      var total = returning + newCount;
+
+      if (!total) {
+        u.drawEmpty(ctx, w, h, 'No retention data');
+        if (retLegend) retLegend.innerHTML = '';
+        return;
+      }
+
+      var slices = [
+        { label: 'Returning', value: returning, color: u.COLORS.indigo },
+        { label: 'New', value: newCount, color: u.COLORS.teal }
+      ];
+
+      var cx = w / 2, cy = h / 2;
+      var outerR = Math.min(w, h) / 2 - 8;
+      var innerR = outerR * 0.62;
+
+      var segments = [];
+      var cumAngle = -Math.PI / 2;
+      for (var i = 0; i < slices.length; i++) {
+        var sweep = (slices[i].value / total) * Math.PI * 2;
+        segments.push({ start: cumAngle, end: cumAngle + sweep, idx: i });
+        cumAngle += sweep;
+      }
+
+      function draw(t) {
+        var progress = u.easeOutQuart(t);
+        var maxAngle = -Math.PI / 2 + Math.PI * 2 * progress;
+        ctx.clearRect(0, 0, w, h);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+        ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+        ctx.fillStyle = '#f0f1f4';
+        ctx.fill();
+        ctx.restore();
+
+        for (var i = 0; i < segments.length; i++) {
+          var seg = segments[i];
+          var drawEnd = Math.min(seg.end, maxAngle);
+          if (drawEnd <= seg.start) continue;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, outerR, seg.start, drawEnd);
+          ctx.arc(cx, cy, innerR, drawEnd, seg.start, true);
+          ctx.closePath();
+          ctx.fillStyle = slices[i].color;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        if (progress > 0.5) {
+          var a = Math.min(1, (progress - 0.5) / 0.3);
+          ctx.save();
+          ctx.globalAlpha = a;
+          ctx.fillStyle = '#1a1a2e';
+          ctx.font = '800 22px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(u.formatNumber(total), cx, cy - 6);
+          ctx.fillStyle = '#8889a0';
+          ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          ctx.fillText('ATTENDEES', cx, cy + 14);
+          ctx.restore();
+        }
+      }
+
+      u.animate(900, draw, function() {
+        if (retLegend) {
+          var html = '';
+          for (var i = 0; i < slices.length; i++) {
+            var pct = total > 0 ? Math.round(slices[i].value / total * 100) : 0;
+            html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+              '<span style="width:10px;height:10px;border-radius:3px;background:' + slices[i].color + ';flex-shrink:0;"></span>' +
+              '<div>' +
+              '<div style="font-size:12px;color:#555770;font-weight:600;">' + slices[i].label + '</div>' +
+              '<div style="font-family:\'SF Mono\',SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:700;color:#1a1a2e;">' + u.formatNumber(slices[i].value) + ' <span style="font-size:10px;color:#8889a0;font-weight:500;">(' + pct + '%)</span></div>' +
+              '</div>' +
+              '</div>';
+          }
+          retLegend.innerHTML = html;
+        }
+
+        retCanvas.addEventListener('mousemove', function(e) {
+          var rect = retCanvas.getBoundingClientRect();
+          var mx = e.clientX - rect.left - cx;
+          var my = e.clientY - rect.top - cy;
+          var dist = Math.sqrt(mx * mx + my * my);
+          var angle = Math.atan2(my, mx);
+          if (angle < -Math.PI / 2) angle += Math.PI * 2;
+
+          if (dist >= innerR && dist <= outerR) {
+            for (var i = 0; i < segments.length; i++) {
+              if (angle >= segments[i].start && angle < segments[i].end) {
+                retCanvas.style.cursor = 'pointer';
+                var pct = total > 0 ? (slices[i].value / total * 100).toFixed(1) : '0';
+                u.showTooltip(e,
+                  '<div style="font-weight:700;margin-bottom:2px;">' + slices[i].label + '</div>' +
+                  '<div>Count: <strong>' + u.formatNumber(slices[i].value) + '</strong> (' + pct + '%)</div>'
+                );
+                return;
+              }
+            }
+          }
+          retCanvas.style.cursor = 'default';
+          u.hideTooltip();
+        });
+        retCanvas.addEventListener('mouseleave', function() { u.hideTooltip(); retCanvas.style.cursor = 'default'; });
+      });
+    }
+
+    requestAnimationFrame(drawRetention);
+    window.addEventListener('resize', (function() {
+      var timer;
+      return function() { clearTimeout(timer); timer = setTimeout(drawRetention, 200); };
+    })());
+  }
+
+  // ---- Metric Comparison Bar Cards ----
+  if (growthData && growthData.history && growthData.history.length > 1) {
+    var history = growthData.history;
+    var barColors = ['#4338ca', '#0d9488', '#7c3aed', '#d97706'];
+
+    function renderMetricBars(containerId, metricKey, formatter) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+
+      var maxVal = Math.max.apply(null, history.map(function(d) { return d[metricKey] || 0; }));
+      if (maxVal === 0) maxVal = 1;
+
+      var html = '';
+      for (var i = 0; i < history.length; i++) {
+        var val = history[i][metricKey] || 0;
+        var pct = Math.round(val / maxVal * 100);
+        var label = history[i].label || history[i].name || '';
+        var growthKey = metricKey + '_growth_pct';
+        var growthHtml = '';
+
+        if (i > 0 && history[i][growthKey] != null) {
+          var g = history[i][growthKey];
+          var cls = g >= 0 ? 'growth-up' : 'growth-down';
+          var arrow = g >= 0 ? '\u25B2' : '\u25BC';
+          growthHtml = '<span class="growth-badge ' + cls + '">' + arrow + ' ' + (g >= 0 ? '+' : '') + g.toFixed(1) + '%</span>';
+        } else if (i > 0) {
+          // Compute growth from adjacent entries if not provided
+          var prevVal = history[i - 1][metricKey] || 0;
+          if (prevVal > 0) {
+            var g = (val - prevVal) / prevVal * 100;
+            var cls = g >= 0 ? 'growth-up' : 'growth-down';
+            var arrow = g >= 0 ? '\u25B2' : '\u25BC';
+            growthHtml = '<span class="growth-badge ' + cls + '">' + arrow + ' ' + (g >= 0 ? '+' : '') + g.toFixed(1) + '%</span>';
+          }
+        }
+
+        var color = barColors[i % barColors.length];
+        html += '<div class="metric-row">' +
+          '<div class="metric-label">' + label + '</div>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + ';"></div></div>' +
+          '<div class="metric-value">' + formatter(val) + growthHtml + '</div>' +
+          '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    renderMetricBars('metric-attendance', 'attendance', function(v) { return u.formatNumber(v) + ' attendees'; });
+    renderMetricBars('metric-revenue', 'revenue', function(v) { return u.formatCurrencyFull(v); });
+    renderMetricBars('metric-sponsors', 'sponsors', function(v) { return u.formatNumber(v) + ' sponsors'; });
+    renderMetricBars('metric-talks', 'talks', function(v) { return u.formatNumber(v) + ' talks'; });
+  }
+})();
+</script>
+{% endblock %}

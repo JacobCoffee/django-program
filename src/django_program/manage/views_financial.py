@@ -461,5 +461,31 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
                 {k: float(v) if isinstance(v, Decimal) else v for k, v in budget.items()}
             )
 
+        # --- Expense & ROI data ---
+        from django_program.manage.reports_analytics import (  # noqa: PLC0415
+            get_event_roi,
+            get_expense_summary,
+        )
+
+        expense_summary = get_expense_summary(conference)
+        context["expense_summary"] = expense_summary
+
+        roi_data = get_event_roi(conference)
+        context["roi"] = roi_data
+        context["chart_expense_json"] = json.dumps(
+            {
+                "by_category": [
+                    {
+                        "name": c["name"],
+                        "budget": float(c["budget"]) if c["budget"] else 0,
+                        "actual": float(c["actual"]),
+                    }
+                    for c in expense_summary["by_category"]
+                ],
+                "total_expenses": float(expense_summary["total_expenses"]),
+                "total_budget": float(expense_summary["total_budget"]),
+            }
+        )
+
         context["active_nav"] = "financial"
         return context

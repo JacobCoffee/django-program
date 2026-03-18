@@ -1,0 +1,240 @@
+{# _grant_status.html -- Travel grant status donut + budget gauge #}
+{# Usage: {% include ".../_grant_status.html" with chart_data=chart_grant_status_json %} #}
+
+<div class="card card--static">
+  <div style="padding: 1.25rem 1.5rem 0.75rem; border-bottom: 1px solid var(--color-border-light);">
+    <div style="font-weight: 700; font-size: 0.95rem; color: var(--color-text);">Travel Grant Status</div>
+    <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.1rem;">Application pipeline and budget allocation</div>
+  </div>
+  <div style="padding: 1.25rem 1.5rem;">
+    <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+      <canvas id="chart-grant-donut" style="width: 200px; height: 200px; display: block;"></canvas>
+      <div id="chart-grant-donut-legend" style="margin-left: 1.5rem;"></div>
+    </div>
+    <div id="chart-grant-budget" style="border-top: 1px solid var(--color-border-light, #e5e7eb); padding-top: 1rem;"></div>
+  </div>
+</div>
+
+<style>
+  @keyframes grant-bar-fill {
+    from { width: 0%; }
+  }
+  .grant-budget-bar-track {
+    flex: 1;
+    height: 8px;
+    background: #f0f1f4;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .grant-budget-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    animation: grant-bar-fill 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+</style>
+
+<script>
+(function() {
+  var canvas = document.getElementById('chart-grant-donut');
+  var legendEl = document.getElementById('chart-grant-donut-legend');
+  var budgetEl = document.getElementById('chart-grant-budget');
+  if (!canvas) return;
+  var u = window._chartUtils;
+  if (!u) return;
+  var data = JSON.parse('{{ chart_data|escapejs }}');
+
+  var STATUS_PALETTE = {
+    submitted: '#2563eb',
+    reviewing: '#d97706',
+    offered: '#7c3aed',
+    accepted: '#059669',
+    rejected: '#dc2626',
+    declined: '#8889a0',
+    disbursed: '#0d9488',
+    cancelled: '#c026d3'
+  };
+
+  var byStatus = data.by_status || {};
+  var chartItems = [];
+  var statusOrder = ['submitted', 'reviewing', 'offered', 'accepted', 'rejected', 'declined', 'disbursed', 'cancelled'];
+  for (var si = 0; si < statusOrder.length; si++) {
+    var key = statusOrder[si];
+    if (byStatus[key] && byStatus[key] > 0) {
+      chartItems.push({ label: u.capitalize(key), value: byStatus[key], color: STATUS_PALETTE[key] || u.CHART_PALETTE[si % u.CHART_PALETTE.length] });
+    }
+  }
+  var remainingKeys = Object.keys(byStatus);
+  for (var ri = 0; ri < remainingKeys.length; ri++) {
+    if (statusOrder.indexOf(remainingKeys[ri]) === -1 && byStatus[remainingKeys[ri]] > 0) {
+      chartItems.push({ label: u.capitalize(remainingKeys[ri]), value: byStatus[remainingKeys[ri]], color: u.CHART_PALETTE[chartItems.length % u.CHART_PALETTE.length] });
+    }
+  }
+
+  function drawDonut() {
+    var s = u.setupCanvas(canvas);
+    var ctx = s.ctx, w = s.w, h = s.h;
+
+    if (!chartItems.length || chartItems.every(function(d) { return d.value === 0; })) {
+      u.drawEmpty(ctx, w, h, 'No grant applications');
+      if (legendEl) legendEl.innerHTML = '';
+      return;
+    }
+
+    var cx = w / 2, cy = h / 2;
+    var outerR = Math.min(w, h) / 2 - 8;
+    var innerR = outerR * 0.62;
+    var total = chartItems.reduce(function(acc, d) { return acc + d.value; }, 0);
+
+    var segments = [];
+    var cumAngle = -Math.PI / 2;
+    for (var i = 0; i < chartItems.length; i++) {
+      var sweep = (chartItems[i].value / total) * Math.PI * 2;
+      segments.push({ start: cumAngle, end: cumAngle + sweep, idx: i });
+      cumAngle += sweep;
+    }
+
+    function draw(t) {
+      var progress = u.easeOutQuart(t);
+      var maxAngle = -Math.PI / 2 + Math.PI * 2 * progress;
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+      ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+      ctx.fillStyle = '#f0f1f4';
+      ctx.fill();
+      ctx.restore();
+
+      for (var i = 0; i < segments.length; i++) {
+        var seg = segments[i];
+        var drawEnd = Math.min(seg.end, maxAngle);
+        if (drawEnd <= seg.start) continue;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, outerR, seg.start, drawEnd);
+        ctx.arc(cx, cy, innerR, drawEnd, seg.start, true);
+        ctx.closePath();
+        ctx.fillStyle = chartItems[i].color;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      if (progress > 0.5) {
+        var a = Math.min(1, (progress - 0.5) / 0.3);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#1a1a2e';
+        ctx.font = '800 20px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(u.formatNumber(total), cx, cy - 6);
+        ctx.fillStyle = '#8889a0';
+        ctx.font = '600 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillText('APPLICATIONS', cx, cy + 12);
+        ctx.restore();
+      }
+    }
+
+    u.animate(900, draw, function() {
+      if (legendEl) {
+        var html = '';
+        for (var i = 0; i < chartItems.length; i++) {
+          var pct = total > 0 ? Math.round(chartItems[i].value / total * 100) : 0;
+          html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">' +
+            '<span style="width:10px;height:10px;border-radius:3px;background:' + chartItems[i].color + ';flex-shrink:0;"></span>' +
+            '<span style="font-size:11px;color:#555770;min-width:70px;">' + chartItems[i].label + '</span>' +
+            '<span style="font-family:\'SF Mono\',SFMono-Regular,Menlo,monospace;font-size:11px;font-weight:700;color:#1a1a2e;">' + chartItems[i].value + '</span>' +
+            '<span style="font-size:10px;color:#8889a0;">(' + pct + '%)</span>' +
+            '</div>';
+        }
+        legendEl.innerHTML = html;
+      }
+
+      function findSegmentAt(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left - cx;
+        var my = e.clientY - rect.top - cy;
+        var dist = Math.sqrt(mx * mx + my * my);
+        if (dist < innerR || dist > outerR) return -1;
+        var angle = Math.atan2(my, mx);
+        if (angle < -Math.PI / 2) angle += Math.PI * 2;
+        for (var i = 0; i < segments.length; i++) {
+          if (angle >= segments[i].start && angle < segments[i].end) return i;
+        }
+        return -1;
+      }
+
+      canvas.addEventListener('mousemove', function(e) {
+        var idx = findSegmentAt(e);
+        if (idx >= 0) {
+          canvas.style.cursor = 'pointer';
+          var pct = total > 0 ? (chartItems[idx].value / total * 100).toFixed(1) : '0';
+          u.showTooltip(e,
+            '<div style="font-weight:700;margin-bottom:2px;">' + chartItems[idx].label + '</div>' +
+            '<div>Count: <strong>' + u.formatNumber(chartItems[idx].value) + '</strong> (' + pct + '%)</div>' +
+            '<div style="margin-top:4px;font-size:10px;color:#8889a0;">Click to view grants</div>'
+          );
+          return;
+        }
+        canvas.style.cursor = 'default';
+        u.hideTooltip();
+      });
+      canvas.addEventListener('click', function(e) {
+        var idx = findSegmentAt(e);
+        if (idx >= 0 && window._drilldownUrls && window._drilldownUrls.travelGrantList) {
+          var statusKey = chartItems[idx].label.toLowerCase().replace(/ /g, '_');
+          window.location.href = window._drilldownUrls.travelGrantList + '?status=' + encodeURIComponent(statusKey);
+        }
+      });
+      canvas.addEventListener('mouseleave', function() { u.hideTooltip(); canvas.style.cursor = 'default'; });
+    });
+  }
+
+  requestAnimationFrame(drawDonut);
+  window.addEventListener('resize', (function() {
+    var timer;
+    return function() { clearTimeout(timer); timer = setTimeout(drawDonut, 200); };
+  })());
+
+  if (budgetEl) {
+    var approvalRate = data.approval_rate != null ? data.approval_rate : 0;
+    var totalApproved = data.total_approved || 0;
+    var totalDisbursed = data.total_disbursed || 0;
+    var budget = data.budget || 0;
+
+    if (budget > 0) {
+      var spentPct = Math.min(Math.round(totalDisbursed / budget * 100), 100);
+      var committedPct = Math.min(Math.round(totalApproved / budget * 100), 100);
+      budgetEl.innerHTML =
+        '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;">' +
+        '  <div style="min-width:5rem;font-size:0.82rem;font-weight:600;color:var(--color-text);">Disbursed</div>' +
+        '  <div class="grant-budget-bar-track">' +
+        '    <div class="grant-budget-bar-fill" style="width:' + spentPct + '%;background:linear-gradient(90deg,#0d9488,#5eead4);"></div>' +
+        '  </div>' +
+        '  <div style="min-width:7rem;text-align:right;font-family:\'SF Mono\',SFMono-Regular,Menlo,monospace;font-size:0.78rem;color:#8889a0;white-space:nowrap;">' +
+        '    $' + totalDisbursed.toLocaleString() + ' / $' + budget.toLocaleString() +
+        '    <span style="font-weight:700;color:#0d9488;margin-left:0.4rem;">' + spentPct + '%</span>' +
+        '  </div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:1rem;">' +
+        '  <div style="min-width:5rem;font-size:0.82rem;font-weight:600;color:var(--color-text);">Committed</div>' +
+        '  <div class="grant-budget-bar-track">' +
+        '    <div class="grant-budget-bar-fill" style="width:' + committedPct + '%;background:linear-gradient(90deg,#7c3aed,#a78bfa);"></div>' +
+        '  </div>' +
+        '  <div style="min-width:7rem;text-align:right;font-family:\'SF Mono\',SFMono-Regular,Menlo,monospace;font-size:0.78rem;color:#8889a0;white-space:nowrap;">' +
+        '    $' + totalApproved.toLocaleString() + ' / $' + budget.toLocaleString() +
+        '    <span style="font-weight:700;color:#7c3aed;margin-left:0.4rem;">' + committedPct + '%</span>' +
+        '  </div>' +
+        '</div>' +
+        '<div style="margin-top:0.6rem;font-size:0.75rem;color:#8889a0;">Approval rate: <strong style="color:var(--color-text);">' + approvalRate.toFixed(1) + '%</strong></div>';
+    } else {
+      budgetEl.innerHTML =
+        '<div style="font-size:0.78rem;color:#8889a0;">Approval rate: <strong style="color:var(--color-text);">' + approvalRate.toFixed(1) + '%</strong>' +
+        (totalApproved > 0 ? ' &middot; $' + totalApproved.toLocaleString() + ' approved' : '') +
+        (totalDisbursed > 0 ? ' &middot; $' + totalDisbursed.toLocaleString() + ' disbursed' : '') +
+        '</div>';
+    }
+  }
+})();
+</script>

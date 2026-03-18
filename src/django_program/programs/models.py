@@ -642,3 +642,79 @@ class PaymentInfo(models.Model):
 
     def __str__(self) -> str:
         return f"Payment info for {self.grant.user} ({self.get_payment_method_display()})"
+
+
+class Survey(models.Model):
+    """A survey for collecting attendee feedback (NPS, satisfaction, etc.).
+
+    Each conference can have multiple surveys (post-event, per-session, etc.).
+    The ``survey_type`` field determines how responses are interpreted.
+    """
+
+    class SurveyType(models.TextChoices):
+        """Classification of survey purpose."""
+
+        NPS = "nps", "Net Promoter Score"
+        SATISFACTION = "satisfaction", "Overall Satisfaction"
+        SESSION = "session", "Session Feedback"
+        CUSTOM = "custom", "Custom Survey"
+
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="surveys",
+    )
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=200)
+    survey_type = models.CharField(
+        max_length=20,
+        choices=SurveyType.choices,
+        default=SurveyType.SATISFACTION,
+    )
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = [("conference", "slug")]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.conference.slug})"
+
+
+class SurveyResponse(models.Model):
+    """An individual response to a survey.
+
+    For NPS surveys, ``score`` is 0-10. For satisfaction surveys, ``score``
+    is 1-5. The ``comment`` field captures optional free-text feedback.
+    """
+
+    survey = models.ForeignKey(
+        Survey,
+        on_delete=models.CASCADE,
+        related_name="responses",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="survey_responses",
+    )
+    score = models.PositiveSmallIntegerField(
+        help_text="Response score (0-10 for NPS, 1-5 for satisfaction).",
+    )
+    comment = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["survey", "user"],
+                name="unique_survey_response_per_user",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Response {self.score} to {self.survey} by {self.user}"

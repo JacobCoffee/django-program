@@ -1,0 +1,190 @@
+{# _cart_funnel.html -- Cart funnel horizontal stacked bar with conversion metrics #}
+{# Usage: {% include ".../_cart_funnel.html" with chart_data=chart_cart_funnel_json %} #}
+
+<div class="card card--static">
+  <div style="padding: 1.25rem 1.5rem 0.75rem; border-bottom: 1px solid var(--color-border-light);">
+    <div style="font-weight: 700; font-size: 0.95rem; color: var(--color-text);">Cart Funnel</div>
+    <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.1rem;">Cart status distribution and conversion rates</div>
+  </div>
+  <div style="padding: 1rem 1.5rem 1.25rem;">
+    <canvas id="chart-cart-funnel" style="width: 100%; height: 220px; display: block;"></canvas>
+    <div id="chart-cart-funnel-metrics" style="display: flex; gap: 1.5rem; justify-content: center; margin-top: 0.75rem;"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var canvas = document.getElementById('chart-cart-funnel');
+  if (!canvas) return;
+  var u = window._chartUtils;
+  if (!u) return;
+  var data = JSON.parse('{{ chart_data|escapejs }}');
+
+  var FUNNEL_COLORS = {
+    open: u.COLORS.amber,
+    completed: u.COLORS.emerald,
+    abandoned: u.COLORS.red,
+    expired: u.COLORS.grayDark
+  };
+
+  function drawChart() {
+    var s = u.setupCanvas(canvas);
+    var ctx = s.ctx, w = s.w, h = s.h;
+
+    var total = (data.open || 0) + (data.completed || 0) + (data.abandoned || 0) + (data.expired || 0);
+    if (!total) { u.drawEmpty(ctx, w, h, 'No cart data'); return; }
+
+    var segments = [
+      { key: 'completed', label: 'Completed', value: data.completed || 0, color: FUNNEL_COLORS.completed },
+      { key: 'open', label: 'Open', value: data.open || 0, color: FUNNEL_COLORS.open },
+      { key: 'abandoned', label: 'Abandoned', value: data.abandoned || 0, color: FUNNEL_COLORS.abandoned },
+      { key: 'expired', label: 'Expired', value: data.expired || 0, color: FUNNEL_COLORS.expired }
+    ];
+
+    var padL = 16, padR = 16, padT = 20, padB = 50;
+    var barH = 32;
+    var barY = padT + 10;
+    var barW = w - padL - padR;
+
+    var hitZones = [];
+
+    function draw(t) {
+      var progress = u.easeOutCubic(t);
+      ctx.clearRect(0, 0, w, h);
+      hitZones = [];
+
+      ctx.fillStyle = '#f0f1f4';
+      u.roundRect(ctx, padL, barY, barW, barH, 6);
+      ctx.fill();
+
+      var xOffset = padL;
+      for (var i = 0; i < segments.length; i++) {
+        var seg = segments[i];
+        if (seg.value === 0) continue;
+        var segW = (seg.value / total) * barW * progress;
+        if (segW < 1) continue;
+
+        var radii = 0;
+        if (i === 0 && xOffset === padL) {
+          radii = segW >= barW - 1 ? 6 : [6, 0, 0, 6];
+        } else if (i === segments.length - 1 || (i < segments.length - 1 && segments.slice(i + 1).every(function(s) { return s.value === 0; }))) {
+          radii = [0, 6, 6, 0];
+        }
+
+        ctx.fillStyle = seg.color;
+        if (radii) {
+          u.roundRect(ctx, xOffset, barY, segW, barH, radii);
+          ctx.fill();
+        } else {
+          ctx.fillRect(xOffset, barY, segW, barH);
+        }
+
+        hitZones.push({ x: xOffset, w: segW, seg: seg });
+
+        if (segW > 40 && progress > 0.7) {
+          ctx.save();
+          ctx.fillStyle = '#fff';
+          ctx.font = '700 11px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(seg.value, xOffset + segW / 2, barY + barH / 2);
+          ctx.restore();
+        }
+
+        xOffset += segW;
+      }
+
+      if (progress > 0.6) {
+        var legY = barY + barH + 16;
+        var legX = padL;
+        ctx.save();
+        for (var i = 0; i < segments.length; i++) {
+          if (segments[i].value === 0) continue;
+          ctx.fillStyle = segments[i].color;
+          u.roundRect(ctx, legX, legY, 10, 10, 2);
+          ctx.fill();
+          ctx.fillStyle = u.COLORS.textMuted;
+          ctx.font = '500 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          var pct = Math.round(segments[i].value / total * 100);
+          var legLabel = segments[i].label + ' (' + pct + '%)';
+          ctx.fillText(legLabel, legX + 14, legY + 5);
+          legX += ctx.measureText(legLabel).width + 30;
+        }
+        ctx.restore();
+      }
+    }
+
+    u.animate(700, draw, function() {
+      function findHitAt(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var my = e.clientY - rect.top;
+        if (my < barY || my > barY + barH) return null;
+        for (var i = 0; i < hitZones.length; i++) {
+          if (mx >= hitZones[i].x && mx < hitZones[i].x + hitZones[i].w) return hitZones[i].seg;
+        }
+        return null;
+      }
+
+      canvas.addEventListener('mousemove', function(e) {
+        var hit = findHitAt(e);
+        if (hit) {
+          canvas.style.cursor = 'pointer';
+          var pct = (hit.value / total * 100).toFixed(1);
+          u.showTooltip(e,
+            '<div style="font-weight:700;margin-bottom:2px;">' + hit.label + '</div>' +
+            '<div>Count: <strong>' + u.formatNumber(hit.value) + '</strong> (' + pct + '%)</div>' +
+            '<div style="font-size:10px;color:#aaa;margin-top:3px;">Click to view orders</div>'
+          );
+        } else {
+          canvas.style.cursor = 'default';
+          u.hideTooltip();
+        }
+      });
+      var CART_TO_ORDER_STATUS = {
+        completed: 'paid',
+        open: 'pending',
+        abandoned: 'cancelled',
+        expired: 'cancelled'
+      };
+      canvas.addEventListener('click', function(e) {
+        var hit = findHitAt(e);
+        if (hit && window._drilldownUrls) {
+          var orderStatus = CART_TO_ORDER_STATUS[hit.key] || '';
+          var url = window._drilldownUrls.orderList;
+          if (orderStatus) url += '?status=' + encodeURIComponent(orderStatus);
+          window.location.href = url;
+        }
+      });
+      canvas.addEventListener('mouseleave', function() { u.hideTooltip(); canvas.style.cursor = 'default'; });
+    });
+
+    var metricsEl = document.getElementById('chart-cart-funnel-metrics');
+    if (metricsEl) {
+      var convRate = data.conversion_rate != null ? data.conversion_rate : (total > 0 ? (data.completed || 0) / total * 100 : 0);
+      var abandRate = data.abandonment_rate != null ? data.abandonment_rate : (total > 0 ? (data.abandoned || 0) / total * 100 : 0);
+      metricsEl.innerHTML =
+        '<div style="text-align:center;">' +
+        '  <div style="font-family:\'SF Mono\',SFMono-Regular,Menlo,monospace;font-size:1.25rem;font-weight:800;color:' + u.COLORS.emerald + ';">' + convRate.toFixed(1) + '%</div>' +
+        '  <div style="font-size:0.72rem;font-weight:600;color:' + u.COLORS.textMuted + ';text-transform:uppercase;letter-spacing:0.05em;">Conversion</div>' +
+        '</div>' +
+        '<div style="text-align:center;">' +
+        '  <div style="font-family:\'SF Mono\',SFMono-Regular,Menlo,monospace;font-size:1.25rem;font-weight:800;color:' + u.COLORS.red + ';">' + abandRate.toFixed(1) + '%</div>' +
+        '  <div style="font-size:0.72rem;font-weight:600;color:' + u.COLORS.textMuted + ';text-transform:uppercase;letter-spacing:0.05em;">Abandonment</div>' +
+        '</div>' +
+        '<div style="text-align:center;">' +
+        '  <div style="font-family:\'SF Mono\',SFMono-Regular,Menlo,monospace;font-size:1.25rem;font-weight:800;color:' + u.COLORS.text + ';">' + u.formatNumber(total) + '</div>' +
+        '  <div style="font-size:0.72rem;font-weight:600;color:' + u.COLORS.textMuted + ';text-transform:uppercase;letter-spacing:0.05em;">Total Carts</div>' +
+        '</div>';
+    }
+  }
+
+  requestAnimationFrame(drawChart);
+  window.addEventListener('resize', (function() {
+    var timer;
+    return function() { clearTimeout(timer); timer = setTimeout(drawChart, 200); };
+  })());
+})();
+</script>

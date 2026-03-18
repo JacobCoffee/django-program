@@ -35,6 +35,12 @@ from django_program.manage.views import (
     ConferenceEditView,
     ConferenceListView,
     DashboardView,
+    ExpenseCategoryCreateView,
+    ExpenseCategoryEditView,
+    ExpenseCategoryListView,
+    ExpenseCreateView,
+    ExpenseEditView,
+    ExpenseListView,
     ImportFromPretalxView,
     ImportPretalxStreamView,
     ManualPaymentView,
@@ -210,6 +216,29 @@ urlpatterns = [
         ManualPaymentView.as_view(),
         name="order-manual-payment",
     ),
+    # --- Expenses ---
+    path("<slug:conference_slug>/expenses/", ExpenseListView.as_view(), name="expense-list"),
+    path("<slug:conference_slug>/expenses/add/", ExpenseCreateView.as_view(), name="expense-add"),
+    path(
+        "<slug:conference_slug>/expenses/<int:pk>/edit/",
+        ExpenseEditView.as_view(),
+        name="expense-edit",
+    ),
+    path(
+        "<slug:conference_slug>/expense-categories/",
+        ExpenseCategoryListView.as_view(),
+        name="expense-category-list",
+    ),
+    path(
+        "<slug:conference_slug>/expense-categories/add/",
+        ExpenseCategoryCreateView.as_view(),
+        name="expense-category-add",
+    ),
+    path(
+        "<slug:conference_slug>/expense-categories/<int:pk>/edit/",
+        ExpenseCategoryEditView.as_view(),
+        name="expense-category-edit",
+    ),
     # --- Conditions & Discounts ---
     path("<slug:conference_slug>/conditions/", ConditionListView.as_view(), name="condition-list"),
     path(
@@ -249,6 +278,8 @@ urlpatterns = [
     path("<slug:conference_slug>/financial/", include("django_program.manage.urls_financial")),
     # --- Reports ---
     path("<slug:conference_slug>/reports/", include("django_program.manage.urls_reports")),
+    # --- Analytics & KPI Dashboard ---
+    path("<slug:conference_slug>/analytics/", include("django_program.manage.urls_analytics")),
     # --- Pretalx Overrides ---
     path("<slug:conference_slug>/overrides/", include("django_program.manage.urls_overrides")),
 ]

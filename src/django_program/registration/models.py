@@ -390,6 +390,24 @@ class Order(models.Model):
         unique=True,
         help_text='Unique order reference, e.g. "ORD-A1B2C3".',
     )
+    utm_source = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="UTM source parameter from registration URL.",
+    )
+    utm_medium = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="UTM medium parameter from registration URL.",
+    )
+    utm_campaign = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="UTM campaign parameter from registration URL.",
+    )
     hold_expires_at = models.DateTimeField(
         null=True,
         blank=True,
