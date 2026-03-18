@@ -280,6 +280,9 @@ class Command(BaseCommand):
             if not created:
                 continue
 
+            # Backdate auto_now_add timestamp for realistic report data
+            Order.objects.filter(pk=order.pk).update(created_at=created_at)
+
             OrderLineItem.objects.create(
                 order=order,
                 description=ticket.name,
@@ -345,11 +348,14 @@ class Command(BaseCommand):
         checked_in_refs: set[str],
     ) -> None:
         """Create an attendee record and optionally check them in."""
-        attendee, _ = Attendee.objects.get_or_create(
+        attendee, att_created = Attendee.objects.get_or_create(
             user=user,
             conference=conference,
             defaults={"order": order},
         )
+
+        if att_created:
+            Attendee.objects.filter(pk=attendee.pk).update(created_at=created_at)
 
         if ref in checked_in_refs:
             attendee.checked_in_at = created_at + datetime.timedelta(hours=9)

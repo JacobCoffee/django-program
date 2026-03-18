@@ -307,6 +307,16 @@ class TestReportPermissions:
         "report-voucher-export",
         "report-discount-effectiveness",
         "report-discount-export",
+        "report-sales-by-date",
+        "report-sales-export",
+        "report-credit-notes",
+        "report-credit-export",
+        "report-speaker-registration",
+        "report-speaker-export",
+        "report-reconciliation",
+        "report-reconciliation-export",
+        "report-registration-flow",
+        "report-registration-flow-export",
     ]
 
     def test_anonymous_redirects_to_login(self, conference):
@@ -802,7 +812,6 @@ class TestSalesByDateReport:
     """Tests for the Sales by Date report."""
 
     def test_returns_200(self, client_logged_in_super, conference):
-        client_logged_in_super.get(_url("report-sales-by-date", conference))
         resp = client_logged_in_super.get(_url("report-sales-by-date", conference))
         assert resp.status_code == 200
 

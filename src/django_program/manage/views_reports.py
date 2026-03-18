@@ -1,8 +1,9 @@
 """Admin reporting dashboard views for conference management.
 
-Provides attendee manifest, product inventory, voucher usage, and discount
-effectiveness reports with CSV export support. All views are scoped to the
-current conference and gated by report-level permissions.
+Provides nine report types: attendee manifest, product inventory, voucher
+usage, discount effectiveness, sales by date, credit notes, speaker
+registration, financial reconciliation, and registration flow. All views
+are scoped to the current conference and gated by report-level permissions.
 """
 
 import csv
@@ -638,9 +639,9 @@ class SpeakerRegistrationView(ReportPermissionMixin, TemplateView):
             Template context with speakers queryset.
         """
         context: dict[str, object] = super().get_context_data(**kwargs)
-        speakers = get_speaker_registrations(self.conference)
+        speakers = list(get_speaker_registrations(self.conference))
         context["speakers"] = speakers
-        total = speakers.count()
+        total = len(speakers)
         registered = sum(1 for s in speakers if s.has_paid_order)
         context["total_speakers"] = total
         context["registered_count"] = registered

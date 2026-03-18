@@ -1,8 +1,10 @@
 """Report service layer for conference admin reporting.
 
 Provides data-access functions that return querysets and aggregated data for
-the attendee manifest, product inventory, voucher usage, and discount
-effectiveness reports. All queries are scoped to a specific conference.
+nine report types: attendee manifest, product inventory, voucher usage,
+discount effectiveness, sales by date, credit notes, speaker registration,
+financial reconciliation, and registration flow. All queries are scoped to
+a specific conference.
 """
 
 from decimal import Decimal
@@ -286,7 +288,8 @@ def get_discount_conditions(conference: Conference) -> dict[str, list[dict[str, 
     """Return all discount/condition data grouped by condition type.
 
     Queries each concrete condition model and returns a flat dict keyed by
-    the condition type slug with a list of condition dicts.
+    the condition type label (e.g. "Speaker", "Product Discount") with a
+    list of condition dicts.
 
     Args:
         conference: The conference to scope the query to.
