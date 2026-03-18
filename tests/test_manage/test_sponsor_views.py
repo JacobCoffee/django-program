@@ -220,8 +220,8 @@ def test_sponsor_edit_unsynced_fields_editable(authed_client: Client, conference
 @pytest.fixture
 def pyconus_conference(db):
     return Conference.objects.create(
-        name="PyCon US 2027",
-        slug="pycon-us-2027",
+        name="Python 2077",
+        slug="python-2077",
         start_date=date(2027, 5, 14),
         end_date=date(2027, 5, 22),
         timezone="America/New_York",

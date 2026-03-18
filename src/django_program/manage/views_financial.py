@@ -5,6 +5,8 @@ analytics, and recent transaction listings -- all scoped to the current
 conference.
 """
 
+import datetime
+import json
 from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -17,6 +19,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from django_program.conference.models import Conference
+from django_program.manage.reports import get_sales_by_date
 from django_program.registration.models import (
     Cart,
     Credit,
@@ -28,6 +31,59 @@ from django_program.registration.models import (
 _ZERO = Decimal("0.00")
 
 _FINANCE_GROUP_NAME = "Program: Finance & Accounting"
+
+
+def _build_chart_context(
+    conference: Conference,
+    orders_by_status: dict[str, int],
+    payments_by_method: dict[str, dict[str, object]],
+    ticket_sales: QuerySet[TicketType],
+) -> dict[str, str]:
+    """Build JSON chart data for the financial dashboard template partials.
+
+    Args:
+        conference: The conference to scope queries to.
+        orders_by_status: Order counts keyed by status string.
+        payments_by_method: Payment aggregation keyed by method string.
+        ticket_sales: Annotated TicketType queryset with ``sold_count``.
+
+    Returns:
+        Dict of JSON-encoded chart data strings, ready to inject into
+        the template context.
+    """
+    sixty_days_ago = timezone.now().date() - datetime.timedelta(days=60)
+    sales_data = get_sales_by_date(conference, date_from=sixty_days_ago)
+
+    return {
+        "chart_sales_json": json.dumps(
+            [
+                {"date": row["date"].isoformat(), "count": row["count"], "revenue": float(row["revenue"])}
+                for row in sales_data
+            ]
+        ),
+        "chart_orders_json": json.dumps(
+            [{"status": status, "count": count, "total": 0} for status, count in orders_by_status.items() if count > 0]
+        ),
+        "chart_payments_json": json.dumps(
+            [
+                {"method": method, "count": data["count"], "total": float(data["total_amount"])}
+                for method, data in payments_by_method.items()
+                if data["count"] > 0
+            ]
+        ),
+        "chart_tickets_json": json.dumps(
+            [
+                {
+                    "name": str(tt.name),
+                    "sold": tt.sold_count,
+                    "reserved": 0,
+                    "remaining": max(0, tt.total_quantity - tt.sold_count) if tt.total_quantity > 0 else 0,
+                    "total": tt.total_quantity,
+                }
+                for tt in ticket_sales
+            ]
+        ),
+    }
 
 
 class FinancePermissionMixin(LoginRequiredMixin):
@@ -259,6 +315,9 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
             .order_by("-created_at")
         )
         context["active_carts"] = active_carts
+
+        # --- Chart JSON data for template partials ---
+        context.update(_build_chart_context(conference, orders_by_status, payments_by_method, ticket_sales))
 
         context["active_nav"] = "financial"
         return context

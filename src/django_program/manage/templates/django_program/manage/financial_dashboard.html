@@ -13,6 +13,8 @@
 
 {% block content %}
 
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
 <!-- Summary cards -->
 <div class="top-stats" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
   <div class="stat-card">
@@ -40,6 +42,17 @@
     <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.credits_applied|floatformat:2 }} applied</div>
     {% endif %}
   </div>
+</div>
+
+<!-- Charts -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_revenue_bar.html" with chart_data=chart_sales_json %}
+  {% include "django_program/manage/charts/_ticket_inventory.html" with chart_data=chart_tickets_json %}
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_order_status.html" with chart_data=chart_orders_json %}
+  {% include "django_program/manage/charts/_payment_methods.html" with chart_data=chart_payments_json %}
 </div>
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">

@@ -1,0 +1,206 @@
+{# _registration_pulse.html -- Registration Pulse area chart component #}
+{# Usage: {% include "django_program/manage/charts/_registration_pulse.html" with chart_data=chart_flow_json %} #}
+
+<div class="card card--static">
+  <div style="padding: 1.25rem 1.5rem 0.75rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border-light);">
+    <div>
+      <div style="font-weight: 700; font-size: 0.95rem; color: var(--color-text);">Registration Pulse</div>
+      <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.1rem;">Registrations vs cancellations over time</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <span style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: var(--color-text-muted);"><span style="width: 10px; height: 10px; border-radius: 2px; background: #0d9488; display: inline-block;"></span> Registrations</span>
+      <span style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: var(--color-text-muted);"><span style="width: 10px; height: 10px; border-radius: 2px; background: #dc2626; display: inline-block;"></span> Cancellations</span>
+    </div>
+  </div>
+  <div style="padding: 1rem 1.5rem 1.25rem;">
+    <canvas id="chart-registration-pulse" style="width: 100%; height: 240px; display: block;"></canvas>
+  </div>
+</div>
+
+<script>
+(function() {
+  var canvas = document.getElementById('chart-registration-pulse');
+  if (!canvas) return;
+  var u = window._chartUtils;
+  if (!u) return;
+  var data = JSON.parse('{{ chart_data|escapejs }}');
+
+  function drawAreaChart() {
+    var s = u.setupCanvas(canvas);
+    var ctx = s.ctx, w = s.w, h = s.h;
+    if (!data || !data.length) { u.drawEmpty(ctx, w, h, 'No registration flow data'); return; }
+
+    var padL = 44, padR = 16, padT = 12, padB = 36;
+    var chartW = w - padL - padR;
+    var chartH = h - padT - padB;
+
+    var maxVal = 1;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].registrations > maxVal) maxVal = data[i].registrations;
+      if (data[i].cancellations > maxVal) maxVal = data[i].cancellations;
+    }
+    var niceMax = Math.ceil(maxVal * 1.2);
+    if (niceMax < 5) niceMax = 5;
+
+    function xPos(idx) { return padL + (idx / Math.max(1, data.length - 1)) * chartW; }
+    function yPos(val) { return padT + chartH - (val / niceMax) * chartH; }
+
+    var dataPoints = [];
+
+    function draw(t) {
+      var progress = u.easeOutCubic(t);
+      var drawCount = Math.floor(data.length * progress);
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 1;
+      var gridSteps = 4;
+      for (var g = 0; g <= gridSteps; g++) {
+        var gy = padT + chartH - (chartH * g / gridSteps);
+        ctx.beginPath();
+        ctx.moveTo(padL, gy);
+        ctx.lineTo(w - padR, gy);
+        ctx.stroke();
+        ctx.fillStyle = u.COLORS.textMuted;
+        ctx.font = '500 10px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(Math.round(niceMax * g / gridSteps), padL - 8, gy);
+      }
+      ctx.restore();
+
+      var skip = Math.max(1, Math.ceil(data.length / 10));
+      for (var xi = 0; xi < data.length; xi += skip) {
+        ctx.save();
+        ctx.fillStyle = u.COLORS.textMuted;
+        ctx.font = '500 10px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(u.formatDateShort(data[xi].date), xPos(xi), padT + chartH + 8);
+        ctx.restore();
+      }
+
+      if (drawCount > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(xPos(0), yPos(0));
+        for (var ri = 0; ri <= drawCount && ri < data.length; ri++) {
+          ctx.lineTo(xPos(ri), yPos(data[ri].registrations));
+        }
+        ctx.lineTo(xPos(Math.min(drawCount, data.length - 1)), yPos(0));
+        ctx.closePath();
+        var areaGrad = ctx.createLinearGradient(0, padT, 0, padT + chartH);
+        areaGrad.addColorStop(0, u.hexToRgba(u.COLORS.teal, 0.25));
+        areaGrad.addColorStop(1, u.hexToRgba(u.COLORS.teal, 0.02));
+        ctx.fillStyle = areaGrad;
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = u.COLORS.teal;
+        ctx.lineWidth = 2.5;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        for (var rj = 0; rj <= drawCount && rj < data.length; rj++) {
+          if (rj === 0) ctx.moveTo(xPos(rj), yPos(data[rj].registrations));
+          else ctx.lineTo(xPos(rj), yPos(data[rj].registrations));
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = u.COLORS.red;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.setLineDash([4, 3]);
+        for (var ci = 0; ci <= drawCount && ci < data.length; ci++) {
+          if (ci === 0) ctx.moveTo(xPos(ci), yPos(data[ci].cancellations));
+          else ctx.lineTo(xPos(ci), yPos(data[ci].cancellations));
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (t >= 1) {
+        dataPoints = [];
+        for (var di = 0; di < data.length; di++) {
+          dataPoints.push({
+            x: xPos(di),
+            yReg: yPos(data[di].registrations),
+            yCan: yPos(data[di].cancellations),
+            idx: di
+          });
+        }
+      }
+    }
+
+    u.animate(800, draw, function() {
+      canvas.addEventListener('mousemove', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var closest = null, minDist = Infinity;
+        for (var i = 0; i < dataPoints.length; i++) {
+          var d = Math.abs(dataPoints[i].x - mx);
+          if (d < minDist) { minDist = d; closest = dataPoints[i]; }
+        }
+        if (closest && minDist < chartW / data.length) {
+          canvas.style.cursor = 'pointer';
+          var dp = data[closest.idx];
+          u.showTooltip(e,
+            '<div style="font-weight:700;margin-bottom:2px;">' + dp.date + '</div>' +
+            '<div style="color:' + u.COLORS.tealLight + '">Registrations: <strong>' + dp.registrations + '</strong></div>' +
+            '<div style="color:#fca5a5">Cancellations: <strong>' + dp.cancellations + '</strong></div>' +
+            '<div style="border-top:1px solid rgba(255,255,255,0.2);margin-top:3px;padding-top:3px;">Net: <strong>' + (dp.registrations - dp.cancellations) + '</strong></div>'
+          );
+
+          draw(1);
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(closest.x, padT);
+          ctx.lineTo(closest.x, padT + chartH);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(closest.x, closest.yReg, 5, 0, Math.PI * 2);
+          ctx.fillStyle = u.COLORS.surface;
+          ctx.fill();
+          ctx.strokeStyle = u.COLORS.teal;
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([]);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(closest.x, closest.yCan, 4, 0, Math.PI * 2);
+          ctx.fillStyle = u.COLORS.surface;
+          ctx.fill();
+          ctx.strokeStyle = u.COLORS.red;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          canvas.style.cursor = 'default';
+          u.hideTooltip();
+          draw(1);
+        }
+      });
+      canvas.addEventListener('mouseleave', function() {
+        u.hideTooltip();
+        canvas.style.cursor = 'default';
+        draw(1);
+      });
+    });
+  }
+
+  requestAnimationFrame(drawAreaChart);
+  window.addEventListener('resize', (function() {
+    var timer;
+    return function() { clearTimeout(timer); timer = setTimeout(drawAreaChart, 200); };
+  })());
+})();
+</script>

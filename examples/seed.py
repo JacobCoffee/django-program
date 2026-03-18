@@ -139,7 +139,7 @@ class Seeder:
     """Seed the example database with realistic conference demo data."""
 
     def __init__(self) -> None:
-        self.rng = _seeded_random("pycon-2027-seed")
+        self.rng = _seeded_random("python-2077-seed")
 
     def run(self) -> None:
         """Create a full conference with realistic registration data."""
@@ -205,15 +205,15 @@ class Seeder:
             return conference
         # Fallback: create one if bootstrap wasn't run
         conference, _ = Conference.objects.get_or_create(
-            slug="pycon-us-2027",
+            slug="python-2077",
             defaults={
-                "name": "PyCon US 2027",
+                "name": "Python 2077",
                 "start_date": datetime.date(2027, 5, 14),
                 "end_date": datetime.date(2027, 5, 22),
                 "timezone": "America/Pittsburgh",
-                "venue": "David L. Lawrence Convention Center",
+                "venue": "Pittsburgh Convention Center",
                 "address": "1000 Fort Duquesne Blvd, Pittsburgh, PA 15222",
-                "website_url": "https://us.pycon.org/2027/",
+                "website_url": "https://python2077.dev/",
                 "is_active": True,
             },
         )
@@ -308,7 +308,7 @@ class Seeder:
             user, created = User.objects.get_or_create(
                 username=username,
                 defaults={
-                    "email": f"{username}@pycon.org",
+                    "email": f"{username}@python2077.dev",
                     "first_name": first,
                     "last_name": last,
                     "is_staff": True,

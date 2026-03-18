@@ -1298,8 +1298,8 @@ class TestExampleSeeder:
         seed_mod = importlib.import_module("seed")
         seed_mod.Seeder().run()
 
-        assert Conference.objects.filter(slug="pycon-us-2027").exists()
-        assert Order.objects.filter(conference__slug="pycon-us-2027").count() >= 50
-        assert Credit.objects.filter(conference__slug="pycon-us-2027").count() >= 1
-        assert Speaker.objects.filter(conference__slug="pycon-us-2027").count() >= 10
-        assert Attendee.objects.filter(conference__slug="pycon-us-2027").count() >= 30
+        assert Conference.objects.filter(slug="python-2077").exists()
+        assert Order.objects.filter(conference__slug="python-2077").count() >= 50
+        assert Credit.objects.filter(conference__slug="python-2077").count() >= 1
+        assert Speaker.objects.filter(conference__slug="python-2077").count() >= 10
+        assert Attendee.objects.filter(conference__slug="python-2077").count() >= 30
