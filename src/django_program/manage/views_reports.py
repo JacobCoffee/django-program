@@ -8,9 +8,11 @@ are scoped to the current conference and gated by report-level permissions.
 
 import csv
 import datetime
+import json
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
+from django.db.models import Count, Sum
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -133,6 +135,105 @@ class ReportsDashboardView(ReportPermissionMixin, TemplateView):
         thirty_days_ago = timezone.now().date() - datetime.timedelta(days=30)
         recent_sales = get_sales_by_date(conference, date_from=thirty_days_ago)
         context["recent_sales_total"] = sum(row["revenue"] for row in recent_sales)
+
+        # Chart data: Sales by date (last 30 days)
+        context["chart_sales_json"] = json.dumps(
+            [
+                {"date": row["date"].isoformat(), "count": row["count"], "revenue": float(row["revenue"])}
+                for row in recent_sales
+            ]
+        )
+
+        # Chart data: Ticket inventory breakdown
+        ticket_chart = [
+            {
+                "name": str(tt.name),
+                "sold": tt.sold_count,
+                "reserved": tt.reserved_count,
+                "remaining": (
+                    max(0, tt.total_quantity - tt.sold_count - tt.reserved_count) if tt.total_quantity > 0 else 0
+                ),
+                "total": tt.total_quantity,
+            }
+            for tt in context["ticket_types"]  # type: ignore[union-attr]
+        ]
+        context["chart_tickets_json"] = json.dumps(ticket_chart)
+
+        # Chart data: Order status breakdown
+        order_statuses = list(
+            Order.objects.filter(conference=conference)
+            .values("status")
+            .annotate(count=Count("id"), total=Sum("total"))
+            .order_by("status")
+        )
+        context["chart_orders_json"] = json.dumps(
+            [
+                {"status": row["status"], "count": row["count"], "total": float(row["total"] or 0)}
+                for row in order_statuses
+            ]
+        )
+
+        # Chart data: Payment method breakdown
+        payment_methods = list(
+            Payment.objects.filter(
+                order__conference=conference,
+                status=Payment.Status.SUCCEEDED,
+            )
+            .values("method")
+            .annotate(count=Count("id"), total=Sum("amount"))
+            .order_by("method")
+        )
+        context["chart_payments_json"] = json.dumps(
+            [
+                {"method": row["method"], "count": row["count"], "total": float(row["total"] or 0)}
+                for row in payment_methods
+            ]
+        )
+
+        # Chart data: Registration flow (last 30 days)
+        flow = get_registration_flow(conference, date_from=thirty_days_ago)
+        context["chart_flow_json"] = json.dumps(
+            [
+                {
+                    "date": row["date"].isoformat(),
+                    "registrations": row["registrations"],
+                    "cancellations": row["cancellations"],
+                }
+                for row in flow
+            ]
+        )
+
+        # Chart data: Voucher redemption rates
+        voucher_chart = [
+            {
+                "code": str(v.code),
+                "used": v.times_used,
+                "max": v.max_uses,
+                "impact": float(v.revenue_impact),
+            }
+            for v in get_voucher_usage(conference)
+        ]
+        context["chart_vouchers_json"] = json.dumps(voucher_chart)
+
+        # Chart data: Check-in status
+        attendee_summary = context["attendee_summary"]
+        context["chart_checkin_json"] = json.dumps(
+            {
+                "checked_in": attendee_summary["checked_in"],  # type: ignore[index]
+                "total": attendee_summary["total"],  # type: ignore[index]
+            }
+        )
+
+        # Chart data: Speaker registration
+        speakers = list(get_speaker_registrations(conference))
+        registered = sum(1 for s in speakers if s.has_paid_order)
+        context["chart_speakers_json"] = json.dumps(
+            {
+                "registered": registered,
+                "unregistered": len(speakers) - registered,
+                "total": len(speakers),
+            }
+        )
 
         return context
 
