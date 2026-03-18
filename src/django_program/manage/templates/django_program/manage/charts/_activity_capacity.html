@@ -1,0 +1,176 @@
+{# _activity_capacity.html -- Activity capacity bars (confirmed/waitlisted/available) #}
+{# Usage: {% include ".../_activity_capacity.html" with chart_data=chart_activity_cap_json %} #}
+
+<div class="card card--static">
+  <div style="padding: 1.25rem 1.5rem 0.75rem; border-bottom: 1px solid var(--color-border-light);">
+    <div style="font-weight: 700; font-size: 0.95rem; color: var(--color-text);">Activity Capacity</div>
+    <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.1rem;">Signup status by activity</div>
+  </div>
+  <div style="padding: 1rem 1.5rem 1.25rem;">
+    <canvas id="chart-activity-capacity" style="width: 100%; height: 260px; display: block;"></canvas>
+  </div>
+</div>
+
+<script>
+(function() {
+  var canvas = document.getElementById('chart-activity-capacity');
+  if (!canvas) return;
+  var u = window._chartUtils;
+  if (!u) return;
+  var data = JSON.parse('{{ chart_data|escapejs }}');
+
+  function drawChart() {
+    var s = u.setupCanvas(canvas);
+    var ctx = s.ctx, w = s.w, h = s.h;
+    if (!data || !data.length) { u.drawEmpty(ctx, w, h, 'No activities configured'); return; }
+
+    var padL = 10, padR = 50, padT = 10, padB = 30;
+    var labelW = 120;
+    var maxItems = Math.min(data.length, 8);
+    var rowH = Math.min(38, (h - padT - padB) / maxItems);
+    var barAreaW = w - padL - labelW - padR;
+
+    var rowRects = [];
+
+    function draw(t) {
+      var progress = u.easeOutCubic(t);
+      ctx.clearRect(0, 0, w, h);
+      rowRects = [];
+
+      for (var i = 0; i < maxItems; i++) {
+        var d = data[i];
+        var rowY = padT + i * rowH;
+        var barY = rowY + 6;
+        var barH = rowH - 14;
+        var maxP = d.max_participants || 0;
+        var confirmed = d.confirmed || 0;
+        var waitlisted = d.waitlisted || 0;
+        var total = maxP > 0 ? maxP : Math.max(confirmed + waitlisted, 1);
+
+        ctx.save();
+        ctx.fillStyle = u.COLORS.text;
+        ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        var label = d.name.length > 16 ? d.name.substring(0, 15) + '\u2026' : d.name;
+        ctx.fillText(label, padL + labelW - 10, barY + barH / 2);
+        ctx.restore();
+
+        var barX = padL + labelW;
+
+        ctx.fillStyle = '#f0f1f4';
+        u.roundRect(ctx, barX, barY, barAreaW, barH, 4);
+        ctx.fill();
+
+        var confirmedW = (confirmed / total) * barAreaW * progress;
+        if (confirmedW > 0) {
+          var confGrad = ctx.createLinearGradient(barX, 0, barX + confirmedW, 0);
+          confGrad.addColorStop(0, u.COLORS.indigo);
+          confGrad.addColorStop(1, u.COLORS.indigoLight);
+          ctx.fillStyle = confGrad;
+          var confRadii = confirmedW >= barAreaW - 1 ? 4 : [4, 0, 0, 4];
+          u.roundRect(ctx, barX, barY, confirmedW, barH, confRadii);
+          ctx.fill();
+        }
+
+        var waitW = (waitlisted / total) * barAreaW * progress;
+        if (waitW > 1) {
+          ctx.fillStyle = u.COLORS.amber;
+          ctx.fillRect(barX + confirmedW, barY, waitW, barH);
+        }
+
+        if (progress > 0.8) {
+          ctx.save();
+          ctx.fillStyle = u.COLORS.textMuted;
+          ctx.font = '700 10px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          var pctLabel = d.utilization_pct != null ? Math.round(d.utilization_pct) + '%' : (maxP > 0 ? Math.round(confirmed / maxP * 100) + '%' : '\u221e');
+          ctx.fillText(pctLabel, barX + barAreaW + 6, barY + barH / 2);
+          ctx.restore();
+
+          if (confirmedW > 30) {
+            ctx.save();
+            ctx.fillStyle = '#fff';
+            ctx.font = '700 9px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(confirmed, barX + confirmedW / 2, barY + barH / 2);
+            ctx.restore();
+          }
+        }
+
+        rowRects.push({ y: rowY, h: rowH, idx: i });
+      }
+
+      if (maxItems * rowH + 28 < h) {
+        var legY = padT + maxItems * rowH + 8;
+        var legItems = [
+          { color: u.COLORS.indigo, label: 'Confirmed' },
+          { color: u.COLORS.amber, label: 'Waitlisted' },
+          { color: '#f0f1f4', label: 'Available' }
+        ];
+        var legX = padL + labelW;
+        ctx.save();
+        for (var li = 0; li < legItems.length; li++) {
+          ctx.fillStyle = legItems[li].color;
+          u.roundRect(ctx, legX, legY, 10, 10, 2);
+          ctx.fill();
+          ctx.fillStyle = u.COLORS.textMuted;
+          ctx.font = '500 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(legItems[li].label, legX + 14, legY + 5);
+          legX += ctx.measureText(legItems[li].label).width + 28;
+        }
+        ctx.restore();
+      }
+    }
+
+    function findHitRow(e) {
+      var rect = canvas.getBoundingClientRect();
+      var my = e.clientY - rect.top;
+      for (var i = 0; i < rowRects.length; i++) {
+        if (my >= rowRects[i].y && my < rowRects[i].y + rowRects[i].h) {
+          return data[rowRects[i].idx];
+        }
+      }
+      return null;
+    }
+
+    u.animate(700, draw, function() {
+      canvas.addEventListener('mousemove', function(e) {
+        var hit = findHitRow(e);
+        if (hit) {
+          canvas.style.cursor = 'pointer';
+          var cap = hit.max_participants > 0 ? u.formatNumber(hit.max_participants) : 'Unlimited';
+          u.showTooltip(e,
+            '<div style="font-weight:700;margin-bottom:2px;">' + hit.name + '</div>' +
+            '<div>Confirmed: <strong>' + u.formatNumber(hit.confirmed || 0) + '</strong></div>' +
+            '<div>Waitlisted: <strong>' + u.formatNumber(hit.waitlisted || 0) + '</strong></div>' +
+            '<div style="border-top:1px solid rgba(255,255,255,0.2);margin-top:3px;padding-top:3px;">Capacity: ' + cap + '</div>' +
+            '<div style="color:rgba(255,255,255,0.5);font-size:0.75em;margin-top:4px;">Click to view dashboard</div>'
+          );
+        } else {
+          canvas.style.cursor = 'default';
+          u.hideTooltip();
+        }
+      });
+      canvas.addEventListener('click', function(e) {
+        var hit = findHitRow(e);
+        if (hit && hit.activity_id && window._drilldownUrls && window._drilldownUrls.activityList) {
+          var base = window._drilldownUrls.activityList.replace(/\/$/, '');
+          window.location.href = base + '/' + hit.activity_id + '/dashboard/';
+        }
+      });
+      canvas.addEventListener('mouseleave', function() { u.hideTooltip(); canvas.style.cursor = 'default'; });
+    });
+  }
+
+  requestAnimationFrame(drawChart);
+  window.addEventListener('resize', (function() {
+    var timer;
+    return function() { clearTimeout(timer); timer = setTimeout(drawChart, 200); };
+  })());
+})();
+</script>

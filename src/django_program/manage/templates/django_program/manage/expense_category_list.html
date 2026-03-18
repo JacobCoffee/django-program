@@ -1,0 +1,74 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Expense Categories{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <span>Expense Categories</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Expense Categories</h1>
+<p>Budget categories for conference expenses</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:expense-list' conference.slug %}" class="btn btn-secondary">Expenses</a>
+<a href="{% url 'manage:expense-category-add' conference.slug %}" class="btn btn-primary">Add Category</a>
+{% endblock %}
+
+{% block content %}
+{% if categories %}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">${{ total_budget|floatformat:2 }}</div>
+    <div class="stat-card-label">Total Budget</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ total_spent|floatformat:2 }}</div>
+    <div class="stat-card-label">Total Spent</div>
+  </div>
+  <div class="stat-card">
+    {% with variance=total_budget|add:total_spent|default:"0" %}
+    <div class="stat-card-value">${{ total_budget|floatformat:2 }}</div>
+    {% endwith %}
+    <div class="stat-card-label">Remaining</div>
+  </div>
+</div>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Slug</th>
+      <th>Budget</th>
+      <th>Spent</th>
+      <th>Expenses</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cat in categories %}
+    <tr>
+      <td>{{ cat.name }}</td>
+      <td><span class="mono">{{ cat.slug }}</span></td>
+      <td>{% if cat.budget_amount %}${{ cat.budget_amount|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+      <td>${{ cat.total_spent|floatformat:2 }}</td>
+      <td>{{ cat.expense_count }}</td>
+      <td>
+        <a href="{% url 'manage:expense-category-edit' conference.slug cat.pk %}" class="btn btn-sm btn-secondary">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No expense categories defined for this conference.</p>
+  <p><a href="{% url 'manage:expense-category-add' conference.slug %}" class="btn btn-primary">Add First Category</a></p>
+</div>
+{% endif %}
+{% endblock %}

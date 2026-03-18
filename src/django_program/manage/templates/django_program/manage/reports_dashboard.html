@@ -68,6 +68,24 @@
   {% include "django_program/manage/charts/_speaker_status.html" with chart_data=chart_speakers_json %}
 </div>
 
+<!-- Analytics Dashboards -->
+<h2 class="section-heading">Analytics Dashboards</h2>
+
+<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2.5rem;">
+  <a href="{% url 'manage:analytics-dashboard' conference.slug %}" class="card" style="color: inherit; text-decoration: none; border-left: 3px solid var(--color-primary);">
+    <div class="card-body">
+      <div style="font-weight: 700; font-size: 1rem; margin-bottom: 0.4rem;">Analytics & KPIs</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Revenue per attendee, cart conversion, check-in throughput, room utilization, sponsor fulfillment, travel grants, content analytics.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:cross-event-dashboard' conference.slug %}" class="card" style="color: inherit; text-decoration: none; border-left: 3px solid var(--color-accent);">
+    <div class="card-body">
+      <div style="font-weight: 700; font-size: 1rem; margin-bottom: 0.4rem;">Cross-Event Intelligence</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Year-over-year retention, attendee lifetime value, sponsor renewal rates, speaker return rates, growth trends.</div>
+    </div>
+  </a>
+</div>
+
 <!-- Available Reports -->
 <h2 class="section-heading">Available Reports</h2>
 

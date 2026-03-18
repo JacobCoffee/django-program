@@ -7,6 +7,8 @@ from django_program.programs.models import (
     ActivitySignup,
     PaymentInfo,
     Receipt,
+    Survey,
+    SurveyResponse,
     TravelGrant,
     TravelGrantMessage,
 )
@@ -109,3 +111,34 @@ class PaymentInfoAdmin(admin.ModelAdmin):
     list_filter = ("payment_method",)
     search_fields = ("grant__user__username", "grant__user__email", "legal_name")
     readonly_fields = ("created_at", "updated_at")
+
+
+class SurveyResponseInline(admin.TabularInline):
+    """Inline editor for survey responses within the survey admin."""
+
+    model = SurveyResponse
+    extra = 0
+    fields = ("user", "score", "comment", "created_at")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(Survey)
+class SurveyAdmin(admin.ModelAdmin):
+    """Admin interface for managing surveys."""
+
+    list_display = ("name", "conference", "survey_type", "is_active", "created_at")
+    list_filter = ("conference", "survey_type", "is_active")
+    search_fields = ("name", "slug")
+    prepopulated_fields = {"slug": ("name",)}
+    inlines = (SurveyResponseInline,)
+
+
+@admin.register(SurveyResponse)
+class SurveyResponseAdmin(admin.ModelAdmin):
+    """Admin interface for managing survey responses."""
+
+    list_display = ("survey", "user", "score", "created_at")
+    list_filter = ("survey__conference", "survey__survey_type", "score")
+    search_fields = ("user__username", "user__email", "comment")
+    raw_id_fields = ("user",)
+    readonly_fields = ("created_at",)

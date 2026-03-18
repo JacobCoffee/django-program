@@ -643,3 +643,48 @@ class SubmissionTypeDefault(models.Model):
 
     def __str__(self) -> str:
         return f"Defaults for '{self.submission_type}'"
+
+
+class SessionRating(models.Model):
+    """Attendee rating for a conference talk or session.
+
+    Captures a 1-5 star rating and optional text comment from an attendee
+    for a specific talk. Each attendee may rate a talk at most once.
+    """
+
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="session_ratings",
+    )
+    talk = models.ForeignKey(
+        Talk,
+        on_delete=models.CASCADE,
+        related_name="ratings",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="session_ratings",
+    )
+    score = models.PositiveSmallIntegerField(
+        help_text="Rating from 1 (poor) to 5 (excellent).",
+    )
+    comment = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["talk", "user"],
+                name="unique_session_rating_per_user",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(score__gte=1, score__lte=5),
+                name="session_rating_score_range",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Rating {self.score}/5 for {self.talk} by {self.user}"

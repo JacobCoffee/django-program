@@ -25,8 +25,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils import timezone
 
-from django_program.conference.models import Conference
-from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk, TalkOverride
+from django_program.conference.models import Conference, Expense, ExpenseCategory
+from django_program.pretalx.models import Room, ScheduleSlot, SessionRating, Speaker, Talk, TalkOverride
+from django_program.programs.models import Activity, ActivitySignup, Survey, SurveyResponse, TravelGrant
 from django_program.registration.conditions import (
     DiscountForCategory,
     DiscountForProduct,
@@ -46,7 +47,7 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
-from django_program.sponsors.models import Sponsor, SponsorLevel
+from django_program.sponsors.models import Sponsor, SponsorBenefit, SponsorLevel
 
 User = get_user_model()
 
@@ -147,6 +148,7 @@ class Seeder:
 
         self._create_superuser()
         conference = self._create_conference()
+        prev_conferences = self._create_previous_conferences()
         ticket_types = self._create_ticket_types(conference)
         addons = self._create_addons(conference)
         vouchers = self._create_vouchers(conference)
@@ -156,12 +158,22 @@ class Seeder:
         talks = self._create_talks(conference, speakers)
         rooms = self._create_rooms(conference)
         self._create_schedule(conference, talks, rooms)
-        self._create_sponsors(conference)
+        sponsors = self._create_sponsors(conference)
         self._create_orders(conference, users, ticket_types, addons, vouchers)
         self._create_carts(conference, users, ticket_types, addons)
         self._create_overrides(conference, talks)
         self._create_discount_conditions(conference, ticket_types)
         self._create_credits(conference, users)
+
+        # Phase 25: Analytics seed data
+        self._create_previous_conference_data(prev_conferences, users, speakers)
+        self._create_sponsor_benefits(sponsors)
+        self._create_activities_and_signups(conference, users, rooms)
+        self._create_expenses(conference)
+        self._create_session_ratings(conference, talks, users)
+        self._create_surveys(conference, users)
+        self._create_travel_grants(conference, users)
+        self._create_more_carts(conference, users, ticket_types, addons)
 
         n_attendees = Attendee.objects.filter(conference=conference).count()
         n_orders = Order.objects.filter(conference=conference).count()
@@ -179,6 +191,15 @@ class Seeder:
         print(f"  Add-ons: {len(addons)}")
         print(f"  Vouchers: {len(vouchers)}")
         print(f"  Credits: {Credit.objects.filter(conference=conference).count()}")
+        print(f"  Expenses: {Expense.objects.filter(conference=conference).count()}")
+        print(f"  Session ratings: {SessionRating.objects.filter(conference=conference).count()}")
+        print(f"  Activities: {Activity.objects.filter(conference=conference).count()}")
+        print(f"  Travel grants: {TravelGrant.objects.filter(conference=conference).count()}")
+        print(f"  Surveys: {Survey.objects.filter(conference=conference).count()}")
+        for prev_conf in prev_conferences:
+            prev_att = Attendee.objects.filter(conference=prev_conf).count()
+            prev_talks = Talk.objects.filter(conference=prev_conf).count()
+            print(f"  Previous conference: {prev_conf.name} ({prev_att} attendees, {prev_talks} talks)")
 
     def _create_superuser(self) -> object:
         """Create the admin superuser."""
@@ -464,8 +485,9 @@ class Seeder:
         if created:
             Talk.objects.filter(pk=talk.pk).update(slot_start=start, slot_end=end, room=room)
 
-    def _create_sponsors(self, conference: Conference) -> None:
+    def _create_sponsors(self, conference: Conference) -> list[Sponsor]:
         """Create sponsor levels and sponsors."""
+        result: list[Sponsor] = []
         levels = [
             ("Diamond", 50000, 0),
             ("Platinum", 25000, 1),
@@ -492,7 +514,7 @@ class Seeder:
                     for sponsor_name in name_list[1]:
                         from django.utils.text import slugify as _slugify
 
-                        Sponsor.objects.get_or_create(
+                        sponsor, _ = Sponsor.objects.get_or_create(
                             conference=conference,
                             slug=_slugify(sponsor_name),
                             defaults={
@@ -502,6 +524,8 @@ class Seeder:
                                 "is_active": True,
                             },
                         )
+                        result.append(sponsor)
+        return result
 
     def _create_carts(self, conference: Conference, users: list, ticket_types: list, addons: list) -> None:
         """Create some active and abandoned carts."""
@@ -815,6 +839,480 @@ class Seeder:
                     "note": note,
                 },
             )
+
+    # ------------------------------------------------------------------
+    # Phase 25: Analytics seed data
+    # ------------------------------------------------------------------
+
+    def _create_previous_conferences(self) -> list[Conference]:
+        """Create two previous conferences for richer YoY trend data.
+
+        Returns:
+            A list of created/existing Conference instances (oldest first),
+            or an empty list if both already existed with no new creation.
+        """
+        confs: list[Conference] = []
+
+        conf_2075, created_2075 = Conference.objects.get_or_create(
+            slug="python-2075",
+            defaults={
+                "name": "Python 2075",
+                "start_date": datetime.date(2025, 5, 14),
+                "end_date": datetime.date(2025, 5, 22),
+                "timezone": "America/New_York",
+                "venue": "Pittsburgh Convention Center",
+                "is_active": False,
+                "revenue_budget": Decimal("60000.00"),
+                "target_attendance": 200,
+                "grant_budget": Decimal("20000.00"),
+            },
+        )
+        confs.append(conf_2075)
+        if created_2075:
+            print("  Created previous conference: Python 2075")
+
+        conf_2076, created_2076 = Conference.objects.get_or_create(
+            slug="python-2076",
+            defaults={
+                "name": "Python 2076",
+                "start_date": datetime.date(2026, 5, 14),
+                "end_date": datetime.date(2026, 5, 22),
+                "timezone": "America/New_York",
+                "venue": "Pittsburgh Convention Center",
+                "is_active": False,
+                "revenue_budget": Decimal("40000.00"),
+                "target_attendance": 120,
+                "grant_budget": Decimal("10000.00"),
+            },
+        )
+        confs.append(conf_2076)
+        if created_2076:
+            print("  Created previous conference: Python 2076")
+
+        return confs
+
+    def _create_previous_conference_data(
+        self, prev_conferences: list[Conference], users: list, speakers: list[Speaker]
+    ) -> None:
+        """Seed previous conferences with attendees, orders, sponsors, speakers, and talks.
+
+        Args:
+            prev_conferences: List of previous Conference instances (oldest first).
+            users: Pool of user instances to draw attendees from.
+            speakers: Pool of Speaker instances for speaker return-rate data.
+        """
+        if not prev_conferences:
+            return
+
+        from django.utils.text import slugify as _slugify
+
+        # Per-conference configuration: (attendee_count, speaker_count, sponsors, prices, talk_count)
+        conf_configs: list[dict[str, object]] = [
+            {
+                "attendee_count": 55,
+                "speaker_count": 15,
+                "sponsors": [
+                    "MegaCorp AI",
+                    "CloudScale Inc",
+                    "DataFlow Systems",
+                    "CodeCraft Labs",
+                    "Open Source Foundation",
+                    "PyStack Technologies",
+                ],
+                "prices": [299, 499, 599],
+                "talk_count": 25,
+                "ref_prefix": "PREV75",
+            },
+            {
+                "attendee_count": 40,
+                "speaker_count": 12,
+                "sponsors": [
+                    "MegaCorp AI",
+                    "DataFlow Systems",
+                    "CodeCraft Labs",
+                    "Open Source Foundation",
+                ],
+                "prices": [99, 199, 349],
+                "talk_count": 20,
+                "ref_prefix": "PREV76",
+            },
+        ]
+
+        for idx, prev_conference in enumerate(prev_conferences):
+            if idx >= len(conf_configs):
+                break
+            cfg = conf_configs[idx]
+            attendee_count: int = cfg["attendee_count"]  # type: ignore[assignment]
+            speaker_count: int = cfg["speaker_count"]  # type: ignore[assignment]
+            sponsor_names: list[str] = cfg["sponsors"]  # type: ignore[assignment]
+            prices: list[int] = cfg["prices"]  # type: ignore[assignment]
+            talk_count: int = cfg["talk_count"]  # type: ignore[assignment]
+            ref_prefix: str = cfg["ref_prefix"]  # type: ignore[assignment]
+
+            # Attendees and orders
+            prev_users = users[:attendee_count]
+            for i, user in enumerate(prev_users):
+                att, created = Attendee.objects.get_or_create(
+                    user=user, conference=prev_conference, defaults={"completed_registration": True}
+                )
+                if created:
+                    ref = f"{ref_prefix}-{i + 1:04d}"
+                    if not Order.objects.filter(reference=ref).exists():
+                        total = Decimal(str(self.rng.choice(prices)))
+                        order = Order.objects.create(
+                            conference=prev_conference,
+                            user=user,
+                            status=Order.Status.PAID,
+                            subtotal=total,
+                            total=total,
+                            reference=ref,
+                            billing_name=f"{user.first_name} {user.last_name}",
+                            billing_email=user.email,
+                        )
+                        att.order = order
+                        att.save(update_fields=["order"])
+
+            # Speakers for return-rate tracking
+            for i, speaker in enumerate(speakers[:speaker_count]):
+                Speaker.objects.get_or_create(
+                    conference=prev_conference,
+                    pretalx_code=f"{ref_prefix}-SPKR{i + 1:03d}",
+                    defaults={
+                        "name": str(speaker.name),
+                        "email": speaker.email,
+                        "user": speaker.user,
+                        "synced_at": timezone.now(),
+                    },
+                )
+
+            # Sponsors for renewal-rate tracking
+            prev_level, _ = SponsorLevel.objects.get_or_create(
+                conference=prev_conference, slug="gold", defaults={"name": "Gold", "cost": 8000, "order": 0}
+            )
+            for name in sponsor_names:
+                Sponsor.objects.get_or_create(
+                    conference=prev_conference,
+                    slug=_slugify(name),
+                    defaults={"name": name, "level": prev_level, "is_active": True},
+                )
+
+            # Talks for content-volume tracking
+            prev_speakers = list(Speaker.objects.filter(conference=prev_conference))
+            for t_idx in range(talk_count):
+                talk_title = TALK_TITLES[t_idx % len(TALK_TITLES)]
+                talk, talk_created = Talk.objects.get_or_create(
+                    conference=prev_conference,
+                    pretalx_code=f"{ref_prefix}-TALK{t_idx + 1:03d}",
+                    defaults={
+                        "title": talk_title,
+                        "track": self.rng.choice(["Web", "Data", "DevOps", "Core"]),
+                        "duration": self.rng.choice([30, 45]),
+                        "synced_at": timezone.now(),
+                    },
+                )
+                if talk_created and prev_speakers:
+                    talk.speakers.add(prev_speakers[t_idx % len(prev_speakers)])
+
+            print(
+                f"  {prev_conference.name}: {attendee_count} attendees, "
+                f"{speaker_count} speakers, {len(sponsor_names)} sponsors, {talk_count} talks"
+            )
+
+    def _create_sponsor_benefits(self, sponsors: list[Sponsor]) -> None:
+        """Create sponsor benefits with varying fulfillment status."""
+        benefit_templates = [
+            ("Logo on website", True),
+            ("Booth at conference", True),
+            ("Talk slot", False),
+            ("Social media mentions", True),
+            ("Recruiting table", False),
+            ("Newsletter feature", True),
+            ("Swag bag insert", True),
+            ("Attendee email list", False),
+        ]
+        count = 0
+        for sponsor in sponsors:
+            # Higher-tier sponsors get more benefits
+            n_benefits = min(len(benefit_templates), 3 + self.rng.randint(0, 5))
+            for name, default_complete in benefit_templates[:n_benefits]:
+                # ~70% completion rate
+                is_complete = default_complete if self.rng.random() < 0.7 else not default_complete
+                _, created = SponsorBenefit.objects.get_or_create(
+                    sponsor=sponsor,
+                    name=name,
+                    defaults={"is_complete": is_complete},
+                )
+                if created:
+                    count += 1
+        print(f"  Sponsor benefits: {count}")
+
+    def _create_activities_and_signups(self, conference: Conference, users: list, rooms: list[Room]) -> None:
+        """Create activities with signups including waitlisted users."""
+        activity_defs = [
+            ("Sprint: Core Python", "sprint-core", Activity.ActivityType.SPRINT, 25),
+            ("Sprint: Django", "sprint-django", Activity.ActivityType.SPRINT, 20),
+            ("Workshop: Testing 101", "workshop-testing", Activity.ActivityType.WORKSHOP, 30),
+            ("Workshop: Docker Deep Dive", "workshop-docker", Activity.ActivityType.WORKSHOP, 15),
+            ("Tutorial: ML Basics", "tutorial-ml", Activity.ActivityType.TUTORIAL, 40),
+            ("PyLadies Lunch", "pyladies-lunch", Activity.ActivityType.SOCIAL, 50),
+            ("Open Space: Async Python", "open-async", Activity.ActivityType.OPEN_SPACE, None),
+            ("Lightning Talks", "lightning", Activity.ActivityType.LIGHTNING_TALK, None),
+        ]
+        signup_count = 0
+        for name, slug, atype, max_p in activity_defs:
+            room = self.rng.choice(rooms) if rooms else None
+            activity, _ = Activity.objects.get_or_create(
+                conference=conference,
+                slug=slug,
+                defaults={
+                    "name": name,
+                    "activity_type": atype,
+                    "max_participants": max_p,
+                    "room": room,
+                    "is_active": True,
+                    "start_time": timezone.now() + datetime.timedelta(days=self.rng.randint(1, 7)),
+                },
+            )
+
+            # Create signups: fill to ~80% capacity, some waitlisted
+            if max_p:
+                n_confirmed = int(max_p * 0.8)
+                n_waitlisted = self.rng.randint(2, 8)
+            else:
+                n_confirmed = self.rng.randint(5, 20)
+                n_waitlisted = 0
+
+            shuffled = list(users)
+            self.rng.shuffle(shuffled)
+            for j, user in enumerate(shuffled[: n_confirmed + n_waitlisted]):
+                status = (
+                    ActivitySignup.SignupStatus.CONFIRMED if j < n_confirmed else ActivitySignup.SignupStatus.WAITLISTED
+                )
+                _, created = ActivitySignup.objects.get_or_create(
+                    activity=activity,
+                    user=user,
+                    defaults={"status": status},
+                )
+                if created:
+                    signup_count += 1
+
+        print(f"  Activity signups: {signup_count}")
+
+    def _create_expenses(self, conference: Conference) -> None:
+        """Create expense categories and expenses."""
+        admin = User.objects.filter(is_superuser=True).first()
+        categories = [
+            ("Venue & Facilities", "venue", Decimal("18000.00")),
+            ("Food & Beverage", "food", Decimal("12000.00")),
+            ("Audio/Visual", "av", Decimal("5000.00")),
+            ("Marketing", "marketing", Decimal("3000.00")),
+            ("Travel & Accommodation", "travel", Decimal("8000.00")),
+            ("Swag & Printing", "swag", Decimal("2500.00")),
+            ("Miscellaneous", "misc", Decimal("1500.00")),
+        ]
+        expense_data = {
+            "venue": [
+                ("Convention center rental (3 days)", Decimal("12000.00"), "Pittsburgh CC", "INV-2027-001"),
+                ("Room setup and teardown", Decimal("2500.00"), "EventPro Services", "INV-2027-002"),
+                ("Wi-Fi and networking infrastructure", Decimal("1800.00"), "NetConnect", "INV-2027-015"),
+            ],
+            "food": [
+                ("Catered lunch Day 1 (250 pax)", Decimal("3750.00"), "Catering Co", "INV-2027-003"),
+                ("Catered lunch Day 2 (230 pax)", Decimal("3450.00"), "Catering Co", "INV-2027-004"),
+                ("Catered lunch Day 3 (200 pax)", Decimal("3000.00"), "Catering Co", "INV-2027-005"),
+                ("Coffee and snacks (3 days)", Decimal("1200.00"), "Brew Masters", "INV-2027-006"),
+                ("Welcome reception appetizers", Decimal("800.00"), "Catering Co", "INV-2027-007"),
+            ],
+            "av": [
+                ("Projector rental (8 rooms)", Decimal("2400.00"), "AV Solutions", "INV-2027-008"),
+                ("Live streaming setup", Decimal("1500.00"), "StreamTech", "INV-2027-009"),
+                ("Microphones and PA", Decimal("800.00"), "AV Solutions", "INV-2027-010"),
+            ],
+            "marketing": [
+                ("Social media advertising", Decimal("1200.00"), "Meta Ads", ""),
+                ("Email marketing platform", Decimal("350.00"), "Mailgun", "INV-2027-011"),
+                ("Conference website hosting", Decimal("180.00"), "Vercel", ""),
+                ("Printed banners and signage", Decimal("650.00"), "PrintShop", "INV-2027-012"),
+            ],
+            "travel": [
+                ("Keynote speaker travel", Decimal("2800.00"), "Delta Airlines", ""),
+                ("Keynote speaker hotel (4 nights)", Decimal("1600.00"), "Marriott Pittsburgh", ""),
+                ("Volunteer coordinator travel", Decimal("450.00"), "Southwest Airlines", ""),
+            ],
+            "swag": [
+                ("Conference t-shirts (300 units)", Decimal("1500.00"), "TeeSpring", "INV-2027-013"),
+                ("Lanyards and badge holders", Decimal("250.00"), "Badge Co", "INV-2027-014"),
+                ("Stickers and swag bags", Decimal("400.00"), "StickerMule", ""),
+            ],
+            "misc": [
+                ("Event insurance", Decimal("800.00"), "EventSure", ""),
+                ("Photography", Decimal("500.00"), "Jane Doe Photography", ""),
+            ],
+        }
+
+        for cat_name, slug, budget in categories:
+            cat, _ = ExpenseCategory.objects.get_or_create(
+                conference=conference,
+                slug=slug,
+                defaults={
+                    "name": cat_name,
+                    "budget_amount": budget,
+                    "order": categories.index((cat_name, slug, budget)),
+                },
+            )
+            if slug in expense_data:
+                for desc, amount, vendor, receipt_ref in expense_data[slug]:
+                    Expense.objects.get_or_create(
+                        conference=conference,
+                        category=cat,
+                        description=desc,
+                        defaults={
+                            "amount": amount,
+                            "vendor": vendor,
+                            "date": datetime.date(2027, 4, self.rng.randint(1, 28)),
+                            "receipt_reference": receipt_ref,
+                            "created_by": admin,
+                        },
+                    )
+
+    def _create_session_ratings(self, conference: Conference, talks: list[Talk], users: list) -> None:
+        """Create session ratings from attendees for talks."""
+        count = 0
+        for talk in talks[:20]:
+            # 5-15 ratings per talk
+            n_ratings = self.rng.randint(5, 15)
+            shuffled = list(users)
+            self.rng.shuffle(shuffled)
+            for user in shuffled[:n_ratings]:
+                # Bell curve around 3.5-4.0
+                score = max(1, min(5, int(self.rng.gauss(3.8, 0.9))))
+                _, created = SessionRating.objects.get_or_create(
+                    conference=conference,
+                    talk=talk,
+                    user=user,
+                    defaults={"score": score, "comment": "" if self.rng.random() < 0.6 else "Great talk!"},
+                )
+                if created:
+                    count += 1
+        print(f"  Session ratings: {count}")
+
+    def _create_surveys(self, conference: Conference, users: list) -> None:
+        """Create NPS and satisfaction surveys with responses."""
+        # NPS survey
+        nps, _ = Survey.objects.get_or_create(
+            conference=conference,
+            slug="post-event-nps",
+            defaults={
+                "name": "Post-Event NPS Survey",
+                "survey_type": Survey.SurveyType.NPS,
+                "is_active": True,
+            },
+        )
+        # Satisfaction survey
+        sat, _ = Survey.objects.get_or_create(
+            conference=conference,
+            slug="overall-satisfaction",
+            defaults={
+                "name": "Overall Satisfaction",
+                "survey_type": Survey.SurveyType.SATISFACTION,
+                "is_active": True,
+            },
+        )
+
+        nps_count = 0
+        sat_count = 0
+        shuffled = list(users)
+        self.rng.shuffle(shuffled)
+
+        # ~40 NPS responses (score 0-10)
+        for user in shuffled[:40]:
+            score = max(0, min(10, int(self.rng.gauss(7.5, 2.0))))
+            _, created = SurveyResponse.objects.get_or_create(survey=nps, user=user, defaults={"score": score})
+            if created:
+                nps_count += 1
+
+        # ~35 satisfaction responses (score 1-5)
+        for user in shuffled[:35]:
+            score = max(1, min(5, int(self.rng.gauss(3.8, 0.8))))
+            _, created = SurveyResponse.objects.get_or_create(survey=sat, user=user, defaults={"score": score})
+            if created:
+                sat_count += 1
+
+        print(f"  Survey responses: {nps_count} NPS, {sat_count} satisfaction")
+
+    def _create_travel_grants(self, conference: Conference, users: list) -> None:
+        """Create travel grant applications if none exist."""
+        if TravelGrant.objects.filter(conference=conference).exists():
+            return
+        statuses = [
+            TravelGrant.GrantStatus.SUBMITTED,
+            TravelGrant.GrantStatus.OFFERED,
+            TravelGrant.GrantStatus.ACCEPTED,
+            TravelGrant.GrantStatus.REJECTED,
+            TravelGrant.GrantStatus.DISBURSED,
+        ]
+        app_types = list(TravelGrant.ApplicationType)
+        for i in range(10):
+            user = users[50 + i] if 50 + i < len(users) else users[i]
+            status = statuses[i % len(statuses)]
+            requested = Decimal(str(self.rng.choice([500, 1000, 1500, 2000, 2500])))
+            approved = (
+                requested * Decimal("0.7")
+                if status
+                in (
+                    TravelGrant.GrantStatus.OFFERED,
+                    TravelGrant.GrantStatus.ACCEPTED,
+                    TravelGrant.GrantStatus.DISBURSED,
+                )
+                else None
+            )
+            disbursed = approved if status == TravelGrant.GrantStatus.DISBURSED else None
+            TravelGrant.objects.create(
+                conference=conference,
+                user=user,
+                status=status,
+                application_type=app_types[i % len(app_types)],
+                requested_amount=requested,
+                approved_amount=approved,
+                disbursed_amount=disbursed,
+                travel_from=self.rng.choice(["New York", "London", "Tokyo", "Berlin", "São Paulo", "Lagos"]),
+                international=i % 3 != 0,
+                first_time=i % 4 == 0,
+            )
+
+    def _create_more_carts(self, conference: Conference, users: list, ticket_types: list, addons: list) -> None:
+        """Create more carts for better cart funnel data."""
+        now = timezone.now()
+        extra_carts = [
+            (30, Cart.Status.CHECKED_OUT, None),
+            (31, Cart.Status.CHECKED_OUT, None),
+            (32, Cart.Status.CHECKED_OUT, None),
+            (33, Cart.Status.ABANDONED, now - datetime.timedelta(hours=6)),
+            (34, Cart.Status.ABANDONED, now - datetime.timedelta(days=1)),
+            (35, Cart.Status.ABANDONED, now - datetime.timedelta(days=3)),
+            (36, Cart.Status.EXPIRED, now - datetime.timedelta(days=5)),
+            (37, Cart.Status.EXPIRED, now - datetime.timedelta(days=4)),
+            (38, Cart.Status.OPEN, now + datetime.timedelta(hours=1)),
+            (39, Cart.Status.OPEN, now + datetime.timedelta(hours=3)),
+            (40, Cart.Status.CHECKED_OUT, None),
+            (41, Cart.Status.CHECKED_OUT, None),
+            (42, Cart.Status.ABANDONED, now - datetime.timedelta(hours=18)),
+            (43, Cart.Status.EXPIRED, now - datetime.timedelta(days=2)),
+            (44, Cart.Status.CHECKED_OUT, None),
+        ]
+        for user_idx, status, expires in extra_carts:
+            if user_idx >= len(users):
+                continue
+            cart, created = Cart.objects.get_or_create(
+                user=users[user_idx],
+                conference=conference,
+                status=status,
+                defaults={"expires_at": expires},
+            )
+            if created and ticket_types:
+                CartItem.objects.create(cart=cart, ticket_type=self.rng.choice(ticket_types), quantity=1)
+                if addons and self.rng.random() < 0.4:
+                    CartItem.objects.create(cart=cart, addon=self.rng.choice(addons), quantity=1)
 
 
 if __name__ == "__main__":

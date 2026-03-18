@@ -1,0 +1,246 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Analytics &amp; KPIs{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Analytics
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Analytics &amp; KPIs</h1>
+<p>Event intelligence and performance metrics for {{ conference.name }}</p>
+{% endblock %}
+
+{% block content %}
+
+{# Drill-down URL map for clickable charts (Feature #47) #}
+<script>
+window._drilldownUrls = {
+  orderList: '{% url "manage:order-list" conference.slug %}',
+  sponsorList: '{% url "manage:sponsor-manage-list" conference.slug %}',
+  addonList: '{% url "manage:addon-list" conference.slug %}',
+  talkList: '{% url "manage:talk-list" conference.slug %}',
+  roomList: '{% url "manage:room-list" conference.slug %}',
+  activityList: '{% url "manage:activity-list" conference.slug %}',
+  travelGrantList: '{% url "manage:travel-grant-list" conference.slug %}',
+  sponsorAnalytics: '{% url "manage:sponsor-analytics" conference.slug %}',
+  roomEditBase: '{% url "manage:room-list" conference.slug %}',
+  activityDashboardBase: '{% url "manage:activity-list" conference.slug %}'
+};
+window._conferenceSlug = '{{ conference.slug }}';
+</script>
+
+<!-- Hero KPI Row -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem;">
+  <div style="background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%); border-radius: 10px; padding: 1.5rem; color: #fff; box-shadow: 0 4px 20px rgba(67,56,202,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(67,56,202,0.35)'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='0 4px 20px rgba(67,56,202,0.25)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; margin-bottom: 0.5rem;">Revenue Per Attendee</div>
+    <div style="font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;">
+      {% if kpi_summary.revenue_per_attendee != None %}${{ kpi_summary.revenue_per_attendee|floatformat:2 }}{% else %}--{% endif %}
+    </div>
+    {% if kpi_targets.target_revenue_per_attendee and kpi_summary.revenue_per_attendee != None %}
+    <div style="font-size: 0.72rem; font-weight: 600; margin-top: 0.4rem; opacity: 0.85;">
+      {% if kpi_summary.revenue_per_attendee >= kpi_targets.target_revenue_per_attendee %}
+      <span style="color: #86efac;">Above target (${{ kpi_targets.target_revenue_per_attendee|floatformat:0 }})</span>
+      {% else %}
+      <span style="color: #fbbf24;">Below target (${{ kpi_targets.target_revenue_per_attendee|floatformat:0 }})</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Cart Conversion Rate</div>
+    <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      {% if kpi_summary.conversion_rate != None %}{{ kpi_summary.conversion_rate|floatformat:1 }}%{% else %}--{% endif %}
+    </div>
+    {% if kpi_summary.conversion_rate != None %}
+    <div style="font-size: 0.75rem; font-weight: 500; margin-top: 0.4rem;">
+      {% if kpi_summary.conversion_rate >= kpi_targets.target_conversion_rate %}
+      <span style="color: var(--color-success); font-weight: 600;">Above target ({{ kpi_targets.target_conversion_rate|floatformat:0 }}%)</span>
+      {% else %}
+      <span style="color: var(--color-text-muted);">Target: {{ kpi_targets.target_conversion_rate|floatformat:0 }}%</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Check-in Rate</div>
+    <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      {% if kpi_summary.checkin_rate != None %}{{ kpi_summary.checkin_rate|floatformat:1 }}%{% else %}--{% endif %}
+    </div>
+    {% if kpi_summary.checkin_rate != None %}
+    <div style="font-size: 0.75rem; font-weight: 500; margin-top: 0.4rem;">
+      {% if kpi_summary.checkin_rate >= kpi_targets.target_checkin_rate %}
+      <span style="color: var(--color-success); font-weight: 600;">Strong turnout (target: {{ kpi_targets.target_checkin_rate|floatformat:0 }}%)</span>
+      {% else %}
+      <span style="color: var(--color-text-muted);">Target: {{ kpi_targets.target_checkin_rate|floatformat:0 }}%</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Sponsor Fulfillment</div>
+    <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      {% if kpi_summary.fulfillment_rate != None %}{{ kpi_summary.fulfillment_rate|floatformat:1 }}%{% else %}--{% endif %}
+    </div>
+    {% if kpi_summary.fulfillment_rate != None %}
+    <div style="font-size: 0.75rem; font-weight: 500; margin-top: 0.4rem;">
+      {% if kpi_summary.fulfillment_rate >= kpi_targets.target_fulfillment_rate %}
+      <span style="color: var(--color-success); font-weight: 600;">On track (target: {{ kpi_targets.target_fulfillment_rate|floatformat:0 }}%)</span>
+      {% else %}
+      <span style="color: #d97706; font-weight: 600;">Below target ({{ kpi_targets.target_fulfillment_rate|floatformat:0 }}%)</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Refund Rate KPI (secondary row) -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem;">
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.25rem 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.4rem;">Refund Rate</div>
+    <div style="font-family: var(--font-mono); font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      {% if kpi_summary.refund_rate != None %}{{ kpi_summary.refund_rate|floatformat:1 }}%{% else %}--{% endif %}
+    </div>
+    {% if kpi_summary.refund_rate != None %}
+    <div style="font-size: 0.72rem; font-weight: 500; margin-top: 0.3rem;">
+      {% if kpi_summary.refund_rate <= kpi_targets.target_refund_rate %}
+      <span style="color: var(--color-success); font-weight: 600;">Within limit (max: {{ kpi_targets.target_refund_rate|floatformat:0 }}%)</span>
+      {% else %}
+      <span style="color: #dc2626; font-weight: 600;">Above limit (max: {{ kpi_targets.target_refund_rate|floatformat:0 }}%)</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  <div></div>
+  <div></div>
+  <div style="display: flex; align-items: center; justify-content: flex-end;">
+    <a href="{% url 'manage:sponsor-analytics' conference.slug %}"
+       style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.2rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; font-size: 0.82rem; font-weight: 600; color: var(--color-text); text-decoration: none; transition: all 0.2s ease;"
+       onmouseenter="this.style.borderColor='#4338ca';this.style.color='#4338ca'"
+       onmouseleave="this.style.borderColor='var(--color-border)';this.style.color='var(--color-text)'">
+      Sponsor Analytics &rarr;
+    </a>
+  </div>
+</div>
+
+<!-- Charts Grid -->
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2.5rem;">
+  {% include "django_program/manage/charts/_cart_funnel.html" with chart_data=chart_cart_funnel_json %}
+  {% include "django_program/manage/charts/_room_utilization.html" with chart_data=chart_room_utilization_json %}
+  {% include "django_program/manage/charts/_activity_capacity.html" with chart_data=chart_activity_capacity_json %}
+  {% include "django_program/manage/charts/_grant_status.html" with chart_data=chart_grant_status_json %}
+  {% include "django_program/manage/charts/_content_analytics.html" with chart_data=chart_content_json %}
+  {% include "django_program/manage/charts/_revenue_breakdown.html" with chart_data=chart_revenue_breakdown_json %}
+</div>
+
+<!-- Data Tables -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+  <!-- Ticket Sales Ratio -->
+  <div>
+    <h2 class="section-heading" style="margin-top: 0;">Ticket Sales Ratio</h2>
+    {% if ticket_sales_ratio %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Ticket Type</th>
+          <th style="text-align: right;">Sold</th>
+          <th style="text-align: right;">Capacity</th>
+          <th style="text-align: right;">Fill Rate</th>
+          <th style="text-align: right;">Revenue Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in ticket_sales_ratio %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ row.sold }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">{% if row.capacity %}{{ row.capacity }}{% else %}&infin;{% endif %}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">
+            {% if row.fill_rate != None %}
+            <span style="color: {% if row.fill_rate >= 80 %}var(--color-success){% elif row.fill_rate >= 50 %}#d97706{% else %}var(--color-text-muted){% endif %}; font-weight: 600;">{{ row.fill_rate|floatformat:1 }}%</span>
+            {% else %}
+            <span style="color: var(--color-text-muted);">--</span>
+            {% endif %}
+          </td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ row.revenue_pct|floatformat:1 }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <p>No ticket sales data available.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Sponsor Benefit Fulfillment -->
+  <div>
+    <h2 class="section-heading" style="margin-top: 0;">Sponsor Benefit Fulfillment</h2>
+    {% if sponsor_fulfillment.by_sponsor %}
+    <div style="font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: 0.75rem;">
+      Overall: <strong>{{ sponsor_fulfillment.completed }}</strong> / {{ sponsor_fulfillment.total_benefits }} fulfilled ({{ sponsor_fulfillment.fulfillment_rate|floatformat:0 }}%)
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Sponsor</th>
+          <th>Level</th>
+          <th style="text-align: right;">Benefits</th>
+          <th style="text-align: right;">Fulfilled</th>
+          <th style="text-align: right;">Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in sponsor_fulfillment.by_sponsor %}
+        <tr>
+          <td>{{ row.sponsor_name }}</td>
+          <td><span class="badge badge--other">{{ row.level }}</span></td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ row.total }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ row.completed }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">
+            {% widthratio row.completed row.total 100 as rate %}
+            <span style="color: {% if row.pending == 0 %}var(--color-success){% elif row.completed > row.pending %}#d97706{% else %}#dc2626{% endif %}; font-weight: 600;">
+              {% if row.total > 0 %}{% widthratio row.completed row.total 100 %}%{% else %}0%{% endif %}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <p>No sponsor fulfillment data available.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+  @media (max-width: 900px) {
+    div[style*="grid-template-columns: repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
+    div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  }
+  @media (max-width: 520px) {
+    div[style*="grid-template-columns: repeat(4"] { grid-template-columns: 1fr !important; }
+  }
+</style>
+{% endblock %}

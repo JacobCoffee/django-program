@@ -1,0 +1,170 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Sponsor Analytics{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:analytics-dashboard' conference.slug %}">Analytics</a>
+  <span class="breadcrumb-separator"></span>
+  Sponsor Analytics
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Sponsor Analytics</h1>
+<p>Revenue tracking, benefit fulfillment, and renewal metrics for {{ conference.name }}</p>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero KPI Row -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem;">
+  <div style="background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); border-radius: 10px; padding: 1.5rem; color: #fff; box-shadow: 0 4px 20px rgba(124,58,237,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(124,58,237,0.35)'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='0 4px 20px rgba(124,58,237,0.25)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; margin-bottom: 0.5rem;">Total Sponsors</div>
+    <div style="font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;">
+      {{ sponsor_analytics.total_sponsors }}
+    </div>
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#7c3aed'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Sponsor Revenue</div>
+    <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      ${{ sponsor_analytics.total_sponsor_revenue|floatformat:0 }}
+    </div>
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#7c3aed'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Benefit Fulfillment</div>
+    <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      {{ sponsor_analytics.overall_fulfillment_rate|floatformat:1 }}%
+    </div>
+    <div style="font-size: 0.72rem; color: var(--color-text-muted); font-weight: 500; margin-top: 0.3rem;">
+      {{ sponsor_analytics.total_completed_benefits }} / {{ sponsor_analytics.total_benefits }} fulfilled
+    </div>
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+       onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#7c3aed'"
+       onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+    <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Renewal Rate</div>
+    <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">
+      {{ sponsor_renewal.renewal_rate|floatformat:1 }}%
+    </div>
+    <div style="font-size: 0.72rem; color: var(--color-text-muted); font-weight: 500; margin-top: 0.3rem;">
+      {{ sponsor_renewal.returning_count }} returning / {{ sponsor_renewal.new_count }} new
+    </div>
+  </div>
+</div>
+
+<!-- Charts -->
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2.5rem;">
+  {% include "django_program/manage/charts/_sponsor_revenue.html" with chart_data=chart_sponsor_revenue_json %}
+  {% include "django_program/manage/charts/_sponsor_pipeline.html" with chart_data=chart_sponsor_revenue_json %}
+</div>
+
+<!-- Sponsor Level Breakdown Table -->
+<h2 class="section-heading">Sponsorship Levels</h2>
+{% if sponsor_analytics.by_level %}
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Level</th>
+      <th style="text-align: right;">Cost</th>
+      <th style="text-align: right;">Sponsors</th>
+      <th style="text-align: right;">Revenue</th>
+      <th style="text-align: right;">Benefits</th>
+      <th style="text-align: right;">Fulfilled</th>
+      <th style="text-align: right;">Rate</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for level in sponsor_analytics.by_level %}
+    <tr>
+      <td><strong>{{ level.level_name }}</strong></td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ level.cost|floatformat:0 }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ level.sponsor_count }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ level.revenue|floatformat:0 }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ level.total_benefits }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ level.completed_benefits }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">
+        <span style="color: {% if level.fulfillment_rate >= 90 %}var(--color-success){% elif level.fulfillment_rate >= 50 %}#d97706{% else %}#dc2626{% endif %}; font-weight: 600;">
+          {{ level.fulfillment_rate|floatformat:0 }}%
+        </span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="font-weight: 700; border-top: 2px solid var(--color-border);">
+      <td>Total</td>
+      <td></td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ sponsor_analytics.total_sponsors }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ sponsor_analytics.total_sponsor_revenue|floatformat:0 }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ sponsor_analytics.total_benefits }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ sponsor_analytics.total_completed_benefits }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">
+        <span style="color: {% if sponsor_analytics.overall_fulfillment_rate >= 90 %}var(--color-success){% elif sponsor_analytics.overall_fulfillment_rate >= 50 %}#d97706{% else %}#dc2626{% endif %}; font-weight: 600;">
+          {{ sponsor_analytics.overall_fulfillment_rate|floatformat:0 }}%
+        </span>
+      </td>
+    </tr>
+  </tfoot>
+</table>
+{% else %}
+<div class="empty-state" style="margin-bottom: 2rem;">
+  <p>No sponsorship levels configured.</p>
+</div>
+{% endif %}
+
+<!-- Per-Sponsor Fulfillment Table -->
+{% if sponsor_fulfillment.by_sponsor %}
+<h2 class="section-heading">Per-Sponsor Benefit Fulfillment</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Sponsor</th>
+      <th>Level</th>
+      <th style="text-align: right;">Benefits</th>
+      <th style="text-align: right;">Fulfilled</th>
+      <th style="text-align: right;">Pending</th>
+      <th style="text-align: right;">Rate</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in sponsor_fulfillment.by_sponsor %}
+    <tr>
+      <td>{{ row.sponsor_name }}</td>
+      <td><span class="badge badge--other">{{ row.level }}</span></td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ row.total }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ row.completed }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ row.pending }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">
+        <span style="color: {% if row.pending == 0 %}var(--color-success){% elif row.completed > row.pending %}#d97706{% else %}#dc2626{% endif %}; font-weight: 600;">
+          {% if row.total > 0 %}{% widthratio row.completed row.total 100 %}%{% else %}0%{% endif %}
+        </span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<style>
+  @media (max-width: 900px) {
+    div[style*="grid-template-columns: repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
+    div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  }
+  @media (max-width: 520px) {
+    div[style*="grid-template-columns: repeat(4"] { grid-template-columns: 1fr !important; }
+  }
+</style>
+{% endblock %}

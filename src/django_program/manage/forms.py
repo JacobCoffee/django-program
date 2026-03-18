@@ -11,7 +11,7 @@ import datetime
 from django import forms
 from django.core.validators import RegexValidator
 
-from django_program.conference.models import Conference, Section
+from django_program.conference.models import Conference, Expense, ExpenseCategory, Section
 from django_program.pretalx.models import Room, ScheduleSlot, Talk
 from django_program.programs.models import Activity, TravelGrant, TravelGrantMessage
 from django_program.registration.badge import BadgeTemplate
@@ -732,3 +732,33 @@ class BadgeTemplateForm(forms.ModelForm):
             "text_color": forms.TextInput(attrs={"type": "color"}),
             "accent_color": forms.TextInput(attrs={"type": "color"}),
         }
+
+
+class ExpenseCategoryForm(forms.ModelForm):
+    """Form for creating and editing expense categories."""
+
+    class Meta:
+        model = ExpenseCategory
+        fields = ["name", "slug", "description", "budget_amount", "order"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class ExpenseForm(forms.ModelForm):
+    """Form for creating and editing individual expenses."""
+
+    class Meta:
+        model = Expense
+        fields = ["category", "description", "amount", "vendor", "date", "receipt_reference", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3}),
+            "date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        """Initialise the form, scoping category choices to the conference."""
+        self.conference = kwargs.pop("conference", None)
+        super().__init__(*args, **kwargs)
+        if self.conference:
+            self.fields["category"].queryset = ExpenseCategory.objects.filter(conference=self.conference)

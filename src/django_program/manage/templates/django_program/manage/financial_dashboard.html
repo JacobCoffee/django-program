@@ -83,6 +83,86 @@
 </div>
 {% endif %}
 
+<!-- Expenses & ROI -->
+{% if roi %}
+<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem;">
+  <div class="stat-card">
+    <div class="stat-card-value">${{ roi.total_expenses|floatformat:0 }}</div>
+    <div class="stat-card-label">Total Expenses</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ roi.gross_profit|floatformat:0 }}</div>
+    <div class="stat-card-label">Gross Profit</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ roi.gross_margin_pct|floatformat:1 }}%</div>
+    <div class="stat-card-label">Gross Margin</div>
+    <div style="font-size: 0.72rem; margin-top: 0.2rem; color: var(--color-text-muted);">Target: 30-50%</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ roi.roi_pct|floatformat:1 }}%</div>
+    <div class="stat-card-label">Event ROI</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ roi.cost_per_attendee|floatformat:0 }}</div>
+    <div class="stat-card-label">Cost / Attendee</div>
+  </div>
+</div>
+{% endif %}
+
+{% if expense_summary.by_category %}
+<h2 class="section-heading">Expense Budget vs. Actual</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Category</th>
+      <th style="text-align: right;">Budget</th>
+      <th style="text-align: right;">Actual</th>
+      <th style="text-align: right;">Variance</th>
+      <th style="text-align: right;">Expenses</th>
+      <th style="width: 200px;">Progress</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cat in expense_summary.by_category %}
+    <tr>
+      <td style="font-weight: 600;">{{ cat.name }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">{% if cat.budget %}${{ cat.budget|floatformat:0 }}{% else %}<span style="color: var(--color-text-muted);">--</span>{% endif %}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ cat.actual|floatformat:0 }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">
+        {% if cat.variance != None %}
+        <span style="color: {% if cat.variance >= 0 %}var(--color-success){% else %}var(--color-danger){% endif %}; font-weight: 600;">
+          {% if cat.variance >= 0 %}+{% endif %}${{ cat.variance|floatformat:0 }}
+        </span>
+        {% else %}<span style="color: var(--color-text-muted);">--</span>{% endif %}
+      </td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ cat.expense_count }}</td>
+      <td>
+        {% if cat.budget %}
+        <div style="background: var(--color-border-light); border-radius: 4px; height: 8px; overflow: hidden;">
+          {% widthratio cat.actual cat.budget 100 as pct %}
+          <div style="background: {% if pct > 100 %}var(--color-danger){% elif pct > 80 %}var(--color-warning){% else %}var(--color-success){% endif %}; height: 100%; width: {% widthratio cat.actual cat.budget 100 %}%; max-width: 100%; border-radius: 4px;"></div>
+        </div>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    <tr style="font-weight: 700; border-top: 2px solid var(--color-border);">
+      <td>Total</td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ expense_summary.total_budget|floatformat:0 }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ expense_summary.total_expenses|floatformat:0 }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">
+        <span style="color: {% if expense_summary.budget_variance >= 0 %}var(--color-success){% else %}var(--color-danger){% endif %};">
+          {% if expense_summary.budget_variance >= 0 %}+{% endif %}${{ expense_summary.budget_variance|floatformat:0 }}
+        </span>
+      </td>
+      <td style="text-align: right; font-family: var(--font-mono);">{{ expense_summary.expense_count }}</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+{% endif %}
+
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
   <!-- Orders by Status -->
   <div>

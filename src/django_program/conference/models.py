@@ -1,5 +1,6 @@
 """Conference and Section models for django-program."""
 
+from django.conf import settings
 from django.db import models
 from encrypted_fields import EncryptedCharField
 
@@ -153,3 +154,139 @@ class FeatureFlags(models.Model):
 
     def __str__(self) -> str:
         return f"Feature flags for {self.conference}"
+
+
+class ExpenseCategory(models.Model):
+    """A category for conference expenses (e.g. Venue, F&B, A/V, Travel, Marketing)."""
+
+    conference = models.ForeignKey(
+        Conference,
+        on_delete=models.CASCADE,
+        related_name="expense_categories",
+    )
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    budget_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Budgeted amount for this expense category.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "name"]
+        unique_together = [("conference", "slug")]
+        verbose_name_plural = "expense categories"
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.conference.slug})"
+
+
+class Expense(models.Model):
+    """An individual expense record for a conference."""
+
+    conference = models.ForeignKey(
+        Conference,
+        on_delete=models.CASCADE,
+        related_name="expenses",
+    )
+    category = models.ForeignKey(
+        ExpenseCategory,
+        on_delete=models.CASCADE,
+        related_name="expenses",
+    )
+    description = models.CharField(max_length=500)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    vendor = models.CharField(max_length=300, blank=True, default="")
+    date = models.DateField()
+    receipt_reference = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Invoice or receipt reference number.",
+    )
+    notes = models.TextField(blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.description} (${self.amount})"
+
+
+class KPITargets(models.Model):
+    """Per-conference configurable KPI thresholds for the analytics dashboard.
+
+    When a field is null, the dashboard falls back to hardcoded industry
+    averages. Setting a value overrides the default target for that metric.
+    """
+
+    conference = models.OneToOneField(
+        Conference,
+        on_delete=models.CASCADE,
+        related_name="kpi_targets",
+    )
+    target_conversion_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Target cart-to-order conversion rate (%). Industry avg ~3%.",
+    )
+    target_refund_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Maximum acceptable refund rate (%). Typical target: 5%.",
+    )
+    target_checkin_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Target check-in rate (%). Strong turnout >= 80%.",
+    )
+    target_fulfillment_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Target sponsor benefit fulfillment rate (%). Goal: 90%+.",
+    )
+    target_revenue_per_attendee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Target revenue per attendee ($).",
+    )
+    target_room_utilization = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Target room utilization rate (%). Industry avg ~28%.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "KPI targets"
+        verbose_name_plural = "KPI targets"
+
+    def __str__(self) -> str:
+        return f"KPI targets for {self.conference}"

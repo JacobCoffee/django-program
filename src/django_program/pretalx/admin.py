@@ -6,6 +6,7 @@ from django_program.pretalx.models import (
     Room,
     RoomOverride,
     ScheduleSlot,
+    SessionRating,
     Speaker,
     SpeakerOverride,
     SubmissionTypeDefault,
@@ -111,3 +112,14 @@ class SubmissionTypeDefaultAdmin(admin.ModelAdmin):
     list_filter = ("conference",)
     search_fields = ("submission_type",)
     raw_id_fields = ("default_room",)
+
+
+@admin.register(SessionRating)
+class SessionRatingAdmin(admin.ModelAdmin):
+    """Admin interface for managing session ratings."""
+
+    list_display = ("talk", "conference", "user", "score", "created_at")
+    list_filter = ("conference", "score")
+    search_fields = ("talk__title", "user__username", "user__email", "comment")
+    raw_id_fields = ("talk", "user")
+    readonly_fields = ("created_at",)
