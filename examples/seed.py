@@ -1,17 +1,32 @@
-"""Management command to seed the database with realistic demo data for admin reports."""
+"""Seed the example database with realistic conference demo data.
+
+Run via ``make dev`` or directly::
+
+    DJANGO_SETTINGS_MODULE=settings uv run python examples/seed.py
+"""
 
 import datetime
 import hashlib
+import os
 import random
+import sys
 from decimal import Decimal
+from pathlib import Path
+
+# Bootstrap Django before any model imports
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings")
+
+import django
+
+django.setup()
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from django_program.conference.models import Conference
-from django_program.pretalx.models import Speaker, Talk
+from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk, TalkOverride
 from django_program.registration.conditions import (
     DiscountForCategory,
     DiscountForProduct,
@@ -22,6 +37,8 @@ from django_program.registration.conditions import (
 from django_program.registration.models import (
     AddOn,
     Attendee,
+    Cart,
+    CartItem,
     Credit,
     Order,
     OrderLineItem,
@@ -29,6 +46,7 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
+from django_program.sponsors.models import Sponsor, SponsorLevel
 
 User = get_user_model()
 
@@ -114,18 +132,18 @@ VOUCHER_DEFS = [
 
 def _seeded_random(seed: str) -> random.Random:
     """Return a seeded Random instance for reproducible data."""
-    return random.Random(hashlib.md5(seed.encode()).hexdigest())  # noqa: S324, S311
+    return random.Random(hashlib.md5(seed.encode()).hexdigest())
 
 
-class Command(BaseCommand):
-    """Seed database with realistic demo data for testing admin reports."""
+class Seeder:
+    """Seed the example database with realistic conference demo data."""
 
-    help = "Seed database with realistic conference demo data (~80 attendees, 20 speakers, 100+ orders)"
-
-    def handle(self, *args: object, **kwargs: object) -> None:
-        """Create a full conference with realistic registration data."""
+    def __init__(self) -> None:
         self.rng = _seeded_random("pycon-2027-seed")
-        self.stdout.write("Seeding realistic demo data...")
+
+    def run(self) -> None:
+        """Create a full conference with realistic registration data."""
+        print("Seeding realistic demo data...")
 
         self._create_superuser()
         conference = self._create_conference()
@@ -135,8 +153,13 @@ class Command(BaseCommand):
         users = self._create_users(80)
         staff = self._create_staff(3)
         speakers = self._create_speakers(conference, users[:25])
-        self._create_talks(conference, speakers)
+        talks = self._create_talks(conference, speakers)
+        rooms = self._create_rooms(conference)
+        self._create_schedule(conference, talks, rooms)
+        self._create_sponsors(conference)
         self._create_orders(conference, users, ticket_types, addons, vouchers)
+        self._create_carts(conference, users, ticket_types, addons)
+        self._create_overrides(conference, talks)
         self._create_discount_conditions(conference, ticket_types)
         self._create_credits(conference, users)
 
@@ -144,18 +167,18 @@ class Command(BaseCommand):
         n_orders = Order.objects.filter(conference=conference).count()
         n_speakers = Speaker.objects.filter(conference=conference).count()
 
-        self.stdout.write(self.style.SUCCESS(f"\nSeeded {conference.name}:"))
-        self.stdout.write("  Admin: admin / admin")
-        self.stdout.write(f"  Staff users: {len(staff)}")
-        self.stdout.write(f"  Attendee users: {len(users)}")
-        self.stdout.write(f"  Speakers: {n_speakers}")
-        self.stdout.write(f"  Talks: {Talk.objects.filter(conference=conference).count()}")
-        self.stdout.write(f"  Orders: {n_orders}")
-        self.stdout.write(f"  Attendees (registered): {n_attendees}")
-        self.stdout.write(f"  Ticket types: {len(ticket_types)}")
-        self.stdout.write(f"  Add-ons: {len(addons)}")
-        self.stdout.write(f"  Vouchers: {len(vouchers)}")
-        self.stdout.write(f"  Credits: {Credit.objects.filter(conference=conference).count()}")
+        print(f"\nSeeded {conference.name}:")
+        print("  Admin: admin / admin")
+        print(f"  Staff users: {len(staff)}")
+        print(f"  Attendee users: {len(users)}")
+        print(f"  Speakers: {n_speakers}")
+        print(f"  Talks: {Talk.objects.filter(conference=conference).count()}")
+        print(f"  Orders: {n_orders}")
+        print(f"  Attendees (registered): {n_attendees}")
+        print(f"  Ticket types: {len(ticket_types)}")
+        print(f"  Add-ons: {len(addons)}")
+        print(f"  Vouchers: {len(vouchers)}")
+        print(f"  Credits: {Credit.objects.filter(conference=conference).count()}")
 
     def _create_superuser(self) -> object:
         """Create the admin superuser."""
@@ -175,9 +198,14 @@ class Command(BaseCommand):
         return admin
 
     def _create_conference(self) -> Conference:
-        """Create the PyCon 2027 conference."""
+        """Use the existing bootstrapped conference, or create one."""
+        # Use whatever conference bootstrap_conference created
+        conference = Conference.objects.first()
+        if conference:
+            return conference
+        # Fallback: create one if bootstrap wasn't run
         conference, _ = Conference.objects.get_or_create(
-            slug="pycon-2027",
+            slug="pycon-us-2027",
             defaults={
                 "name": "PyCon US 2027",
                 "start_date": datetime.date(2027, 5, 14),
@@ -192,7 +220,10 @@ class Command(BaseCommand):
         return conference
 
     def _create_ticket_types(self, conference: Conference) -> list[TicketType]:
-        """Create ticket types."""
+        """Use existing ticket types from bootstrap, or create defaults."""
+        existing = list(TicketType.objects.filter(conference=conference).order_by("order"))
+        if existing:
+            return existing
         result = []
         for idx, (name, slug, price, qty) in enumerate(TICKET_TYPES):
             tt, _ = TicketType.objects.get_or_create(
@@ -211,7 +242,10 @@ class Command(BaseCommand):
         return result
 
     def _create_addons(self, conference: Conference) -> list[AddOn]:
-        """Create add-on products."""
+        """Use existing add-ons from bootstrap, or create defaults."""
+        existing = list(AddOn.objects.filter(conference=conference).order_by("order"))
+        if existing:
+            return existing
         result = []
         for idx, (name, slug, price) in enumerate(ADDONS):
             addon, _ = AddOn.objects.get_or_create(
@@ -305,8 +339,9 @@ class Command(BaseCommand):
             result.append(speaker)
         return result
 
-    def _create_talks(self, conference: Conference, speakers: list[Speaker]) -> None:
+    def _create_talks(self, conference: Conference, speakers: list[Speaker]) -> list[Talk]:
         """Create talks and link speakers."""
+        result = []
         for i, title in enumerate(TALK_TITLES):
             talk, created = Talk.objects.get_or_create(
                 conference=conference,
@@ -320,15 +355,189 @@ class Command(BaseCommand):
                 },
             )
             if created:
-                # Assign 1-2 speakers per talk
                 primary = speakers[i % len(speakers)]
                 talk.speakers.add(primary)
                 if self.rng.random() < 0.3 and len(speakers) > 1:
                     co = speakers[(i + 7) % len(speakers)]
                     if co != primary:
                         talk.speakers.add(co)
+            result.append(talk)
+        return result
 
-    def _create_orders(  # noqa: C901, PLR0912, PLR0915
+    def _create_rooms(self, conference: Conference) -> list[Room]:
+        """Create conference rooms."""
+        room_defs = [
+            ("Hall A", 500),
+            ("Hall B", 300),
+            ("Room 301", 80),
+            ("Room 302", 80),
+            ("Room 303", 50),
+            ("Tutorial Room 1", 40),
+            ("Tutorial Room 2", 40),
+            ("Open Space", 100),
+        ]
+        result = []
+        for i, (name, capacity) in enumerate(room_defs):
+            room, _ = Room.objects.get_or_create(
+                conference=conference,
+                name=name,
+                defaults={"pretalx_id": 1000 + i, "capacity": capacity, "synced_at": timezone.now()},
+            )
+            result.append(room)
+        return result
+
+    def _create_schedule(self, conference: Conference, talks: list[Talk], rooms: list[Room]) -> None:
+        """Schedule most talks and add breaks/socials. Leave ~5 unscheduled."""
+        conf_start = datetime.datetime(2027, 5, 15, 9, 0, tzinfo=datetime.UTC)
+
+        # Schedule 25 of 30 talks (leave 5 unscheduled)
+        scheduled_talks = talks[:25]
+        talk_queue = list(scheduled_talks)
+
+        for day_offset in range(3):
+            day_start = conf_start + datetime.timedelta(days=day_offset)
+
+            # Morning break
+            self._slot(conference, "Registration & Coffee", rooms[0], day_start, 30, ScheduleSlot.SlotType.BREAK)
+
+            # Morning talks — 3 parallel tracks
+            morning = day_start + datetime.timedelta(minutes=30)
+            for track in range(min(3, len(talk_queue))):
+                talk = talk_queue.pop(0) if talk_queue else None
+                if talk:
+                    self._talk_slot(conference, talk, rooms[track], morning, talk.duration or 30)
+
+            # Lunch
+            lunch = day_start + datetime.timedelta(hours=3, minutes=30)
+            self._slot(
+                conference, "Lunch", rooms[7] if len(rooms) > 7 else rooms[0], lunch, 60, ScheduleSlot.SlotType.BREAK
+            )
+
+            # Afternoon talks — up to 5 parallel
+            afternoon = day_start + datetime.timedelta(hours=4, minutes=30)
+            for track in range(min(5, len(talk_queue))):
+                talk = talk_queue.pop(0) if talk_queue else None
+                if talk:
+                    room = rooms[min(track, len(rooms) - 1)]
+                    self._talk_slot(conference, talk, room, afternoon, talk.duration or 30)
+
+            # Evening social
+            if day_offset < 2:
+                evening = day_start + datetime.timedelta(hours=9)
+                title = "Welcome Reception" if day_offset == 0 else "Conference Dinner"
+                self._slot(conference, title, rooms[0], evening, 120, ScheduleSlot.SlotType.SOCIAL)
+
+    def _slot(
+        self, conference: Conference, title: str, room: Room, start: datetime.datetime, minutes: int, slot_type: str
+    ) -> None:
+        """Create a non-talk schedule slot."""
+        end = start + datetime.timedelta(minutes=minutes)
+        ScheduleSlot.objects.get_or_create(
+            conference=conference,
+            start=start,
+            room=room,
+            defaults={"title": title, "end": end, "slot_type": slot_type, "synced_at": timezone.now()},
+        )
+
+    def _talk_slot(
+        self, conference: Conference, talk: Talk, room: Room, start: datetime.datetime, minutes: int
+    ) -> None:
+        """Create a talk schedule slot and update the talk's scheduling fields."""
+        end = start + datetime.timedelta(minutes=minutes)
+        _, created = ScheduleSlot.objects.get_or_create(
+            conference=conference,
+            start=start,
+            room=room,
+            defaults={"talk": talk, "end": end, "slot_type": ScheduleSlot.SlotType.TALK, "synced_at": timezone.now()},
+        )
+        if created:
+            Talk.objects.filter(pk=talk.pk).update(slot_start=start, slot_end=end, room=room)
+
+    def _create_sponsors(self, conference: Conference) -> None:
+        """Create sponsor levels and sponsors."""
+        levels = [
+            ("Diamond", 50000, 0),
+            ("Platinum", 25000, 1),
+            ("Gold", 10000, 2),
+            ("Silver", 5000, 3),
+            ("Community", 0, 4),
+        ]
+        sponsor_names = [
+            ("Diamond", ["MegaCorp AI", "CloudScale Inc"]),
+            ("Platinum", ["DataFlow Systems", "PyStack Technologies", "DevOps Pro"]),
+            ("Gold", ["CodeCraft Labs", "API Gateway Co", "TestRunner.io", "SecureAuth"]),
+            ("Silver", ["Open Source Foundation", "Py Publishing", "WebFrame Tools"]),
+            ("Community", ["Local Python User Group", "Django Girls", "PyLadies Pittsburgh"]),
+        ]
+
+        for level_name, cost, order in levels:
+            level, _ = SponsorLevel.objects.get_or_create(
+                conference=conference,
+                slug=level_name.lower(),
+                defaults={"name": level_name, "cost": cost, "order": order},
+            )
+            for name_list in sponsor_names:
+                if name_list[0] == level_name:
+                    for sponsor_name in name_list[1]:
+                        from django.utils.text import slugify as _slugify
+
+                        Sponsor.objects.get_or_create(
+                            conference=conference,
+                            slug=_slugify(sponsor_name),
+                            defaults={
+                                "name": sponsor_name,
+                                "level": level,
+                                "description": f"{sponsor_name} is a proud {level_name} sponsor.",
+                                "is_active": True,
+                            },
+                        )
+
+    def _create_carts(self, conference: Conference, users: list, ticket_types: list, addons: list) -> None:
+        """Create some active and abandoned carts."""
+        now = timezone.now()
+        cart_defs = [
+            (60, Cart.Status.OPEN, now + datetime.timedelta(hours=2)),
+            (61, Cart.Status.OPEN, now + datetime.timedelta(hours=4)),
+            (62, Cart.Status.OPEN, None),
+            (63, Cart.Status.ABANDONED, now - datetime.timedelta(hours=12)),
+            (64, Cart.Status.EXPIRED, now - datetime.timedelta(days=2)),
+        ]
+        for user_idx, status, expires in cart_defs:
+            if user_idx >= len(users):
+                continue
+            cart, created = Cart.objects.get_or_create(
+                user=users[user_idx],
+                conference=conference,
+                status=status,
+                defaults={"expires_at": expires},
+            )
+            if created and ticket_types:
+                CartItem.objects.create(cart=cart, ticket_type=ticket_types[0], quantity=1)
+                if addons:
+                    CartItem.objects.create(cart=cart, addon=addons[0], quantity=1)
+
+    def _create_overrides(self, conference: Conference, talks: list) -> None:
+        """Create some talk overrides for demo."""
+        override_data = [
+            (0, {"override_title": "Building Async APIs with Python 3.14 (Updated!)"}),
+            (3, {"override_abstract": "This talk has been revised with new benchmark data."}),
+            (
+                7,
+                {
+                    "override_title": "Testing Microservices — Extended Edition",
+                    "override_abstract": "Now includes live demo section with real service mesh.",
+                },
+            ),
+        ]
+        for talk_idx, fields in override_data:
+            if talk_idx < len(talks):
+                TalkOverride.objects.get_or_create(
+                    conference=conference,
+                    talk=talks[talk_idx],
+                    defaults=fields,
+                )
+
+    def _create_orders(
         self,
         conference: Conference,
         users: list[object],
@@ -338,8 +547,9 @@ class Command(BaseCommand):
     ) -> None:
         """Create ~100 orders spread across 45 days with realistic distribution."""
         now = timezone.now()
-        # Weight toward regular and early bird tickets
-        ticket_weights = [25, 40, 15, 10, 10]  # early-bird, regular, student, corporate, speaker
+        # Weight first tickets higher; dynamically sized to match actual count
+        n_types = len(ticket_types)
+        ticket_weights = [40] + [max(5, 30 - i * 8) for i in range(1, n_types)] if n_types > 1 else [1]
         order_num = 0
 
         for days_ago in range(45, 0, -1):
@@ -464,7 +674,7 @@ class Command(BaseCommand):
                         attendee.completed_registration = True
                         attendee.save(update_fields=["checked_in_at", "completed_registration"])
 
-        self.stdout.write(f"  Orders: {order_num}")
+        print(f"  Orders: {order_num}")
 
     def _create_discount_conditions(self, conference: Conference, ticket_types: list[TicketType]) -> None:
         """Create a variety of discount conditions."""
@@ -594,3 +804,7 @@ class Command(BaseCommand):
                     "note": note,
                 },
             )
+
+
+if __name__ == "__main__":
+    Seeder().run()

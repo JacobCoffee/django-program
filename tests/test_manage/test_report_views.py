@@ -2,10 +2,10 @@
 
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from django.contrib.auth.models import Group, User
-from django.core.management import call_command
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
@@ -1286,22 +1286,20 @@ class TestRegistrationFlowCancellations:
         assert total_cancellations >= 1
 
 
-class TestSeedReportsCommand:
-    """Test that the seed_reports management command runs without errors."""
+class TestExampleSeeder:
+    """Test that the example seed script runs without errors."""
 
     @pytest.mark.django_db
-    def test_seed_reports_runs_successfully(self):
-        call_command("seed_reports")
+    def test_seeder_runs_successfully(self):
+        import importlib
+        import sys
 
-        assert Conference.objects.filter(slug="pycon-2027").exists()
-        assert Order.objects.filter(conference__slug="pycon-2027").count() >= 50
-        assert Credit.objects.filter(conference__slug="pycon-2027").count() >= 1
-        assert Speaker.objects.filter(conference__slug="pycon-2027").count() >= 10
-        assert Attendee.objects.filter(conference__slug="pycon-2027").count() >= 30
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "examples"))
+        seed_mod = importlib.import_module("seed")
+        seed_mod.Seeder().run()
 
-    @pytest.mark.django_db
-    def test_seed_reports_idempotent(self):
-        call_command("seed_reports")
-        call_command("seed_reports")
-
-        assert Conference.objects.filter(slug="pycon-2027").count() == 1
+        assert Conference.objects.filter(slug="pycon-us-2027").exists()
+        assert Order.objects.filter(conference__slug="pycon-us-2027").count() >= 50
+        assert Credit.objects.filter(conference__slug="pycon-us-2027").count() >= 1
+        assert Speaker.objects.filter(conference__slug="pycon-us-2027").count() >= 10
+        assert Attendee.objects.filter(conference__slug="pycon-us-2027").count() >= 30

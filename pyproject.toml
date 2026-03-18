@@ -241,9 +241,21 @@ known-first-party = ["django_program", "pretalx_client", "tests"]
   "DTZ",    # Datetime timezone
 ]
 "examples/**/*.*" = [
-  "INP001", # Implicit namespace package (standalone Django project)
+  "ANN",     # Type annotations (dev scripts)
+  "C901",    # Complexity (seed data generation)
+  "D",       # Docstrings (dev scripts)
+  "E402",    # Import not at top of file (Django bootstrap)
+  "INP001",  # Implicit namespace package (standalone Django project)
+  "N806",    # User = get_user_model() (Django convention)
   "PLC0415", # Import not at top level (Django manage.py pattern)
-  "S105",   # Hardcoded secret key (dev-only)
+  "PLR0912", # Too many branches (seed data)
+  "PLR0915", # Too many statements (seed data)
+  "S105",    # Hardcoded secret key (dev-only)
+  "S311",    # Pseudo-random (seed data, not crypto)
+  "S324",    # md5 (seed hash, not crypto)
+  "PLR0913", # Too many args (seed helper methods)
+  "PLR2004", # Magic values (probability thresholds in seed)
+  "T201",    # Print statements (CLI output)
 ]
 "scripts/**/*.*" = [
   "D",        # Docstrings (utility scripts)

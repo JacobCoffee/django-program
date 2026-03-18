@@ -16,10 +16,10 @@
 <!-- Summary cards -->
 <div class="top-stats" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
   <div class="stat-card">
-    <div class="stat-card-value">${{ revenue.net }}</div>
+    <div class="stat-card-value">${{ revenue.net|floatformat:2 }}</div>
     <div class="stat-card-label">Net Revenue</div>
     {% if revenue.refunded %}
-    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.total }} gross</div>
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.total|floatformat:2 }} gross</div>
     {% endif %}
   </div>
   <div class="stat-card">
@@ -34,10 +34,10 @@
     <div class="stat-card-label">Active Carts</div>
   </div>
   <div class="stat-card">
-    <div class="stat-card-value">${{ revenue.credits_outstanding }}</div>
+    <div class="stat-card-value">${{ revenue.credits_outstanding|floatformat:2 }}</div>
     <div class="stat-card-label">Credits Outstanding</div>
     {% if revenue.credits_applied %}
-    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.credits_applied }} applied</div>
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.credits_applied|floatformat:2 }} applied</div>
     {% endif %}
   </div>
 </div>
@@ -126,7 +126,7 @@
     <tr>
       <td>{{ data.label }}</td>
       <td style="text-align: right; font-family: var(--font-mono);">{{ data.count }}</td>
-      <td style="text-align: right; font-family: var(--font-mono);">${{ data.total_amount }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ data.total_amount|floatformat:2 }}</td>
     </tr>
     {% endfor %}
   </tbody>

@@ -25,23 +25,23 @@
 
 <div class="stat-grid">
   <div class="stat-card">
-    <div class="stat-card-value">${{ recon.sales_total }}</div>
+    <div class="stat-card-value">${{ recon.sales_total|floatformat:2 }}</div>
     <div class="stat-card-label">Total Sales</div>
   </div>
   <div class="stat-card">
-    <div class="stat-card-value">${{ recon.payments_total }}</div>
+    <div class="stat-card-value">${{ recon.payments_total|floatformat:2 }}</div>
     <div class="stat-card-label">Total Payments</div>
   </div>
   <div class="stat-card">
-    <div class="stat-card-value">${{ recon.refunds_total }}</div>
+    <div class="stat-card-value">${{ recon.refunds_total|floatformat:2 }}</div>
     <div class="stat-card-label">Credits Issued</div>
   </div>
   <div class="stat-card">
-    <div class="stat-card-value">${{ recon.credits_outstanding }}</div>
+    <div class="stat-card-value">${{ recon.credits_outstanding|floatformat:2 }}</div>
     <div class="stat-card-label">Credits Outstanding</div>
   </div>
   <div class="stat-card">
-    <div class="stat-card-value">${{ recon.discrepancy }}</div>
+    <div class="stat-card-value">${{ recon.discrepancy|floatformat:2 }}</div>
     <div class="stat-card-label">Discrepancy</div>
   </div>
 </div>
@@ -62,7 +62,7 @@
     <tr>
       <td>{{ row.method|title }}</td>
       <td style="text-align: right;" class="mono">{{ row.count }}</td>
-      <td style="text-align: right;" class="mono">${{ row.total }}</td>
+      <td style="text-align: right;" class="mono">${{ row.total|floatformat:2 }}</td>
     </tr>
     {% endfor %}
   </tbody>
@@ -103,7 +103,7 @@
         {% endif %}
       </td>
       <td style="text-align: right;" class="mono">{{ row.count }}</td>
-      <td style="text-align: right;" class="mono">${{ row.total }}</td>
+      <td style="text-align: right;" class="mono">${{ row.total|floatformat:2 }}</td>
     </tr>
     {% endfor %}
   </tbody>
