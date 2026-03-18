@@ -1,0 +1,157 @@
+{# _ticket_inventory.html -- Ticket Inventory horizontal stacked bars component #}
+{# Usage: {% include "django_program/manage/charts/_ticket_inventory.html" with chart_data=chart_tickets_json %} #}
+
+<div class="card card--static">
+  <div style="padding: 1.25rem 1.5rem 0.75rem; border-bottom: 1px solid var(--color-border-light);">
+    <div style="font-weight: 700; font-size: 0.95rem; color: var(--color-text);">Ticket Inventory</div>
+    <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.1rem;">Sold, reserved, and remaining by type</div>
+  </div>
+  <div style="padding: 1rem 1.5rem 1.25rem;">
+    <canvas id="chart-ticket-inventory" style="width: 100%; height: 240px; display: block;"></canvas>
+  </div>
+</div>
+
+<script>
+(function() {
+  var canvas = document.getElementById('chart-ticket-inventory');
+  if (!canvas) return;
+  var u = window._chartUtils;
+  if (!u) return;
+  var data = JSON.parse('{{ chart_data|escapejs }}');
+
+  function drawTicketChart() {
+    var s = u.setupCanvas(canvas);
+    var ctx = s.ctx, w = s.w, h = s.h;
+    if (!data || !data.length) { u.drawEmpty(ctx, w, h, 'No ticket types configured'); return; }
+
+    var padL = 10, padR = 16, padT = 10, padB = 10;
+    var labelW = 120;
+    var maxItems = Math.min(data.length, 8);
+    var rowH = Math.min(36, (h - padT - padB) / maxItems);
+    var barAreaW = w - padL - labelW - padR;
+    var maxTotal = Math.max.apply(null, data.map(function(d) { return d.total || (d.sold + d.reserved + d.remaining); })) || 1;
+
+    var rowRects = [];
+
+    function draw(t) {
+      var progress = u.easeOutCubic(t);
+      ctx.clearRect(0, 0, w, h);
+
+      for (var i = 0; i < maxItems; i++) {
+        var d = data[i];
+        var rowY = padT + i * rowH;
+        var barY = rowY + 6;
+        var barH = rowH - 14;
+        var totalVal = d.total || (d.sold + d.reserved + d.remaining);
+        if (totalVal === 0) totalVal = 1;
+
+        ctx.save();
+        ctx.fillStyle = u.COLORS.text;
+        ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        var label = d.name.length > 16 ? d.name.substring(0, 15) + '\u2026' : d.name;
+        ctx.fillText(label, padL + labelW - 10, barY + barH / 2);
+        ctx.restore();
+
+        var barX = padL + labelW;
+
+        ctx.fillStyle = '#f0f1f4';
+        u.roundRect(ctx, barX, barY, barAreaW, barH, 4);
+        ctx.fill();
+
+        var soldW = (d.sold / totalVal) * barAreaW * progress;
+        if (soldW > 0) {
+          var soldGrad = ctx.createLinearGradient(barX, 0, barX + soldW, 0);
+          soldGrad.addColorStop(0, u.COLORS.indigo);
+          soldGrad.addColorStop(1, u.COLORS.indigoLight);
+          ctx.fillStyle = soldGrad;
+          u.roundRect(ctx, barX, barY, soldW, barH, soldW >= barAreaW - 1 ? 4 : [4, 0, 0, 4]);
+          ctx.fill();
+        }
+
+        var resW = (d.reserved / totalVal) * barAreaW * progress;
+        if (resW > 1) {
+          ctx.fillStyle = u.COLORS.amber;
+          ctx.fillRect(barX + soldW, barY, resW, barH);
+        }
+
+        if (progress > 0.8) {
+          ctx.save();
+          ctx.font = '700 9px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+          ctx.textBaseline = 'middle';
+          var midY = barY + barH / 2;
+          if (soldW > 30) {
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.fillText(d.sold, barX + soldW / 2, midY);
+          }
+          ctx.fillStyle = u.COLORS.textMuted;
+          ctx.textAlign = 'left';
+          var remainLabel = d.remaining > 0 ? d.remaining + ' left' : (d.total === 0 ? '\u221e' : '0 left');
+          ctx.fillText(remainLabel, barX + barAreaW + 6, midY);
+          ctx.restore();
+        }
+
+        rowRects.push({ y: rowY, h: rowH, idx: i });
+      }
+
+      if (maxItems * rowH + 30 < h) {
+        var legY = padT + maxItems * rowH + 8;
+        var legItems = [
+          { color: u.COLORS.indigo, label: 'Sold' },
+          { color: u.COLORS.amber, label: 'Reserved' },
+          { color: '#f0f1f4', label: 'Remaining' }
+        ];
+        var legX = padL + labelW;
+        ctx.save();
+        for (var li = 0; li < legItems.length; li++) {
+          ctx.fillStyle = legItems[li].color;
+          ctx.fillRect(legX, legY, 10, 10);
+          ctx.fillStyle = u.COLORS.textMuted;
+          ctx.font = '500 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(legItems[li].label, legX + 14, legY + 5);
+          legX += ctx.measureText(legItems[li].label).width + 28;
+        }
+        ctx.restore();
+      }
+    }
+
+    u.animate(700, draw, function() {
+      canvas.addEventListener('mousemove', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var my = e.clientY - rect.top;
+        var hit = null;
+        for (var i = 0; i < rowRects.length; i++) {
+          if (my >= rowRects[i].y && my < rowRects[i].y + rowRects[i].h) {
+            hit = data[rowRects[i].idx]; break;
+          }
+        }
+        if (hit) {
+          canvas.style.cursor = 'pointer';
+          var totalLabel = hit.total > 0 ? u.formatNumber(hit.total) : 'Unlimited';
+          u.showTooltip(e,
+            '<div style="font-weight:700;margin-bottom:2px;">' + hit.name + '</div>' +
+            '<div>Sold: <strong>' + u.formatNumber(hit.sold) + '</strong></div>' +
+            '<div>Reserved: <strong>' + u.formatNumber(hit.reserved) + '</strong></div>' +
+            '<div>Remaining: <strong>' + u.formatNumber(hit.remaining) + '</strong></div>' +
+            '<div style="border-top:1px solid rgba(255,255,255,0.2);margin-top:3px;padding-top:3px;">Capacity: ' + totalLabel + '</div>'
+          );
+        } else {
+          canvas.style.cursor = 'default';
+          u.hideTooltip();
+        }
+      });
+      canvas.addEventListener('mouseleave', function() { u.hideTooltip(); canvas.style.cursor = 'default'; });
+    });
+  }
+
+  requestAnimationFrame(drawTicketChart);
+  window.addEventListener('resize', (function() {
+    var timer;
+    return function() { clearTimeout(timer); timer = setTimeout(drawTicketChart, 200); };
+  })());
+})();
+</script>

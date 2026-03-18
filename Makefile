@@ -53,9 +53,8 @@ dev: ## Run the example Django dev server (clean slate + migrate + bootstrap + r
 	@$(UV) run python examples/manage.py bootstrap_conference --config conference.example.toml --update --seed-demo || true
 	@echo "=> Setting up permission groups"
 	@$(UV) run python examples/manage.py setup_groups
-	@echo "=> Creating default admin user (admin/admin)"
-	@DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_EMAIL=admin@localhost DJANGO_SUPERUSER_PASSWORD=admin \
-		$(UV) run python examples/manage.py createsuperuser --noinput 2>/dev/null || true
+	@echo "=> Seeding demo data (80 users, 20 speakers, ~100 orders)"
+	@$(UV) run python examples/seed.py
 	@echo "=> Starting dev server at http://localhost:8000/admin/  (login: admin/admin)"
 	@$(UV) run python examples/manage.py runserver
 

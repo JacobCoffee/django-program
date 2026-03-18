@@ -9,6 +9,60 @@
 
 {% block content %}
 {% if grant_stats.total %}
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+{# Analytics charts #}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_donut.html" with chart_data=chart_grant_status_json chart_title="Grant Status" chart_subtitle="Applications by status" chart_center="GRANTS" chart_id="grant-status" %}
+
+  {% if chart_grant_budget_json %}
+  <div class="card card--static" style="padding: 1.25rem 1.5rem;">
+    <strong style="font-size: 0.95rem;">Grant Budget</strong><br>
+    <small style="color: var(--color-text-muted); font-size: 0.78rem;">Committed vs budget</small>
+    <div style="margin-top: 1rem;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+        <span style="font-size: 0.82rem; color: var(--color-text-secondary);">Committed</span>
+        <span class="mono" style="font-size: 0.82rem;">${{ grant_budget.committed|floatformat:0 }} / ${{ grant_budget.budget|floatformat:0 }}</span>
+      </div>
+      <div style="height: 8px; background: var(--color-border-light); border-radius: 4px; overflow: hidden; margin-bottom: 1rem;">
+        <div style="height: 100%; width: {{ grant_budget.pct_committed }}%; background: var(--color-primary); border-radius: 4px;"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+        <span style="font-size: 0.82rem; color: var(--color-text-secondary);">Disbursed</span>
+        <span class="mono" style="font-size: 0.82rem;">${{ grant_budget.disbursed|floatformat:0 }} / ${{ grant_budget.budget|floatformat:0 }}</span>
+      </div>
+      <div style="height: 8px; background: var(--color-border-light); border-radius: 4px; overflow: hidden; margin-bottom: 1rem;">
+        <div style="height: 100%; width: {{ grant_budget.pct_disbursed }}%; background: var(--color-accent); border-radius: 4px;"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--color-text-muted);">
+        <span>Remaining: <strong class="mono">${{ grant_budget.remaining|floatformat:0 }}</strong></span>
+        <span>{{ grant_budget.pct_committed|floatformat:0 }}% committed</span>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="card card--static" style="padding: 1.25rem 1.5rem;">
+    <strong style="font-size: 0.95rem;">Financial Summary</strong><br>
+    <small style="color: var(--color-text-muted); font-size: 0.78rem;">Requested, approved, and disbursed totals</small>
+    <div style="margin-top: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border-light);">
+        <span style="font-size: 0.85rem; color: var(--color-text-secondary);">Total Requested</span>
+        <span class="mono" style="font-size: 1.1rem; font-weight: 700;">${{ grant_stats.total_requested|floatformat:0 }}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border-light);">
+        <span style="font-size: 0.85rem; color: var(--color-text-secondary);">Total Approved</span>
+        <span class="mono" style="font-size: 1.1rem; font-weight: 700; color: var(--color-success);">${{ grant_stats.total_approved|floatformat:0 }}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <span style="font-size: 0.85rem; color: var(--color-text-secondary);">Total Disbursed</span>
+        <span class="mono" style="font-size: 1.1rem; font-weight: 700; color: #1e40af;">${{ grant_stats.total_disbursed|floatformat:0 }}</span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# Summary stat cards #}
 <div class="stat-grid" style="margin-bottom: 1.5rem;">
   <div class="stat-card">
     <a href="?">
@@ -20,6 +74,12 @@
     <a href="?status=submitted">
       <div class="stat-card-value" style="color: var(--color-warning);">{{ grant_stats.pending }}</div>
       <div class="stat-card-label">Submitted</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=offered">
+      <div class="stat-card-value" style="color: var(--color-primary);">{{ grant_stats.offered }}</div>
+      <div class="stat-card-label">Offered</div>
     </a>
   </div>
   <div class="stat-card">
@@ -39,14 +99,6 @@
       <div class="stat-card-value" style="color: #1e40af;">{{ grant_stats.disbursed }}</div>
       <div class="stat-card-label">Disbursed</div>
     </a>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-value">${{ grant_stats.total_requested }}</div>
-    <div class="stat-card-label">Total Requested</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-value" style="color: var(--color-success);">${{ grant_stats.total_approved }}</div>
-    <div class="stat-card-label">Total Approved</div>
   </div>
 </div>
 

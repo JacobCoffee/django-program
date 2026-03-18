@@ -5,6 +5,8 @@ analytics, and recent transaction listings -- all scoped to the current
 conference.
 """
 
+import datetime
+import json
 from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -17,7 +19,19 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from django_program.conference.models import Conference
+from django_program.manage.reports import (
+    get_aov_by_date,
+    get_cashflow_waterfall,
+    get_cumulative_revenue,
+    get_discount_impact,
+    get_refund_metrics,
+    get_revenue_by_ticket_type,
+    get_sales_by_date,
+    get_ticket_inventory,
+)
+from django_program.programs.models import TravelGrant
 from django_program.registration.models import (
+    Attendee,
     Cart,
     Credit,
     Order,
@@ -28,6 +42,178 @@ from django_program.registration.models import (
 _ZERO = Decimal("0.00")
 
 _FINANCE_GROUP_NAME = "Program: Finance & Accounting"
+
+
+def _build_chart_context(
+    conference: Conference,
+    orders_by_status: dict[str, dict[str, object]],
+    payments_by_method: dict[str, dict[str, object]],
+) -> dict[str, str]:
+    """Build JSON chart data for the financial dashboard template partials.
+
+    Args:
+        conference: The conference to scope queries to.
+        orders_by_status: Order counts and totals keyed by status string.
+        payments_by_method: Payment aggregation keyed by method string.
+
+    Returns:
+        Dict of JSON-encoded chart data strings, ready to inject into
+        the template context.
+    """
+    sixty_days_ago = timezone.now().date() - datetime.timedelta(days=60)
+    sales_data = get_sales_by_date(conference, date_from=sixty_days_ago)
+
+    # -- AOV over time --
+    aov_data = get_aov_by_date(conference, date_from=sixty_days_ago)
+
+    # -- Revenue by ticket type --
+    rev_by_type = get_revenue_by_ticket_type(conference, date_from=sixty_days_ago)
+
+    # -- Discount impact --
+    discount_data = get_discount_impact(conference)
+
+    # -- Refund metrics --
+    refund_data = get_refund_metrics(conference)
+
+    # -- Cash flow waterfall --
+    waterfall = get_cashflow_waterfall(conference)
+
+    # -- Cumulative revenue --
+    cumulative = get_cumulative_revenue(conference, date_from=sixty_days_ago)
+
+    return {
+        "chart_sales_json": json.dumps(
+            [
+                {"date": row["date"].isoformat(), "count": row["count"], "revenue": float(row["revenue"])}
+                for row in sales_data
+            ]
+        ),
+        "chart_orders_json": json.dumps(
+            [
+                {"status": status, "count": data["count"], "total": float(data["total"])}
+                for status, data in orders_by_status.items()
+                if data["count"] > 0
+            ]
+        ),
+        "chart_payments_json": json.dumps(
+            [
+                {"method": method, "count": data["count"], "total": float(data["total_amount"])}
+                for method, data in payments_by_method.items()
+                if data["count"] > 0
+            ]
+        ),
+        "chart_tickets_json": json.dumps(
+            [
+                {
+                    "name": str(tt.name),
+                    "sold": tt.sold_count,
+                    "reserved": tt.reserved_count,
+                    "remaining": (
+                        max(0, tt.total_quantity - tt.sold_count - tt.reserved_count) if tt.total_quantity > 0 else 0
+                    ),
+                    "total": tt.total_quantity,
+                }
+                for tt in get_ticket_inventory(conference)
+            ]
+        ),
+        "chart_aov_json": json.dumps(
+            [{"date": row["date"].isoformat(), "aov": float(row["aov"]), "count": row["count"]} for row in aov_data]
+        ),
+        "chart_rev_by_type_json": json.dumps(
+            [
+                {
+                    "date": row["date"].isoformat(),
+                    "ticket_type": row["ticket_type"],
+                    "revenue": float(row["revenue"]),
+                    "count": row["count"],
+                }
+                for row in rev_by_type
+            ]
+        ),
+        "chart_discount_json": json.dumps(
+            {
+                "total_discount": float(discount_data["total_discount"]),
+                "total_gross": float(discount_data["total_gross"]),
+                "total_net": float(discount_data["total_net"]),
+                "discount_rate": float(discount_data["discount_rate"]),
+                "by_voucher": discount_data["by_voucher"],
+                "orders_with_discount": discount_data["orders_with_discount"],
+                "orders_without_discount": discount_data["orders_without_discount"],
+            }
+        ),
+        "chart_refund_json": json.dumps(
+            {
+                "total_refunded": float(refund_data["total_refunded"]),
+                "total_revenue": float(refund_data["total_revenue"]),
+                "refund_rate": float(refund_data["refund_rate"]),
+                "refund_count": refund_data["refund_count"],
+                "by_status": refund_data["by_status"],
+            }
+        ),
+        "chart_waterfall_json": json.dumps(
+            [{"label": step["label"], "value": float(step["value"]), "type": step["type"]} for step in waterfall]
+        ),
+        "chart_cumulative_json": json.dumps(
+            [
+                {"date": row["date"].isoformat(), "daily": float(row["daily"]), "cumulative": float(row["cumulative"])}
+                for row in cumulative
+            ]
+        ),
+    }
+
+
+def _build_financial_budget_context(conference: Conference, total_revenue: Decimal) -> dict[str, object]:
+    """Build budget-vs-actuals data for the financial dashboard.
+
+    Uses the already-computed ``total_revenue`` for the revenue budget
+    comparison instead of re-querying.
+
+    Args:
+        conference: The conference to compute budget data for.
+        total_revenue: Pre-computed total paid revenue.
+
+    Returns:
+        A dict with budget metrics, empty if no budget fields are configured.
+    """
+    budget: dict[str, object] = {}
+
+    if conference.revenue_budget:
+        budget["revenue_target"] = conference.revenue_budget
+        budget["revenue_actual"] = total_revenue
+        budget["revenue_pct"] = (
+            float(total_revenue / conference.revenue_budget * 100) if conference.revenue_budget else 0
+        )
+
+    if conference.target_attendance:
+        actual_attendance = Attendee.objects.filter(conference=conference).count()
+        budget["attendance_target"] = conference.target_attendance
+        budget["attendance_actual"] = actual_attendance
+        budget["attendance_pct"] = round(actual_attendance / conference.target_attendance * 100, 1)
+
+    if conference.grant_budget:
+        granted = (
+            TravelGrant.objects.filter(
+                conference=conference,
+                status__in=[
+                    TravelGrant.GrantStatus.ACCEPTED,
+                    TravelGrant.GrantStatus.OFFERED,
+                ],
+            ).aggregate(total=Sum("approved_amount"))["total"]
+            or _ZERO
+        )
+        disbursed = (
+            TravelGrant.objects.filter(
+                conference=conference,
+                status=TravelGrant.GrantStatus.DISBURSED,
+            ).aggregate(total=Sum("disbursed_amount"))["total"]
+            or _ZERO
+        )
+        budget["grant_target"] = conference.grant_budget
+        budget["grant_committed"] = granted
+        budget["grant_disbursed"] = disbursed
+        budget["grant_pct"] = float(granted / conference.grant_budget * 100) if conference.grant_budget else 0
+
+    return budget
 
 
 class FinancePermissionMixin(LoginRequiredMixin):
@@ -105,7 +291,7 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/financial_dashboard.html"
 
-    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:  # noqa: PLR0915
         """Build context with all financial metrics for the dashboard.
 
         Args:
@@ -169,11 +355,15 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
 
         # --- Orders by status (Comment 7: single aggregated query) ---
         order_qs = Order.objects.filter(conference=conference)
-        order_status_rows = order_qs.values("status").annotate(count=Count("id"))
-        orders_by_status: dict[str, int] = {status_value: 0 for status_value, _label in Order.Status.choices}
+        order_status_rows = order_qs.values("status").annotate(
+            count=Count("id"), total=Coalesce(Sum("total"), Value(_ZERO))
+        )
+        orders_by_status: dict[str, dict[str, object]] = {
+            status_value: {"count": 0, "total": _ZERO} for status_value, _label in Order.Status.choices
+        }
         for row in order_status_rows:
-            orders_by_status[row["status"]] = row["count"]
-        total_orders = sum(orders_by_status.values())
+            orders_by_status[row["status"]] = {"count": row["count"], "total": row["total"] or _ZERO}
+        total_orders = sum(d["count"] for d in orders_by_status.values())  # type: ignore[arg-type]
         context["orders_by_status"] = orders_by_status
         context["total_orders"] = total_orders
 
@@ -259,6 +449,17 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
             .order_by("-created_at")
         )
         context["active_carts"] = active_carts
+
+        # --- Chart JSON data for template partials ---
+        context.update(_build_chart_context(conference, orders_by_status, payments_by_method))
+
+        # Budget vs actuals
+        budget = _build_financial_budget_context(conference, total_revenue)
+        if budget:
+            context["budget"] = budget
+            context["chart_budget_json"] = json.dumps(
+                {k: float(v) if isinstance(v, Decimal) else v for k, v in budget.items()}
+            )
 
         context["active_nav"] = "financial"
         return context

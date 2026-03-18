@@ -1,0 +1,204 @@
+{# _refund_gauge.html -- Refund Rate semi-circle gauge chart #}
+{# Usage: {% include "django_program/manage/charts/_refund_gauge.html" with chart_data=chart_refund_json %} #}
+
+<div class="card card--static" style="padding: 1.25rem 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+    <div>
+      <strong style="font-size: 0.95rem;">Refund Rate</strong><br>
+      <small style="color: var(--color-text-muted); font-size: 0.78rem;">Credits and refund health</small>
+    </div>
+  </div>
+  <canvas id="chart-refund-gauge" width="400" height="200" style="width: 100%; height: 200px;"></canvas>
+  <div id="chart-refund-status-bar" style="margin-top: 0.5rem;"></div>
+</div>
+
+<script>
+(function() {
+  var canvas = document.getElementById('chart-refund-gauge');
+  var statusBarEl = document.getElementById('chart-refund-status-bar');
+  if (!canvas) return;
+  var u = window._chartUtils;
+  if (!u) return;
+  var data = JSON.parse('{{ chart_data|escapejs }}');
+
+  var ZONE_GREEN = u.COLORS.emerald;
+  var ZONE_AMBER = u.COLORS.amber;
+  var ZONE_RED = u.COLORS.red;
+
+  function drawChart() {
+    var s = u.setupCanvas(canvas);
+    var ctx = s.ctx, w = s.w, h = s.h;
+
+    if (!data || data.total_revenue === 0) {
+      u.drawEmpty(ctx, w, h, 'No revenue data for refund analysis');
+      if (statusBarEl) statusBarEl.innerHTML = '';
+      return;
+    }
+
+    var cx = w / 2;
+    var gaugeR = Math.min(w / 2 - 20, h - 50);
+    var cy = h - 30;
+    var arcW = 18;
+    var innerR = gaugeR - arcW;
+    var rate = data.refund_rate || 0;
+    var maxRate = 25;
+    var clampedRate = Math.min(rate, maxRate);
+
+    var startAngle = Math.PI;
+    var endAngle = Math.PI * 2;
+
+    function rateToAngle(r) {
+      return startAngle + (r / maxRate) * Math.PI;
+    }
+
+    function draw(t) {
+      var progress = u.easeOutCubic(t);
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, gaugeR, startAngle, endAngle);
+      ctx.arc(cx, cy, innerR, endAngle, startAngle, true);
+      ctx.closePath();
+      ctx.fillStyle = '#f0f1f4';
+      ctx.fill();
+      ctx.restore();
+
+      var zones = [
+        { start: 0, end: 5, color: ZONE_GREEN },
+        { start: 5, end: 15, color: ZONE_AMBER },
+        { start: 15, end: maxRate, color: ZONE_RED }
+      ];
+      ctx.save();
+      for (var i = 0; i < zones.length; i++) {
+        var a1 = rateToAngle(zones[i].start);
+        var a2 = rateToAngle(zones[i].end);
+        ctx.beginPath();
+        ctx.arc(cx, cy, gaugeR, a1, a2);
+        ctx.arc(cx, cy, innerR, a2, a1, true);
+        ctx.closePath();
+        ctx.fillStyle = u.hexToRgba(zones[i].color, 0.2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      var needleAngle = startAngle + (clampedRate / maxRate) * Math.PI * progress;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, gaugeR, startAngle, needleAngle);
+      ctx.arc(cx, cy, innerR, needleAngle, startAngle, true);
+      ctx.closePath();
+      var needleColor = rate <= 5 ? ZONE_GREEN : (rate <= 15 ? ZONE_AMBER : ZONE_RED);
+      ctx.fillStyle = needleColor;
+      ctx.fill();
+      ctx.restore();
+
+      var needleTipR = gaugeR + 6;
+      var needleBaseW = 3;
+      var nx = cx + Math.cos(needleAngle) * needleTipR;
+      var ny = cy + Math.sin(needleAngle) * needleTipR;
+      var perpAngle = needleAngle + Math.PI / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(nx, ny);
+      ctx.lineTo(cx + Math.cos(perpAngle) * needleBaseW, cy + Math.sin(perpAngle) * needleBaseW);
+      ctx.lineTo(cx - Math.cos(perpAngle) * needleBaseW, cy - Math.sin(perpAngle) * needleBaseW);
+      ctx.closePath();
+      ctx.fillStyle = needleColor;
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = needleColor;
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.fillStyle = u.COLORS.textMuted;
+      ctx.font = '500 9px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('0%', cx + Math.cos(startAngle) * (gaugeR + 14), cy + Math.sin(startAngle) * (gaugeR + 14));
+      ctx.fillText(maxRate + '%', cx + Math.cos(endAngle) * (gaugeR + 14), cy + Math.sin(endAngle) * (gaugeR + 14));
+      ctx.fillText('5%', cx + Math.cos(rateToAngle(5)) * (gaugeR + 14), cy + Math.sin(rateToAngle(5)) * (gaugeR + 14) - 4);
+      ctx.fillText('15%', cx + Math.cos(rateToAngle(15)) * (gaugeR + 14), cy + Math.sin(rateToAngle(15)) * (gaugeR + 14) - 4);
+      ctx.restore();
+
+      if (progress > 0.4) {
+        var alpha = Math.min(1, (progress - 0.4) / 0.3);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = u.COLORS.text;
+        ctx.font = '800 24px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(rate.toFixed(1) + '%', cx, cy - 10);
+        ctx.fillStyle = u.COLORS.textMuted;
+        ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.textBaseline = 'top';
+        ctx.fillText(u.formatCurrencyFull(data.total_refunded) + ' of ' + u.formatCurrencyFull(data.total_revenue), cx, cy + 2);
+        ctx.fillText(u.formatNumber(data.refund_count) + ' refund' + (data.refund_count !== 1 ? 's' : ''), cx, cy + 16);
+        ctx.restore();
+      }
+    }
+
+    u.animate(800, draw, function() {
+      canvas.addEventListener('mousemove', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left - cx;
+        var my = e.clientY - rect.top - cy;
+        var dist = Math.sqrt(mx * mx + my * my);
+        if (dist >= innerR - 4 && dist <= gaugeR + 8 && my <= 4) {
+          canvas.style.cursor = 'pointer';
+          u.showTooltip(e,
+            '<div style="font-weight:700;margin-bottom:2px;">Refund Rate: ' + rate.toFixed(1) + '%</div>' +
+            '<div>Refunded: <strong>' + u.formatCurrencyFull(data.total_refunded) + '</strong></div>' +
+            '<div>Revenue: <strong>' + u.formatCurrencyFull(data.total_revenue) + '</strong></div>' +
+            '<div>Refund Count: <strong>' + u.formatNumber(data.refund_count) + '</strong></div>'
+          );
+        } else {
+          canvas.style.cursor = 'default';
+          u.hideTooltip();
+        }
+      });
+      canvas.addEventListener('mouseleave', function() {
+        u.hideTooltip();
+        canvas.style.cursor = 'default';
+      });
+    });
+
+    if (statusBarEl && data.by_status) {
+      var statuses = data.by_status;
+      var statusTotal = (statuses.available || 0) + (statuses.applied || 0) + (statuses.expired || 0);
+      if (statusTotal > 0) {
+        var availPct = (statuses.available || 0) / statusTotal * 100;
+        var appliedPct = (statuses.applied || 0) / statusTotal * 100;
+        var expiredPct = (statuses.expired || 0) / statusTotal * 100;
+        var html = '<div style="font-size:0.72rem;color:#8889a0;margin-bottom:0.3rem;">Credit Status Breakdown</div>';
+        html += '<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:#f0f1f4;">';
+        if (availPct > 0) html += '<div style="width:' + availPct + '%;background:' + u.COLORS.emerald + ';"></div>';
+        if (appliedPct > 0) html += '<div style="width:' + appliedPct + '%;background:' + u.COLORS.blue + ';"></div>';
+        if (expiredPct > 0) html += '<div style="width:' + expiredPct + '%;background:' + u.COLORS.grayDark + ';"></div>';
+        html += '</div>';
+        html += '<div style="display:flex;gap:1rem;margin-top:0.3rem;">';
+        html += '<span style="display:flex;align-items:center;gap:0.3rem;font-size:0.68rem;color:#8889a0;"><span style="width:8px;height:8px;border-radius:2px;background:' + u.COLORS.emerald + ';display:inline-block;"></span>Available (' + (statuses.available || 0) + ')</span>';
+        html += '<span style="display:flex;align-items:center;gap:0.3rem;font-size:0.68rem;color:#8889a0;"><span style="width:8px;height:8px;border-radius:2px;background:' + u.COLORS.blue + ';display:inline-block;"></span>Applied (' + (statuses.applied || 0) + ')</span>';
+        html += '<span style="display:flex;align-items:center;gap:0.3rem;font-size:0.68rem;color:#8889a0;"><span style="width:8px;height:8px;border-radius:2px;background:' + u.COLORS.grayDark + ';display:inline-block;"></span>Expired (' + (statuses.expired || 0) + ')</span>';
+        html += '</div>';
+        statusBarEl.innerHTML = html;
+      } else {
+        statusBarEl.innerHTML = '';
+      }
+    }
+  }
+
+  requestAnimationFrame(drawChart);
+  window.addEventListener('resize', (function() {
+    var timer;
+    return function() { clearTimeout(timer); timer = setTimeout(drawChart, 200); };
+  })());
+})();
+</script>

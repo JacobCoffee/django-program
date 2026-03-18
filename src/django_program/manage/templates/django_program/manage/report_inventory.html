@@ -1,0 +1,132 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Product Inventory{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Product Inventory
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Product Inventory</h1>
+<p>Stock status for ticket types and add-ons for {{ conference.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:report-inventory-export' conference.slug %}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_ticket_inventory.html" with chart_data=chart_tickets_json %}
+</div>
+
+<h2 class="section-heading" style="margin-top: 0;">Ticket Types</h2>
+{% if ticket_types %}
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th style="text-align: right;">Price</th>
+      <th style="text-align: right;">Total</th>
+      <th style="text-align: right;">Sold</th>
+      <th style="text-align: right;">Reserved</th>
+      <th>Window</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for tt in ticket_types %}
+    <tr>
+      <td><a href="{% url 'manage:ticket-type-edit' conference.slug tt.pk %}">{{ tt.name }}</a></td>
+      <td style="text-align: right;" class="mono">${{ tt.price }}</td>
+      <td style="text-align: right;" class="mono">
+        {% if tt.total_quantity == 0 %}&infin;{% else %}{{ tt.total_quantity }}{% endif %}
+      </td>
+      <td style="text-align: right;" class="mono">{{ tt.sold_count }}</td>
+      <td style="text-align: right;" class="mono">{{ tt.reserved_count }}</td>
+      <td style="font-size: 0.82rem;">
+        {% if tt.available_from %}{{ tt.available_from|date:"M j" }}{% endif %}
+        {% if tt.available_from and tt.available_until %}&ndash;{% endif %}
+        {% if tt.available_until %}{{ tt.available_until|date:"M j" }}{% endif %}
+        {% if not tt.available_from and not tt.available_until %}
+          <span style="color: var(--color-text-muted);">Always</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if tt.is_active %}
+        <span class="badge badge--active">Active</span>
+        {% else %}
+        <span class="badge badge--inactive">Inactive</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state" style="margin-bottom: 2rem;">
+  <p>No ticket types configured.</p>
+  <p><a href="{% url 'manage:ticket-type-add' conference.slug %}" class="btn btn-primary btn-sm">Add Ticket Type</a></p>
+</div>
+{% endif %}
+
+<h2 class="section-heading">Add-ons</h2>
+{% if addons %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th style="text-align: right;">Price</th>
+      <th style="text-align: right;">Total</th>
+      <th style="text-align: right;">Sold</th>
+      <th style="text-align: right;">Reserved</th>
+      <th>Window</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for addon in addons %}
+    <tr>
+      <td><a href="{% url 'manage:addon-edit' conference.slug addon.pk %}">{{ addon.name }}</a></td>
+      <td style="text-align: right;" class="mono">${{ addon.price }}</td>
+      <td style="text-align: right;" class="mono">
+        {% if addon.total_quantity == 0 %}&infin;{% else %}{{ addon.total_quantity }}{% endif %}
+      </td>
+      <td style="text-align: right;" class="mono">{{ addon.sold_count }}</td>
+      <td style="text-align: right;" class="mono">{{ addon.reserved_count }}</td>
+      <td style="font-size: 0.82rem;">
+        {% if addon.available_from %}{{ addon.available_from|date:"M j" }}{% endif %}
+        {% if addon.available_from and addon.available_until %}&ndash;{% endif %}
+        {% if addon.available_until %}{{ addon.available_until|date:"M j" }}{% endif %}
+        {% if not addon.available_from and not addon.available_until %}
+          <span style="color: var(--color-text-muted);">Always</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if addon.is_active %}
+        <span class="badge badge--active">Active</span>
+        {% else %}
+        <span class="badge badge--inactive">Inactive</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No add-ons configured.</p>
+  <p><a href="{% url 'manage:addon-add' conference.slug %}" class="btn btn-primary btn-sm">Add Add-on</a></p>
+</div>
+{% endif %}
+
+{% endblock %}

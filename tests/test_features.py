@@ -514,13 +514,13 @@ class TestFeatureFlagsAdmin:
         assert FeatureFlags in admin_site._registry
 
     def test_inline_on_conference_admin(self) -> None:
-        from django_program.conference.admin import ConferenceAdmin  # noqa: PLC0415
+        from django_program.conference.admin import ConferenceAdmin
 
         inline_classes = [i.model for i in ConferenceAdmin.inlines]
         assert FeatureFlags in inline_classes
 
     def test_inline_max_num_is_one(self) -> None:
-        from django_program.conference.admin import FeatureFlagsInline  # noqa: PLC0415
+        from django_program.conference.admin import FeatureFlagsInline
 
         assert FeatureFlagsInline.max_num == 1
 

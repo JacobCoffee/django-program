@@ -89,6 +89,17 @@ _GROUP_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
         ("program_programs", "view_activity"),
         ("program_programs", "view_activitysignup"),
     ],
+    "Program: Reports": [
+        # Read-only access for report dashboards
+        ("program_conference", "view_conference"),
+        ("program_registration", "view_tickettype"),
+        ("program_registration", "view_addon"),
+        ("program_registration", "view_voucher"),
+        ("program_registration", "view_order"),
+        ("program_registration", "view_orderlineitem"),
+        ("program_registration", "view_payment"),
+        ("program_registration", "view_credit"),
+    ],
     "Program: Read-Only Staff": [
         ("program_conference", "view_conference"),
         ("program_conference", "view_section"),
@@ -108,11 +119,12 @@ _GROUP_PERMISSIONS: dict[str, list[tuple[str, str]]] = {
 class Command(BaseCommand):
     """Create default permission groups for conference staff roles.
 
-    Creates five groups with appropriate permissions:
+    Creates six groups with appropriate permissions:
 
     * **Conference Organizers** -- full conference, ticket, voucher, and activity management
     * **Registration & Ticket Support** -- ticket ops, voucher issuing, order support
     * **Finance & Accounting** -- orders, payments, credits, and revenue visibility
+    * **Reports** -- read-only access to report dashboards and underlying data
     * **Activity Organizers** -- per-activity signup management
     * **Read-Only Staff** -- view-only access to all registration models
 

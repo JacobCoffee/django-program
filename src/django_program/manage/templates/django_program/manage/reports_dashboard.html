@@ -1,0 +1,131 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  Reports
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Reports</h1>
+<p>Admin reports and analytics for {{ conference.name }}</p>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero KPI Row -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem;">
+  <a href="{% url 'manage:report-sales-by-date' conference.slug %}" style="text-decoration: none; color: inherit;">
+    <div style="background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%); border-radius: 10px; padding: 1.5rem; color: #fff; box-shadow: 0 4px 20px rgba(67,56,202,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease;"
+         onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(67,56,202,0.35)'"
+         onmouseleave="this.style.transform='none';this.style.boxShadow='0 4px 20px rgba(67,56,202,0.25)'">
+      <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; margin-bottom: 0.5rem;">Total Revenue (30d)</div>
+      <div style="font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;">${{ recent_sales_total }}</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-attendee-manifest' conference.slug %}" style="text-decoration: none; color: inherit;">
+    <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+         onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+         onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+      <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Attendees</div>
+      <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">{{ attendee_summary.total }}</div>
+      {% if attendee_summary.checked_in %}<div style="font-size: 0.75rem; color: var(--color-success); font-weight: 600; margin-top: 0.4rem;">{{ attendee_summary.checked_in }} checked in</div>{% endif %}
+    </div>
+  </a>
+  <a href="{% url 'manage:report-voucher-usage' conference.slug %}" style="text-decoration: none; color: inherit;">
+    <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+         onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+         onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+      <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Vouchers</div>
+      <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">{{ voucher_summary.total }}</div>
+      {% if voucher_summary.used %}<div style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; margin-top: 0.4rem;">{{ voucher_summary.used }} redeemed</div>{% endif %}
+    </div>
+  </a>
+  <a href="{% url 'manage:report-speaker-registration' conference.slug %}" style="text-decoration: none; color: inherit;">
+    <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+         onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
+         onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
+      <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Speakers</div>
+      <div style="font-family: var(--font-mono); font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text);">{{ speaker_count }}</div>
+    </div>
+  </a>
+</div>
+
+<!-- Charts Grid -->
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2.5rem;">
+  {% include "django_program/manage/charts/_ticket_inventory.html" with chart_data=chart_tickets_json %}
+  {% include "django_program/manage/charts/_registration_pulse.html" with chart_data=chart_flow_json %}
+  {% include "django_program/manage/charts/_order_status.html" with chart_data=chart_orders_json %}
+  {% include "django_program/manage/charts/_payment_methods.html" with chart_data=chart_payments_json %}
+  {% include "django_program/manage/charts/_voucher_performance.html" with chart_data=chart_vouchers_json %}
+  {% include "django_program/manage/charts/_checkin_progress.html" with chart_data=chart_checkin_json %}
+  {% include "django_program/manage/charts/_speaker_status.html" with chart_data=chart_speakers_json %}
+</div>
+
+<!-- Available Reports -->
+<h2 class="section-heading">Available Reports</h2>
+
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
+  <a href="{% url 'manage:report-attendee-manifest' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Attendee Manifest</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Filterable list of all attendees with ticket type, check-in status, and access codes.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-inventory' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Product Inventory</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Stock status for ticket types and add-ons with sold, reserved, and remaining counts.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-voucher-usage' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Voucher Usage</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Redemption rates, revenue impact, and usage details for all vouchers.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-discount-effectiveness' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Discount Effectiveness</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Overview of all discount conditions, their types, usage counts, and applicable products.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-sales-by-date' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Sales by Date</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Daily ticket sales count and revenue for paid orders, with date range filtering.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-credit-notes' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Credit Notes</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Store credits and refund balances with status, linked orders, and outstanding amounts.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-speaker-registration' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Speaker Registration</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Speakers and whether they have a paid registration, with talk counts.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-reconciliation' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Reconciliation</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Financial reconciliation with sales, payments, credits, and discrepancy detection.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-registration-flow' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Registration Flow</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Daily flow of new registrations and cancellations with net change tracking.</div>
+    </div>
+  </a>
+</div>
+
+{% endblock %}

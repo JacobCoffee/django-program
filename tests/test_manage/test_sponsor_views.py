@@ -218,10 +218,10 @@ def test_sponsor_edit_unsynced_fields_editable(authed_client: Client, conference
 
 
 @pytest.fixture
-def pyconus_conference(db):
+def python2077_conference(db):
     return Conference.objects.create(
-        name="PyCon US 2027",
-        slug="pycon-us-2027",
+        name="Python 2077",
+        slug="python-2077",
         start_date=date(2027, 5, 14),
         end_date=date(2027, 5, 22),
         timezone="America/New_York",
@@ -231,8 +231,8 @@ def pyconus_conference(db):
 
 
 @pytest.mark.django_db
-def test_dashboard_shows_psf_sync_for_pyconus(authed_client: Client, pyconus_conference):
-    url = reverse("manage:dashboard", kwargs={"conference_slug": pyconus_conference.slug})
+def test_dashboard_shows_psf_sync_for_pyconus(authed_client: Client, python2077_conference):
+    url = reverse("manage:dashboard", kwargs={"conference_slug": python2077_conference.slug})
     response = authed_client.get(url)
     assert response.status_code == 200
     assert response.context["has_psf_sponsor_sync"] is True
@@ -248,11 +248,11 @@ def test_dashboard_hides_psf_sync_for_non_pyconus(authed_client: Client, confere
 
 @pytest.mark.django_db
 @patch("django_program.manage.views.SponsorSyncService")
-def test_sync_sponsors_view_success(mock_service_cls, authed_client: Client, pyconus_conference):
+def test_sync_sponsors_view_success(mock_service_cls, authed_client: Client, python2077_conference):
     mock_service = mock_service_cls.return_value
     mock_service.sync_all.return_value = {"sponsors": 5}
 
-    url = reverse("manage:sync-sponsors", kwargs={"conference_slug": pyconus_conference.slug})
+    url = reverse("manage:sync-sponsors", kwargs={"conference_slug": python2077_conference.slug})
     response = authed_client.post(url)
 
     assert response.status_code == 302
@@ -272,11 +272,11 @@ def test_sync_sponsors_view_value_error(mock_service_cls, authed_client: Client,
 
 @pytest.mark.django_db
 @patch("django_program.manage.views.SponsorSyncService")
-def test_sync_sponsors_view_runtime_error(mock_service_cls, authed_client: Client, pyconus_conference):
+def test_sync_sponsors_view_runtime_error(mock_service_cls, authed_client: Client, python2077_conference):
     mock_service = mock_service_cls.return_value
     mock_service.sync_all.side_effect = RuntimeError("API failed")
 
-    url = reverse("manage:sync-sponsors", kwargs={"conference_slug": pyconus_conference.slug})
+    url = reverse("manage:sync-sponsors", kwargs={"conference_slug": python2077_conference.slug})
     response = authed_client.post(url)
 
     assert response.status_code == 302

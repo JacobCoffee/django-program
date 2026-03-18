@@ -1,0 +1,47 @@
+"""URL patterns for the admin reports dashboard."""
+
+from django.urls import path
+
+from django_program.manage.views_reports import (
+    AttendeeManifestExportView,
+    AttendeeManifestView,
+    CreditNotesExportView,
+    CreditNotesView,
+    DiscountEffectivenessExportView,
+    DiscountEffectivenessView,
+    InventoryReportExportView,
+    InventoryReportView,
+    ReconciliationExportView,
+    ReconciliationView,
+    RegistrationFlowExportView,
+    RegistrationFlowView,
+    ReportsDashboardView,
+    SalesByDateExportView,
+    SalesByDateView,
+    SpeakerRegistrationExportView,
+    SpeakerRegistrationView,
+    VoucherUsageExportView,
+    VoucherUsageReportView,
+)
+
+urlpatterns = [
+    path("", ReportsDashboardView.as_view(), name="reports-dashboard"),
+    path("attendees/", AttendeeManifestView.as_view(), name="report-attendee-manifest"),
+    path("attendees/export/", AttendeeManifestExportView.as_view(), name="report-attendee-export"),
+    path("inventory/", InventoryReportView.as_view(), name="report-inventory"),
+    path("inventory/export/", InventoryReportExportView.as_view(), name="report-inventory-export"),
+    path("vouchers/", VoucherUsageReportView.as_view(), name="report-voucher-usage"),
+    path("vouchers/export/", VoucherUsageExportView.as_view(), name="report-voucher-export"),
+    path("discounts/", DiscountEffectivenessView.as_view(), name="report-discount-effectiveness"),
+    path("discounts/export/", DiscountEffectivenessExportView.as_view(), name="report-discount-export"),
+    path("sales/", SalesByDateView.as_view(), name="report-sales-by-date"),
+    path("sales/export/", SalesByDateExportView.as_view(), name="report-sales-export"),
+    path("credits/", CreditNotesView.as_view(), name="report-credit-notes"),
+    path("credits/export/", CreditNotesExportView.as_view(), name="report-credit-export"),
+    path("speakers/", SpeakerRegistrationView.as_view(), name="report-speaker-registration"),
+    path("speakers/export/", SpeakerRegistrationExportView.as_view(), name="report-speaker-export"),
+    path("reconciliation/", ReconciliationView.as_view(), name="report-reconciliation"),
+    path("reconciliation/export/", ReconciliationExportView.as_view(), name="report-reconciliation-export"),
+    path("flow/", RegistrationFlowView.as_view(), name="report-registration-flow"),
+    path("flow/export/", RegistrationFlowExportView.as_view(), name="report-registration-flow-export"),
+]

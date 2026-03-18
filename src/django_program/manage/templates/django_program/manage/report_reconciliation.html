@@ -1,0 +1,128 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Reconciliation{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Reconciliation
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Reconciliation</h1>
+<p>Financial summary and payment reconciliation for {{ conference.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:report-reconciliation-export' conference.slug %}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_waterfall.html" with chart_data=chart_waterfall_json %}
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_payment_methods.html" with chart_data=chart_payments_json %}
+  {% include "django_program/manage/charts/_order_status.html" with chart_data=chart_orders_json %}
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">${{ recon.sales_total|floatformat:2 }}</div>
+    <div class="stat-card-label">Total Sales</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ recon.payments_total|floatformat:2 }}</div>
+    <div class="stat-card-label">Total Payments</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ recon.refunds_total|floatformat:2 }}</div>
+    <div class="stat-card-label">Credits Issued</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ recon.credits_outstanding|floatformat:2 }}</div>
+    <div class="stat-card-label">Credits Outstanding</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ recon.discrepancy|floatformat:2 }}</div>
+    <div class="stat-card-label">Discrepancy</div>
+  </div>
+</div>
+
+<h2 class="section-heading">By Payment Method</h2>
+
+{% if recon.by_payment_method %}
+<table class="data-table" style="margin-bottom: 2rem; max-width: 600px;">
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th style="text-align: right;">Count</th>
+      <th style="text-align: right;">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in recon.by_payment_method %}
+    <tr>
+      <td>{{ row.method|title }}</td>
+      <td style="text-align: right;" class="mono">{{ row.count }}</td>
+      <td style="text-align: right;" class="mono">${{ row.total|floatformat:2 }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state" style="margin-bottom: 2rem;">
+  <p>No payments recorded.</p>
+</div>
+{% endif %}
+
+<h2 class="section-heading">By Order Status</h2>
+
+{% if recon.by_order_status %}
+<table class="data-table" style="max-width: 600px;">
+  <thead>
+    <tr>
+      <th>Status</th>
+      <th style="text-align: right;">Count</th>
+      <th style="text-align: right;">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in recon.by_order_status %}
+    <tr>
+      <td>
+        {% if row.status == "paid" %}
+        <span class="badge badge--active">Paid</span>
+        {% elif row.status == "pending" %}
+        <span class="badge badge--warning">Pending</span>
+        {% elif row.status == "cancelled" %}
+        <span class="badge badge--inactive">Cancelled</span>
+        {% elif row.status == "refunded" %}
+        <span class="badge badge--other">Refunded</span>
+        {% elif row.status == "partially_refunded" %}
+        <span class="badge badge--other">Partially Refunded</span>
+        {% else %}
+        <span class="badge">{{ row.status|title }}</span>
+        {% endif %}
+      </td>
+      <td style="text-align: right;" class="mono">{{ row.count }}</td>
+      <td style="text-align: right;" class="mono">${{ row.total|floatformat:2 }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No orders recorded.</p>
+</div>
+{% endif %}
+
+{% endblock %}

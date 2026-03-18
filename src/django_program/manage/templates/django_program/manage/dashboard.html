@@ -189,6 +189,13 @@
 </a>
 {% endif %}
 
+{% if budget %}
+{% include "django_program/manage/charts/_chart_utils.html" %}
+<div style="margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_budget_gauge.html" with chart_data=chart_budget_json %}
+</div>
+{% endif %}
+
 <!-- Directory -->
 <div class="card card--static" style="margin-bottom: 1.5rem;">
   <div class="card-body">
@@ -210,6 +217,7 @@
         <a href="{% url 'manage:voucher-list' conference.slug %}" class="dir-link">Vouchers <span class="dir-link-n">{{ stats.vouchers }}</span></a>
         <a href="{% url 'manage:sponsor-manage-list' conference.slug %}" class="dir-link">Sponsors <span class="dir-link-n">{{ stats.sponsors }}</span></a>
         <a href="{% url 'manage:travel-grant-list' conference.slug %}" class="dir-link">Travel Grants <span class="dir-link-n">{{ stats.travel_grants }}</span></a>
+        <a href="{% url 'manage:reports-dashboard' conference.slug %}" class="dir-link">Reports</a>
       </div>
     </div>
   </div>

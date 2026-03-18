@@ -1,0 +1,122 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Voucher Usage{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Voucher Usage
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Voucher Usage</h1>
+<p>Redemption rates and revenue impact for {{ conference.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:report-voucher-export' conference.slug %}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_voucher_performance.html" with chart_data=chart_vouchers_json %}
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">{{ voucher_summary.total }}</div>
+    <div class="stat-card-label">Total Vouchers</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ voucher_summary.active }}</div>
+    <div class="stat-card-label">Active</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ voucher_summary.used }}</div>
+    <div class="stat-card-label">Used</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ voucher_summary.total_revenue_impact }}</div>
+    <div class="stat-card-label">Revenue Impact</div>
+  </div>
+</div>
+
+{% if vouchers %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Type</th>
+      <th style="text-align: right;">Discount</th>
+      <th style="text-align: right;">Used / Max</th>
+      <th>Redemption Rate</th>
+      <th style="text-align: right;">Revenue Impact</th>
+      <th>Validity</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for voucher in vouchers %}
+    <tr>
+      <td>
+        <a href="{% url 'manage:voucher-edit' conference.slug voucher.pk %}" class="mono">{{ voucher.code }}</a>
+      </td>
+      <td>{{ voucher.get_voucher_type_display }}</td>
+      <td style="text-align: right;" class="mono">
+        {% if voucher.voucher_type == "percentage" %}
+          {{ voucher.discount_value }}%
+        {% elif voucher.voucher_type == "fixed_amount" %}
+          ${{ voucher.discount_value }}
+        {% elif voucher.voucher_type == "comp" %}
+          100%
+        {% endif %}
+      </td>
+      <td style="text-align: right;" class="mono">{{ voucher.times_used }} / {{ voucher.max_uses }}</td>
+      <td>
+        {% if voucher.max_uses > 0 %}
+          {% widthratio voucher.times_used voucher.max_uses 100 as redemption_pct %}
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="flex: 1; max-width: 80px; height: 6px; background: var(--color-border-light); border-radius: 3px; overflow: hidden;">
+              <div style="width: {{ redemption_pct }}%; height: 100%; background: {% if voucher.times_used == voucher.max_uses %}var(--color-text-muted){% else %}var(--color-success){% endif %}; border-radius: 3px;"></div>
+            </div>
+            <span class="mono" style="font-size: 0.78rem; color: var(--color-text-secondary);">{{ redemption_pct }}%</span>
+          </div>
+        {% else %}
+          <span style="color: var(--color-text-muted); font-size: 0.82rem;">Unlimited</span>
+        {% endif %}
+      </td>
+      <td style="text-align: right;" class="mono">${{ voucher.revenue_impact }}</td>
+      <td style="font-size: 0.82rem;">
+        {% if voucher.valid_from %}{{ voucher.valid_from|date:"M j" }}{% endif %}
+        {% if voucher.valid_from and voucher.valid_until %}&ndash;{% endif %}
+        {% if voucher.valid_until %}{{ voucher.valid_until|date:"M j" }}{% endif %}
+        {% if not voucher.valid_from and not voucher.valid_until %}
+          <span style="color: var(--color-text-muted);">Always</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if voucher.is_active %}
+        <span class="badge badge--active">Active</span>
+        {% else %}
+        <span class="badge badge--inactive">Inactive</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No vouchers configured for this conference.</p>
+  <p><a href="{% url 'manage:voucher-add' conference.slug %}" class="btn btn-primary btn-sm">Add Voucher</a></p>
+</div>
+{% endif %}
+
+{% endblock %}

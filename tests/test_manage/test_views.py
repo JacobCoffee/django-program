@@ -2724,3 +2724,643 @@ class TestOrderViews:
         )
         assert resp.status_code == 302
         assert Payment.objects.filter(order=order).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Attendee List & Detail Views
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestAttendeeViews:
+    """Cover AttendeeListView and AttendeeDetailView."""
+
+    @pytest.fixture
+    def attendee_user(self, db):
+        return User.objects.create_user(username="attendee1", password="password", email="attendee1@test.com")
+
+    @pytest.fixture
+    def attendee(self, conference, attendee_user):
+        from django_program.registration.attendee import Attendee
+
+        return Attendee.objects.create(user=attendee_user, conference=conference)
+
+    @pytest.fixture
+    def checked_in_attendee(self, conference, db):
+        from django_program.registration.attendee import Attendee
+
+        u = User.objects.create_user(username="checkedin", password="password", email="checkedin@test.com")
+        return Attendee.objects.create(user=u, conference=conference, checked_in_at=timezone.now())
+
+    def test_attendee_list_basic(self, client_logged_in_super, conference, attendee):
+        url = reverse("manage:attendee-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "attendees"
+        assert resp.context["total_count"] >= 1
+        assert attendee in resp.context["attendees"]
+
+    def test_attendee_list_checked_in_filter(self, client_logged_in_super, conference, attendee, checked_in_attendee):
+        url = reverse("manage:attendee-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"filter": "checked_in"})
+        assert resp.status_code == 200
+        pks = [a.pk for a in resp.context["attendees"]]
+        assert checked_in_attendee.pk in pks
+        assert attendee.pk not in pks
+
+    def test_attendee_list_not_checked_in_filter(
+        self, client_logged_in_super, conference, attendee, checked_in_attendee
+    ):
+        url = reverse("manage:attendee-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"filter": "not_checked_in"})
+        assert resp.status_code == 200
+        pks = [a.pk for a in resp.context["attendees"]]
+        assert attendee.pk in pks
+        assert checked_in_attendee.pk not in pks
+
+    def test_attendee_list_search(self, client_logged_in_super, conference, attendee):
+        url = reverse("manage:attendee-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"q": "attendee1"})
+        assert resp.status_code == 200
+        assert attendee in resp.context["attendees"]
+
+    def test_attendee_list_search_no_match(self, client_logged_in_super, conference, attendee):
+        url = reverse("manage:attendee-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"q": "zzzznotfound"})
+        assert resp.status_code == 200
+        assert list(resp.context["attendees"]) == []
+
+    def test_attendee_list_checked_in_count(self, client_logged_in_super, conference, attendee, checked_in_attendee):
+        url = reverse("manage:attendee-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.context["checked_in_count"] == 1
+
+    def test_attendee_detail(self, client_logged_in_super, conference, attendee):
+        url = reverse(
+            "manage:attendee-detail",
+            kwargs={"conference_slug": conference.slug, "pk": attendee.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "attendees"
+        assert resp.context["attendee"] == attendee
+        assert "orders" in resp.context
+        assert "credits" in resp.context
+        assert "vouchers_used" in resp.context
+        assert "activity_signups" in resp.context
+        assert "travel_grants" in resp.context
+
+
+# ---------------------------------------------------------------------------
+# Condition List / Create / Edit Views
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestConditionViews:
+    """Cover ConditionListView, ConditionCreateView, ConditionEditView."""
+
+    def test_condition_list(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import TimeOrStockLimitCondition
+
+        TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Early Bird",
+            discount_type="percentage",
+            discount_value=Decimal("20.00"),
+        )
+        url = reverse("manage:condition-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "conditions"
+        rows = resp.context["condition_rows"]
+        assert len(rows) >= 1
+        assert rows[0]["type_label"] == "Time/Stock Limit"
+        assert "20" in rows[0]["discount"]
+        assert "condition_types" in resp.context
+
+    def test_condition_list_with_category_discount(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import DiscountForCategory
+
+        DiscountForCategory.objects.create(
+            conference=conference,
+            name="10% off categories",
+            percentage=Decimal("10.00"),
+            apply_to_tickets=True,
+            apply_to_addons=True,
+        )
+        url = reverse("manage:condition-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        rows = resp.context["condition_rows"]
+        assert len(rows) >= 1
+        cat_row = next(r for r in rows if r["type_slug"] == "category-discount")
+        assert "10" in cat_row["discount"]
+        assert "All tickets" in cat_row["scope"]
+
+    def test_condition_create_get(self, client_logged_in_super, conference):
+        url = reverse(
+            "manage:condition-add",
+            kwargs={"conference_slug": conference.slug, "type_slug": "time-limit"},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is True
+        assert resp.context["condition_type_label"] == "Time/Stock Limit"
+        assert resp.context["active_nav"] == "conditions"
+
+    def test_condition_create_post(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import TimeOrStockLimitCondition
+
+        url = reverse(
+            "manage:condition-add",
+            kwargs={"conference_slug": conference.slug, "type_slug": "time-limit"},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "Flash Sale",
+                "discount_type": "percentage",
+                "discount_value": "15.00",
+                "priority": "0",
+                "is_active": "on",
+                "limit": "0",
+                "max_quantity": "0",
+            },
+        )
+        assert resp.status_code == 302
+        assert TimeOrStockLimitCondition.objects.filter(conference=conference, name="Flash Sale").exists()
+
+    def test_condition_create_invalid_type_404(self, client_logged_in_super, conference):
+        url = reverse(
+            "manage:condition-add",
+            kwargs={"conference_slug": conference.slug, "type_slug": "nonexistent"},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    def test_condition_edit_get(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import TimeOrStockLimitCondition
+
+        cond = TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Editable",
+            discount_type="percentage",
+            discount_value=Decimal("10.00"),
+        )
+        url = reverse(
+            "manage:condition-edit",
+            kwargs={
+                "conference_slug": conference.slug,
+                "type_slug": "time-limit",
+                "pk": cond.pk,
+            },
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "conditions"
+        assert resp.context["condition_type_label"] == "Time/Stock Limit"
+
+    def test_condition_edit_post(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import TimeOrStockLimitCondition
+
+        cond = TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Original",
+            discount_type="percentage",
+            discount_value=Decimal("10.00"),
+        )
+        url = reverse(
+            "manage:condition-edit",
+            kwargs={
+                "conference_slug": conference.slug,
+                "type_slug": "time-limit",
+                "pk": cond.pk,
+            },
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "Updated Name",
+                "discount_type": "fixed_amount",
+                "discount_value": "25.00",
+                "priority": "1",
+                "is_active": "on",
+                "limit": "100",
+                "max_quantity": "0",
+            },
+        )
+        assert resp.status_code == 302
+        cond.refresh_from_db()
+        assert cond.name == "Updated Name"
+        assert cond.discount_type == "fixed_amount"
+
+    def test_condition_edit_invalid_type_404(self, client_logged_in_super, conference):
+        url = reverse(
+            "manage:condition-edit",
+            kwargs={
+                "conference_slug": conference.slug,
+                "type_slug": "nonexistent",
+                "pk": 999,
+            },
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    def test_condition_list_usage_display(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import TimeOrStockLimitCondition
+
+        TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Limited",
+            discount_type="percentage",
+            discount_value=Decimal("10.00"),
+            limit=100,
+            times_used=5,
+        )
+        url = reverse("manage:condition-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        rows = resp.context["condition_rows"]
+        limited_row = next(r for r in rows if r["condition"].name == "Limited")
+        assert "5 / 100" in limited_row["usage"]
+
+    def test_condition_list_scope_all_products(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import TimeOrStockLimitCondition
+
+        TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="All Products",
+            discount_type="percentage",
+            discount_value=Decimal("5.00"),
+        )
+        url = reverse("manage:condition-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        rows = resp.context["condition_rows"]
+        row = next(r for r in rows if r["condition"].name == "All Products")
+        assert row["scope"] == "All products"
+
+    def test_condition_list_scope_specific_ticket(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import TimeOrStockLimitCondition
+
+        tt = TicketType.objects.create(conference=conference, name="VIP", slug="vip-scope", price=Decimal("200.00"))
+        cond = TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="VIP Only",
+            discount_type="percentage",
+            discount_value=Decimal("10.00"),
+        )
+        cond.applicable_ticket_types.add(tt)
+        url = reverse("manage:condition-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        rows = resp.context["condition_rows"]
+        row = next(r for r in rows if r["condition"].name == "VIP Only")
+        assert "VIP" in row["scope"]
+
+    def test_condition_list_fixed_amount_discount(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import TimeOrStockLimitCondition
+
+        TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="$15 off",
+            discount_type="fixed_amount",
+            discount_value=Decimal("15.00"),
+        )
+        url = reverse("manage:condition-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        rows = resp.context["condition_rows"]
+        row = next(r for r in rows if r["condition"].name == "$15 off")
+        assert "$15" in row["discount"]
+
+    def test_condition_list_scope_with_addons(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import TimeOrStockLimitCondition
+        from django_program.registration.models import AddOn
+
+        addon = AddOn.objects.create(
+            conference=conference,
+            name="T-Shirt",
+            slug="tshirt-scope",
+            price=Decimal("25.00"),
+        )
+        cond = TimeOrStockLimitCondition.objects.create(
+            conference=conference,
+            name="Addon Discount",
+            discount_type="percentage",
+            discount_value=Decimal("10.00"),
+        )
+        cond.applicable_addons.add(addon)
+        url = reverse("manage:condition-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        rows = resp.context["condition_rows"]
+        row = next(r for r in rows if r["condition"].name == "Addon Discount")
+        assert "T-Shirt" in row["scope"]
+
+    def test_condition_list_speaker_no_usage(self, client_logged_in_super, conference):
+        from django_program.registration.conditions import SpeakerCondition
+
+        SpeakerCondition.objects.create(
+            conference=conference,
+            name="Speaker Comp",
+            is_presenter=True,
+            discount_type="percentage",
+            discount_value=Decimal("100.00"),
+        )
+        url = reverse("manage:condition-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        rows = resp.context["condition_rows"]
+        row = next(r for r in rows if r["condition"].name == "Speaker Comp")
+        assert row["usage"] == "--"
+
+
+class TestConditionHelperFunctions:
+    """Direct tests for _describe_discount, _describe_usage, _get_condition_type_slug."""
+
+    def test_describe_discount_no_discount_type(self):
+        from django_program.manage.views import _describe_discount
+
+        class FakeCondition:
+            pass
+
+        assert _describe_discount(FakeCondition()) == "--"
+
+    def test_get_condition_type_slug_unknown(self):
+        from django_program.manage.views import _get_condition_type_slug
+
+        class FakeCondition:
+            pass
+
+        assert _get_condition_type_slug(FakeCondition()) == ""
+
+
+# ---------------------------------------------------------------------------
+# Badge Management Views
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
+class TestBadgeManageViews:
+    """Cover BadgeTemplateListView, BadgeTemplateCreateView, BadgeTemplateEditView,
+    BadgeBulkGenerateView, BadgeListView, BadgeDownloadView, BadgeBulkDownloadView,
+    and BadgePreviewView.
+    """
+
+    @pytest.fixture
+    def badge_template(self, conference):
+        from django_program.registration.badge import BadgeTemplate
+
+        return BadgeTemplate.objects.create(
+            conference=conference,
+            name="Default",
+            slug="default-badge",
+            is_default=True,
+        )
+
+    @pytest.fixture
+    def attendee_for_badge(self, conference, regular_user):
+        from django_program.registration.attendee import Attendee
+
+        return Attendee.objects.create(user=regular_user, conference=conference)
+
+    @pytest.fixture
+    def badge_with_file(self, conference, badge_template, attendee_for_badge):
+        from django_program.registration.services.badge import BadgeGenerationService
+
+        service = BadgeGenerationService()
+        return service.generate_or_get_badge(attendee_for_badge, template=badge_template, badge_format="pdf")
+
+    def test_badge_template_list(self, client_logged_in_super, conference, badge_template):
+        url = reverse(
+            "manage:badge-template-list",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "badges"
+        assert "ticket_types" in resp.context
+        assert "badge_count" in resp.context
+        assert badge_template in resp.context["badge_templates"]
+
+    def test_badge_template_create_get(self, client_logged_in_super, conference):
+        url = reverse(
+            "manage:badge-template-add",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["is_create"] is True
+        assert resp.context["active_nav"] == "badges"
+
+    def test_badge_template_create_post(self, client_logged_in_super, conference):
+        from django_program.registration.badge import BadgeTemplate
+
+        url = reverse(
+            "manage:badge-template-add",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "New Template",
+                "slug": "new-template",
+                "width_mm": "102",
+                "height_mm": "152",
+                "background_color": "#FFFFFF",
+                "text_color": "#000000",
+                "accent_color": "#4338CA",
+                "show_name": "on",
+                "show_qr_code": "on",
+                "show_conference_name": "on",
+                "show_ticket_type": "on",
+                "ticket_banner_position": "below_header",
+            },
+        )
+        assert resp.status_code == 302
+        assert BadgeTemplate.objects.filter(conference=conference, name="New Template").exists()
+
+    def test_badge_template_edit_get(self, client_logged_in_super, conference, badge_template):
+        url = reverse(
+            "manage:badge-template-edit",
+            kwargs={"conference_slug": conference.slug, "pk": badge_template.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "badges"
+
+    def test_badge_template_edit_post(self, client_logged_in_super, conference, badge_template):
+        url = reverse(
+            "manage:badge-template-edit",
+            kwargs={"conference_slug": conference.slug, "pk": badge_template.pk},
+        )
+        resp = client_logged_in_super.post(
+            url,
+            {
+                "name": "Updated Template",
+                "slug": "default-badge",
+                "width_mm": "102",
+                "height_mm": "152",
+                "background_color": "#FFFFFF",
+                "text_color": "#000000",
+                "accent_color": "#FF0000",
+                "show_name": "on",
+                "show_qr_code": "on",
+                "show_conference_name": "on",
+                "show_ticket_type": "on",
+                "ticket_banner_position": "below_header",
+            },
+        )
+        assert resp.status_code == 302
+        badge_template.refresh_from_db()
+        assert badge_template.name == "Updated Template"
+
+    def test_badge_list(self, client_logged_in_super, conference, badge_with_file):
+        url = reverse("manage:badge-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp.context["active_nav"] == "badges"
+        assert "ticket_types" in resp.context
+        assert "badge_templates" in resp.context
+        assert resp.context["total_badge_count"] >= 1
+
+    def test_badge_list_search(self, client_logged_in_super, conference, badge_with_file):
+        url = reverse("manage:badge-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"q": "regular"})
+        assert resp.status_code == 200
+        assert badge_with_file in resp.context["badges"]
+
+    def test_badge_list_format_filter(self, client_logged_in_super, conference, badge_with_file):
+        url = reverse("manage:badge-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"format": "pdf"})
+        assert resp.status_code == 200
+        assert badge_with_file in resp.context["badges"]
+
+    def test_badge_list_format_filter_no_match(self, client_logged_in_super, conference, badge_with_file):
+        url = reverse("manage:badge-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"format": "png"})
+        assert resp.status_code == 200
+        assert list(resp.context["badges"]) == []
+
+    def test_badge_download(self, client_logged_in_super, conference, badge_with_file):
+        url = reverse(
+            "manage:badge-download",
+            kwargs={"conference_slug": conference.slug, "pk": badge_with_file.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/pdf"
+        assert "attachment" in resp["Content-Disposition"]
+
+    def test_badge_download_missing_file(self, client_logged_in_super, conference, attendee_for_badge, badge_template):
+        from django_program.registration.badge import Badge
+
+        badge = Badge.objects.create(attendee=attendee_for_badge, template=badge_template, format="pdf")
+        url = reverse(
+            "manage:badge-download",
+            kwargs={"conference_slug": conference.slug, "pk": badge.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 302
+
+    def test_badge_bulk_generate(self, client_logged_in_super, conference, badge_template, attendee_for_badge):
+        url = reverse(
+            "manage:badge-bulk-generate",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.post(url, {"template_pk": badge_template.pk})
+        assert resp.status_code == 302
+
+    def test_badge_bulk_generate_with_ticket_type(
+        self, client_logged_in_super, conference, badge_template, attendee_for_badge
+    ):
+        tt = TicketType.objects.create(
+            conference=conference,
+            name="Individual",
+            slug="individual-badge",
+            price=Decimal("100.00"),
+        )
+        url = reverse(
+            "manage:badge-bulk-generate",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.post(url, {"template_pk": badge_template.pk, "ticket_type": tt.pk})
+        assert resp.status_code == 302
+
+    def test_badge_bulk_generate_invalid_format(
+        self, client_logged_in_super, conference, badge_template, attendee_for_badge
+    ):
+        url = reverse(
+            "manage:badge-bulk-generate",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.post(url, {"template_pk": badge_template.pk, "format": "invalid"})
+        assert resp.status_code == 302
+
+    def test_badge_bulk_generate_no_template(self, client_logged_in_super, conference, attendee_for_badge):
+        url = reverse(
+            "manage:badge-bulk-generate",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.post(url)
+        assert resp.status_code == 302
+
+    def test_badge_bulk_download(self, client_logged_in_super, conference, badge_with_file):
+        url = reverse(
+            "manage:badge-bulk-download",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/zip"
+        assert "attachment" in resp["Content-Disposition"]
+
+    def test_badge_list_ticket_type_filter(self, client_logged_in_super, conference, badge_with_file):
+        tt = TicketType.objects.create(
+            conference=conference,
+            name="Corporate",
+            slug="corp-badge-filter",
+            price=Decimal("500.00"),
+        )
+        url = reverse("manage:badge-list", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url, {"ticket_type": tt.pk})
+        assert resp.status_code == 200
+
+    def test_badge_bulk_download_with_filters(self, client_logged_in_super, conference, badge_with_file):
+        url = reverse(
+            "manage:badge-bulk-download",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.get(url, {"format": "pdf"})
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/zip"
+
+    def test_badge_bulk_download_with_ticket_type_filter(self, client_logged_in_super, conference, badge_with_file):
+        tt = TicketType.objects.create(
+            conference=conference,
+            name="Student",
+            slug="student-badge-dl",
+            price=Decimal("50.00"),
+        )
+        url = reverse(
+            "manage:badge-bulk-download",
+            kwargs={"conference_slug": conference.slug},
+        )
+        resp = client_logged_in_super.get(url, {"ticket_type": tt.pk})
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/zip"
+
+    def test_badge_preview(self, client_logged_in_super, conference, badge_template, attendee_for_badge):
+        url = reverse(
+            "manage:badge-template-preview",
+            kwargs={"conference_slug": conference.slug, "pk": badge_template.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/pdf"
+        assert "inline" in resp["Content-Disposition"]
+
+    def test_badge_preview_no_attendees(self, client_logged_in_super, conference, badge_template):
+        url = reverse(
+            "manage:badge-template-preview",
+            kwargs={"conference_slug": conference.slug, "pk": badge_template.pk},
+        )
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404

@@ -781,7 +781,8 @@
     }
 
     .filter-bar input[type="text"],
-    .filter-bar input[type="search"] {
+    .filter-bar input[type="search"],
+    .filter-bar input[type="date"] {
       padding: 0.45rem 0.75rem;
       border: 1px solid var(--color-border);
       border-radius: var(--radius-sm);
@@ -789,7 +790,7 @@
       font-family: var(--font-sans);
       color: var(--color-text);
       background: var(--color-surface);
-      min-width: 240px;
+      min-width: 160px;
       transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
     .filter-bar input:focus {
@@ -1105,6 +1106,11 @@
           <li>
             <a href="{% url 'manage:badge-list' conference.slug %}" class="{% if active_nav == 'badges' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="7" cy="7" r="1.5"/><path d="M9.5 10V6.5h1"/><path d="M12 10V8.5"/></svg></span> Badges
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'manage:reports-dashboard' conference.slug %}" class="{% if active_nav == 'reports' %}active{% endif %}">
+              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13V5l3-3h5l3 3v8a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><path d="M7 7h2M6 9.5h4"/></svg></span> Reports
             </a>
           </li>
         </ul>

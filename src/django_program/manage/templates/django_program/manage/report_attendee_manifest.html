@@ -1,0 +1,117 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Attendee Manifest{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Attendee Manifest
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Attendee Manifest</h1>
+<p>{{ attendee_summary.total }} registered &middot; {{ attendee_summary.checked_in }} checked in &middot; {{ attendee_summary.completed }} completed</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:report-attendee-export' conference.slug %}?ticket_type={{ current_ticket_type }}&checked_in={{ current_checked_in }}&completed={{ current_completed }}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_checkin_progress.html" with chart_data=chart_checkin_json %}
+  {% include "django_program/manage/charts/_donut.html" with chart_data=chart_ticket_dist_json chart_title="Ticket Distribution" chart_subtitle="Attendees by ticket type" chart_center="ATTENDEES" chart_id="ticket-dist" %}
+</div>
+
+<form method="get" class="filter-bar">
+  <select name="ticket_type" onchange="this.form.submit()">
+    <option value="">All Ticket Types</option>
+    {% for tt in ticket_types %}
+    <option value="{{ tt.pk }}" {% if current_ticket_type == tt.pk|stringformat:"d" %}selected{% endif %}>{{ tt.name }}</option>
+    {% endfor %}
+  </select>
+  <select name="checked_in" onchange="this.form.submit()">
+    <option value="">Check-in: All</option>
+    <option value="yes" {% if current_checked_in == "yes" %}selected{% endif %}>Checked In</option>
+    <option value="no" {% if current_checked_in == "no" %}selected{% endif %}>Not Checked In</option>
+  </select>
+  <select name="completed" onchange="this.form.submit()">
+    <option value="">Registration: All</option>
+    <option value="yes" {% if current_completed == "yes" %}selected{% endif %}>Completed</option>
+    <option value="no" {% if current_completed == "no" %}selected{% endif %}>Incomplete</option>
+  </select>
+  {% if current_ticket_type or current_checked_in or current_completed %}
+  <a href="{% url 'manage:report-attendee-manifest' conference.slug %}" class="btn btn-sm btn-secondary">Clear</a>
+  {% endif %}
+</form>
+
+{% if attendees %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Email</th>
+      <th>Ticket Type</th>
+      <th>Check-in</th>
+      <th>Access Code</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for attendee in attendees %}
+    <tr>
+      <td>
+        <a href="{% url 'manage:attendee-detail' conference.slug attendee.pk %}">
+          {{ attendee.user.get_full_name|default:attendee.user.username }}
+        </a>
+      </td>
+      <td>{{ attendee.user.email|default:"--" }}</td>
+      <td>
+        {% if attendee.ticket_descriptions %}
+          {{ attendee.ticket_descriptions }}
+        {% elif attendee.order %}
+          --
+        {% else %}
+          <span class="badge badge--inactive">None</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if attendee.checked_in_at %}
+        <span class="badge badge--active">Checked In</span>
+        <br><small style="color: var(--color-text-muted);">{{ attendee.checked_in_at|date:"M j, g:i A" }}</small>
+        {% else %}
+        <span class="badge badge--inactive">Not Checked In</span>
+        {% endif %}
+      </td>
+      <td class="mono">{{ attendee.access_code }}</td>
+      <td>
+        {% if attendee.completed_registration %}
+        <span class="badge badge--active">Complete</span>
+        {% else %}
+        <span class="badge badge--warning">Incomplete</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+
+{% else %}
+<div class="empty-state">
+  <p>No attendees found matching the current filters.</p>
+  {% if current_ticket_type or current_checked_in or current_completed %}
+  <p><a href="{% url 'manage:report-attendee-manifest' conference.slug %}" class="btn btn-sm btn-secondary">Clear Filters</a></p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

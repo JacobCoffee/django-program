@@ -1,0 +1,83 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Sales by Date{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:reports-dashboard' conference.slug %}">Reports</a>
+  <span class="breadcrumb-separator"></span>
+  Sales by Date
+</div>
+{% endblock %}
+
+{% block page_title %}
+<h1>Sales by Date</h1>
+<p>Daily ticket sales and revenue for {{ conference.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:report-sales-export' conference.slug %}?date_from={{ current_date_from }}&date_until={{ current_date_until }}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+  {% include "django_program/manage/charts/_revenue_bar.html" with chart_data=chart_sales_json %}
+  {% include "django_program/manage/charts/_cumulative_revenue.html" with chart_data=chart_cumulative_json %}
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">{{ total_orders }}</div>
+    <div class="stat-card-label">Total Orders</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ total_revenue }}</div>
+    <div class="stat-card-label">Total Revenue</div>
+  </div>
+</div>
+
+<form method="get" class="filter-bar">
+  <label for="date_from" style="font-size: 0.82rem; font-weight: 600; color: var(--color-text-secondary);">From</label>
+  <input type="date" name="date_from" id="date_from" value="{{ current_date_from }}">
+  <label for="date_until" style="font-size: 0.82rem; font-weight: 600; color: var(--color-text-secondary);">Until</label>
+  <input type="date" name="date_until" id="date_until" value="{{ current_date_until }}">
+  <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+  {% if current_date_from or current_date_until %}
+  <a href="{% url 'manage:report-sales-by-date' conference.slug %}" class="btn btn-sm btn-secondary">Clear</a>
+  {% endif %}
+</form>
+
+{% if sales_rows %}
+<table class="data-table" style="max-width: 600px;">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th style="text-align: right;">Orders</th>
+      <th style="text-align: right;">Revenue</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in sales_rows %}
+    <tr>
+      <td>{{ row.date|date:"M j, Y" }}</td>
+      <td style="text-align: right;" class="mono">{{ row.count }}</td>
+      <td style="text-align: right;" class="mono">${{ row.revenue }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No paid orders found for the selected date range.</p>
+  {% if current_date_from or current_date_until %}
+  <p><a href="{% url 'manage:report-sales-by-date' conference.slug %}" class="btn btn-sm btn-secondary">Clear Filters</a></p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

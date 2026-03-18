@@ -59,7 +59,7 @@ class AttendeeProfileBase(models.Model):
     class Meta:
         abstract = True
 
-    def save(self, *args: object, **kwargs: object) -> None:
+    def save(self, *args: object, **kwargs: object) -> None:  # pragma: no cover — abstract base
         """Auto-generate access code on first save if not already set."""
         if not self.access_code:
             self.access_code = generate_access_code()

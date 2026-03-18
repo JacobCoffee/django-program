@@ -164,3 +164,29 @@ class TestAttendeeProfileBase:
 
     def test_abstract_base_cannot_instantiate(self) -> None:
         assert AttendeeProfileBase._meta.abstract is True
+
+
+# -- Tests: generate_access_code edge cases -----------------------------------
+
+
+@pytest.mark.unit
+class TestGenerateAccessCode:
+    """Tests for generate_access_code collision handling."""
+
+    def test_runtime_error_on_exhausted_retries(self) -> None:
+        from unittest.mock import patch
+
+        from django_program.registration.attendee import generate_access_code
+
+        with patch("django_program.registration.attendee.Attendee.objects") as mock_objects:
+            mock_objects.filter.return_value.exists.return_value = True
+            with pytest.raises(RuntimeError, match="Failed to generate unique access code"):
+                generate_access_code(max_retries=3)
+
+    def test_attendee_save_auto_generates_access_code(self) -> None:
+        conf = _make_conference()
+        user = _make_user()
+        attendee = Attendee(user=user, conference=conf)
+        assert attendee.access_code == ""
+        attendee.save()
+        assert len(attendee.access_code) == 8

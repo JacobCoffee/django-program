@@ -1,0 +1,151 @@
+{# _donut.html -- Generic donut chart with palette colors #}
+{# Usage: {% include ".../_donut.html" with chart_data=json chart_title="Title" chart_subtitle="Sub" chart_center="LABEL" chart_id="unique" %} #}
+
+<div class="card card--static">
+  <div style="padding: 1.25rem 1.5rem 0.75rem; border-bottom: 1px solid var(--color-border-light);">
+    <div style="font-weight: 700; font-size: 0.95rem; color: var(--color-text);">{{ chart_title|default:"Breakdown" }}</div>
+    <div style="font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.1rem;">{{ chart_subtitle|default:"Distribution" }}</div>
+  </div>
+  <div style="padding: 1.25rem 1.5rem; display: flex; align-items: center; justify-content: center;">
+    <canvas id="chart-donut-{{ chart_id|default:'main' }}" style="width: 240px; height: 240px; display: block;"></canvas>
+    <div id="chart-donut-{{ chart_id|default:'main' }}-legend" style="margin-left: 1.5rem;"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var cid = '{{ chart_id|default:"main"|escapejs }}';
+  var canvas = document.getElementById('chart-donut-' + cid);
+  var legendEl = document.getElementById('chart-donut-' + cid + '-legend');
+  if (!canvas) return;
+  var u = window._chartUtils;
+  if (!u) return;
+  var rawData = JSON.parse('{{ chart_data|escapejs }}');
+  var centerLabel = '{{ chart_center|default:"TOTAL"|escapejs }}';
+
+  var PALETTE = ['#4338ca','#0d9488','#7c3aed','#d97706','#059669','#dc2626','#2563eb','#c026d3','#f59e0b','#06b6d4'];
+
+  var chartData = rawData.map(function(d) {
+    return { label: d.status || d.label || d.name || '', value: d.count || d.value || 0 };
+  });
+  var colors = chartData.map(function(_, i) { return PALETTE[i % PALETTE.length]; });
+
+  function drawChart() {
+    var s = u.setupCanvas(canvas);
+    var ctx = s.ctx, w = s.w, h = s.h;
+    if (!chartData.length || chartData.every(function(d) { return d.value === 0; })) {
+      u.drawEmpty(ctx, w, h, 'No data');
+      if (legendEl) legendEl.innerHTML = '';
+      return;
+    }
+
+    var cx = w / 2, cy = h / 2;
+    var outerR = Math.min(w, h) / 2 - 8;
+    var innerR = outerR * 0.62;
+    var total = chartData.reduce(function(acc, d) { return acc + d.value; }, 0);
+
+    var segments = [];
+    var cumAngle = -Math.PI / 2;
+    for (var i = 0; i < chartData.length; i++) {
+      var sweep = (chartData[i].value / total) * Math.PI * 2;
+      segments.push({ start: cumAngle, end: cumAngle + sweep, idx: i });
+      cumAngle += sweep;
+    }
+
+    function draw(t) {
+      var progress = u.easeOutQuart ? u.easeOutQuart(t) : u.easeOutCubic(t);
+      var maxAngle = -Math.PI / 2 + Math.PI * 2 * progress;
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+      ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+      ctx.fillStyle = '#f0f1f4';
+      ctx.fill();
+      ctx.restore();
+
+      for (var i = 0; i < segments.length; i++) {
+        var seg = segments[i];
+        var drawEnd = Math.min(seg.end, maxAngle);
+        if (drawEnd <= seg.start) continue;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, outerR, seg.start, drawEnd);
+        ctx.arc(cx, cy, innerR, drawEnd, seg.start, true);
+        ctx.closePath();
+        ctx.fillStyle = colors[i];
+        ctx.fill();
+        ctx.restore();
+      }
+
+      if (progress > 0.5) {
+        var a = Math.min(1, (progress - 0.5) / 0.3);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#1a1a2e';
+        ctx.font = '800 22px "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(u.formatNumber(total), cx, cy - 6);
+        ctx.fillStyle = '#8889a0';
+        ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillText(centerLabel, cx, cy + 14);
+        ctx.restore();
+      }
+    }
+
+    u.animate(900, draw, function() {
+      if (legendEl) {
+        var html = '';
+        for (var i = 0; i < chartData.length; i++) {
+          var pct = total > 0 ? Math.round(chartData[i].value / total * 100) : 0;
+          html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+            '<span style="width:10px;height:10px;border-radius:3px;background:' + colors[i] + ';flex-shrink:0;"></span>' +
+            '<span style="font-size:12px;color:#555770;min-width:80px;">' + chartData[i].label + '</span>' +
+            '<span style="font-family:\'SF Mono\',SFMono-Regular,Menlo,monospace;font-size:11px;font-weight:700;color:#1a1a2e;">' + u.formatNumber(chartData[i].value) + '</span>' +
+            '<span style="font-size:10px;color:#8889a0;">(' + pct + '%)</span>' +
+            '</div>';
+        }
+        legendEl.innerHTML = html;
+      }
+
+      canvas.addEventListener('mousemove', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left - cx;
+        var my = e.clientY - rect.top - cy;
+        var dist = Math.sqrt(mx * mx + my * my);
+        var angle = Math.atan2(my, mx);
+        if (angle < -Math.PI / 2) angle += Math.PI * 2;
+
+        if (dist >= innerR && dist <= outerR) {
+          for (var i = 0; i < segments.length; i++) {
+            if (angle >= segments[i].start && angle < segments[i].end) {
+              canvas.style.cursor = 'pointer';
+              var pct = total > 0 ? (chartData[i].value / total * 100).toFixed(1) : '0';
+              u.showTooltip(e,
+                '<div style="font-weight:700;margin-bottom:2px;">' + chartData[i].label + '</div>' +
+                '<div>Count: <strong>' + u.formatNumber(chartData[i].value) + '</strong> (' + pct + '%)</div>'
+              );
+              return;
+            }
+          }
+        }
+        canvas.style.cursor = 'default';
+        u.hideTooltip();
+      });
+      canvas.addEventListener('mouseleave', function() {
+        u.hideTooltip();
+        canvas.style.cursor = 'default';
+      });
+    });
+  }
+
+  requestAnimationFrame(drawChart);
+  window.addEventListener('resize', (function() {
+    var timer;
+    return function() { clearTimeout(timer); timer = setTimeout(drawChart, 200); };
+  })());
+})();
+</script>

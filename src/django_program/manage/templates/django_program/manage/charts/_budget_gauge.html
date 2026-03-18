@@ -1,0 +1,208 @@
+{# _budget_gauge.html -- Budget vs Actuals progress bars (pure HTML/CSS, no canvas) #}
+{# Usage: {% include ".../_budget_gauge.html" with chart_data=chart_budget_json %} #}
+
+<div class="card card--static" style="padding: 1.25rem 1.5rem;">
+  <div style="margin-bottom: 1.25rem;">
+    <strong style="font-size: 0.95rem;">Budget vs Actuals</strong><br>
+    <small style="color: var(--color-text-muted); font-size: 0.78rem;">Conference targets and progress</small>
+  </div>
+  <div id="budget-gauge-content"></div>
+  <div id="budget-gauge-summary" style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--color-border-light, #e5e7eb);"></div>
+</div>
+
+<style>
+  @keyframes budget-bar-fill {
+    from { width: 0%; }
+  }
+  @keyframes budget-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .budget-metric-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    opacity: 0;
+    animation: budget-fade-in 0.4s ease forwards;
+  }
+  .budget-metric-row + .budget-metric-row { margin-top: 1rem; }
+  .budget-metric-label {
+    min-width: 5.5rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text, #1a1a2e);
+  }
+  .budget-bar-track {
+    flex: 1;
+    height: 10px;
+    background: #f0f1f4;
+    border-radius: 5px;
+    overflow: hidden;
+    position: relative;
+  }
+  .budget-bar-fill {
+    height: 100%;
+    border-radius: 5px;
+    animation: budget-bar-fill 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    will-change: width;
+  }
+  .budget-metric-values {
+    min-width: 9rem;
+    text-align: right;
+    font-family: "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--color-text-muted, #8889a0);
+    white-space: nowrap;
+  }
+  .budget-metric-pct {
+    font-weight: 700;
+    margin-left: 0.5rem;
+  }
+  .budget-check {
+    color: #059669;
+    font-weight: 700;
+    font-size: 0.82rem;
+  }
+</style>
+
+<script>
+(function() {
+  var raw = '{{ chart_data|escapejs }}';
+  if (!raw) return;
+  var data;
+  try { data = JSON.parse(raw); } catch(e) { return; }
+  if (!data) return;
+
+  var container = document.getElementById('budget-gauge-content');
+  var summaryEl = document.getElementById('budget-gauge-summary');
+  if (!container) return;
+
+  var metrics = [];
+  if (data.revenue_target) {
+    metrics.push({
+      label: 'Revenue',
+      actual: data.revenue_actual || 0,
+      target: data.revenue_target,
+      pct: data.revenue_pct || 0,
+      gradient: 'linear-gradient(90deg, #4338ca, #6366f1)',
+      color: '#4338ca',
+      format: function(v) { return '$' + v.toLocaleString('en-US', {maximumFractionDigits: 0}); }
+    });
+  }
+  if (data.attendance_target) {
+    metrics.push({
+      label: 'Attendance',
+      actual: data.attendance_actual || 0,
+      target: data.attendance_target,
+      pct: data.attendance_pct || 0,
+      gradient: 'linear-gradient(90deg, #0d9488, #5eead4)',
+      color: '#0d9488',
+      format: function(v) { return v.toLocaleString('en-US'); }
+    });
+  }
+  if (data.grant_target) {
+    var grantActual = data.grant_committed || 0;
+    metrics.push({
+      label: 'Grants',
+      actual: grantActual,
+      target: data.grant_target,
+      pct: data.grant_pct || 0,
+      gradient: 'linear-gradient(90deg, #7c3aed, #a78bfa)',
+      color: '#7c3aed',
+      format: function(v) { return '$' + v.toLocaleString('en-US', {maximumFractionDigits: 0}); },
+      sublabel: data.grant_disbursed != null ? ('$' + data.grant_disbursed.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' disbursed') : null
+    });
+  }
+
+  if (!metrics.length) {
+    container.innerHTML = '<div style="text-align:center;color:#8889a0;font-size:0.85rem;padding:1rem 0;">No budget targets configured</div>';
+    if (summaryEl) summaryEl.style.display = 'none';
+    return;
+  }
+
+  var html = '';
+  var totalPct = 0;
+  var metricCount = 0;
+
+  for (var i = 0; i < metrics.length; i++) {
+    var m = metrics[i];
+    var cappedPct = Math.min(m.pct, 100);
+    var overTarget = m.pct > 100;
+    var delay = (i * 150) + 'ms';
+
+    totalPct += m.pct;
+    metricCount++;
+
+    html += '<div class="budget-metric-row" style="animation-delay: ' + delay + ';">';
+    html += '  <div class="budget-metric-label">' + m.label + '</div>';
+    html += '  <div class="budget-bar-track">';
+    html += '    <div class="budget-bar-fill" style="width: ' + cappedPct + '%; background: ' + m.gradient + '; animation-delay: ' + delay + ';"></div>';
+    html += '  </div>';
+    html += '  <div class="budget-metric-values">';
+    html += '    <span>' + m.format(m.actual) + ' / ' + m.format(m.target) + '</span>';
+
+    if (overTarget) {
+      html += '    <span class="budget-check"> &#10003; 100%+</span>';
+    } else {
+      html += '    <span class="budget-metric-pct" style="color: ' + m.color + ';">' + m.pct.toFixed(m.pct % 1 === 0 ? 0 : 1) + '%</span>';
+    }
+
+    html += '  </div>';
+    html += '</div>';
+
+    if (m.sublabel) {
+      html += '<div style="margin-left: 6.5rem; margin-top: 0.2rem; font-size: 0.72rem; color: #8889a0; opacity: 0; animation: budget-fade-in 0.4s ease forwards; animation-delay: ' + ((i * 150) + 100) + 'ms;">' + m.sublabel + '</div>';
+    }
+  }
+
+  container.innerHTML = html;
+
+  // Animate percentage counters
+  var pctEls = container.querySelectorAll('.budget-metric-pct');
+  var pctIdx = 0;
+  for (var i = 0; i < metrics.length; i++) {
+    if (metrics[i].pct <= 100) {
+      (function(el, target, delayMs) {
+        var start = null;
+        var duration = 800;
+        function step(ts) {
+          if (!start) start = ts;
+          var elapsed = ts - start;
+          if (elapsed < delayMs) { requestAnimationFrame(step); return; }
+          var t = Math.min((elapsed - delayMs) / duration, 1);
+          var eased = 1 - Math.pow(1 - t, 3);
+          var current = target * eased;
+          el.textContent = current.toFixed(current % 1 === 0 && t === 1 ? 0 : 1) + '%';
+          if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      })(pctEls[pctIdx], metrics[i].pct, i * 150);
+      pctIdx++;
+    }
+  }
+
+  // Summary line
+  if (summaryEl && metricCount > 0) {
+    var avgPct = totalPct / metricCount;
+    var healthColor, healthLabel;
+    if (avgPct >= 80) {
+      healthColor = '#059669';
+      healthLabel = 'On Track';
+    } else if (avgPct >= 50) {
+      healthColor = '#d97706';
+      healthLabel = 'Progressing';
+    } else {
+      healthColor = '#dc2626';
+      healthLabel = 'Behind Target';
+    }
+    summaryEl.innerHTML =
+      '<div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.78rem; opacity: 0; animation: budget-fade-in 0.4s ease forwards; animation-delay: ' + (metrics.length * 150 + 200) + 'ms;">' +
+      '  <span style="color: #8889a0;">Overall progress: <strong style="color: var(--color-text, #1a1a2e);">' + avgPct.toFixed(0) + '%</strong> avg across ' + metricCount + ' target' + (metricCount !== 1 ? 's' : '') + '</span>' +
+      '  <span style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; color: ' + healthColor + ';">' +
+      '    <span style="width: 8px; height: 8px; border-radius: 50%; background: ' + healthColor + '; display: inline-block;"></span>' +
+      '    ' + healthLabel +
+      '  </span>' +
+      '</div>';
+  }
+})();
+</script>

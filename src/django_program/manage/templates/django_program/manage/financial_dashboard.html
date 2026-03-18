@@ -13,20 +13,22 @@
 
 {% block content %}
 
+{% include "django_program/manage/charts/_chart_utils.html" %}
+
 <!-- Summary cards -->
 <div class="top-stats" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
   <div class="stat-card">
-    <div class="stat-card-value">${{ revenue.net }}</div>
+    <div class="stat-card-value">${{ revenue.net|floatformat:2 }}</div>
     <div class="stat-card-label">Net Revenue</div>
     {% if revenue.refunded %}
-    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.total }} gross</div>
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.total|floatformat:2 }} gross</div>
     {% endif %}
   </div>
   <div class="stat-card">
     <div class="stat-card-value">{{ total_orders }}</div>
     <div class="stat-card-label">Total Orders</div>
-    {% if orders_by_status.paid %}
-    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-success); font-weight: 500;">{{ orders_by_status.paid }} paid</div>
+    {% if orders_by_status.paid.count %}
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-success); font-weight: 500;">{{ orders_by_status.paid.count }} paid</div>
     {% endif %}
   </div>
   <div class="stat-card">
@@ -34,13 +36,52 @@
     <div class="stat-card-label">Active Carts</div>
   </div>
   <div class="stat-card">
-    <div class="stat-card-value">${{ revenue.credits_outstanding }}</div>
+    <div class="stat-card-value">${{ revenue.credits_outstanding|floatformat:2 }}</div>
     <div class="stat-card-label">Credits Outstanding</div>
     {% if revenue.credits_applied %}
-    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.credits_applied }} applied</div>
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-text-muted); font-weight: 500;">${{ revenue.credits_applied|floatformat:2 }} applied</div>
     {% endif %}
   </div>
 </div>
+
+<!-- Charts -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_revenue_bar.html" with chart_data=chart_sales_json %}
+  {% include "django_program/manage/charts/_ticket_inventory.html" with chart_data=chart_tickets_json %}
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_order_status.html" with chart_data=chart_orders_json %}
+  {% include "django_program/manage/charts/_payment_methods.html" with chart_data=chart_payments_json %}
+</div>
+
+{# Row 3: AOV + Revenue by type #}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_aov_line.html" with chart_data=chart_aov_json %}
+  {% include "django_program/manage/charts/_revenue_stacked.html" with chart_data=chart_rev_by_type_json %}
+</div>
+
+{# Row 4: Waterfall + Cumulative #}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_waterfall.html" with chart_data=chart_waterfall_json %}
+  {% include "django_program/manage/charts/_cumulative_revenue.html" with chart_data=chart_cumulative_json %}
+</div>
+
+{# Row 5: Discount impact + Refund gauge #}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_discount_impact.html" with chart_data=chart_discount_json %}
+  {% include "django_program/manage/charts/_refund_gauge.html" with chart_data=chart_refund_json %}
+</div>
+
+{# Row 6: Stripe fees + Budget gauge #}
+{% if chart_stripe_json %}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+  {% include "django_program/manage/charts/_stripe_fees.html" with chart_data=chart_stripe_json %}
+  {% if chart_budget_json %}
+  {% include "django_program/manage/charts/_budget_gauge.html" with chart_data=chart_budget_json %}
+  {% endif %}
+</div>
+{% endif %}
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
   <!-- Orders by Status -->
@@ -54,7 +95,7 @@
         </tr>
       </thead>
       <tbody>
-        {% for status, count in orders_by_status.items %}
+        {% for status, data in orders_by_status.items %}
         <tr>
           <td>
             {% if status == "paid" %}
@@ -71,7 +112,7 @@
             <span class="badge badge--other">{{ status }}</span>
             {% endif %}
           </td>
-          <td style="text-align: right; font-family: var(--font-mono);">{{ count }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ data.count }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -126,7 +167,7 @@
     <tr>
       <td>{{ data.label }}</td>
       <td style="text-align: right; font-family: var(--font-mono);">{{ data.count }}</td>
-      <td style="text-align: right; font-family: var(--font-mono);">${{ data.total_amount }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ data.total_amount|floatformat:2 }}</td>
     </tr>
     {% endfor %}
   </tbody>

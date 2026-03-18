@@ -43,7 +43,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "urls"
 
-import django_program  # noqa: E402
+import django_program
 
 TEMPLATES = [
     {
