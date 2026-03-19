@@ -235,6 +235,16 @@ class PaymentIntentSucceededWebhook(Webhook):
                 payment.stripe_charge_id = str(latest_charge)
                 update.append("stripe_charge_id")
             payment.save(update_fields=update)
+        elif Payment.objects.filter(
+            order=order,
+            stripe_payment_intent_id=intent_id,
+            status=Payment.Status.SUCCEEDED,
+        ).exists():
+            logger.info(
+                "payment_intent.succeeded %s already captured (terminal), skipping duplicate",
+                intent_id,
+            )
+            return
         else:
             payment_kwargs: dict[str, object] = {
                 "order": order,

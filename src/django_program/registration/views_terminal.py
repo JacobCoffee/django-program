@@ -42,11 +42,17 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_json_body(request: HttpRequest) -> dict[str, object] | None:
-    """Parse JSON from request body, returning None on failure."""
+    """Parse JSON from request body, returning None on failure.
+
+    Returns None if the body is not valid JSON or is not an object (dict).
+    """
     try:
-        return json.loads(request.body)  # type: ignore[no-any-return]
+        payload = json.loads(request.body)
     except json.JSONDecodeError, ValueError:
         return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
 
 
 def _generate_order_reference() -> str:
@@ -128,9 +134,9 @@ class CreatePaymentIntentView(StaffRequiredMixin, View):
             return result
         order, amount = result
 
-        return self._create_and_dispatch(request, reader_id, order, amount)
+        return self._create_and_dispatch(request, reader_id, order, amount, body)
 
-    def _resolve_order_and_amount(self, body: dict[str, object]) -> tuple[Order | None, Decimal] | JsonResponse:
+    def _resolve_order_and_amount(self, body: dict[str, object]) -> tuple[Order | None, Decimal] | JsonResponse:  # noqa: PLR0911
         """Resolve the order and amount from the request body."""
         order_id = body.get("order_id")
         raw_amount = body.get("amount")
@@ -143,7 +149,18 @@ class CreatePaymentIntentView(StaffRequiredMixin, View):
                 order = Order.objects.get(pk=int(order_id), conference=self.conference)  # type: ignore[arg-type]
             except Order.DoesNotExist, TypeError, ValueError:
                 return JsonResponse({"error": "Order not found"}, status=404)
-            return order, order.total
+            if order.status != Order.Status.PENDING:
+                return JsonResponse(
+                    {"error": f"Order is {order.get_status_display()}, not pending"},
+                    status=409,
+                )
+            paid = order.payments.filter(status=Payment.Status.SUCCEEDED).aggregate(total=models.Sum("amount"))[
+                "total"
+            ] or Decimal("0.00")
+            remaining = order.total - paid
+            if remaining <= 0:
+                return JsonResponse({"error": "Order is already fully paid"}, status=409)
+            return order, remaining
 
         try:
             amount = Decimal(str(raw_amount))
@@ -159,6 +176,7 @@ class CreatePaymentIntentView(StaffRequiredMixin, View):
         reader_id: str,
         order: Order | None,
         amount: Decimal,
+        body: dict[str, object] | None = None,
     ) -> JsonResponse:
         """Create PaymentIntent, dispatch to reader, and record in DB."""
         try:
@@ -188,23 +206,33 @@ class CreatePaymentIntentView(StaffRequiredMixin, View):
                 metadata=metadata,
                 description=description,
             )
-            reader_result = client.process_terminal_payment(
-                reader_id=reader_id,
-                payment_intent_id=intent.id,
-            )
+        except ValueError:
+            return JsonResponse({"error": "Invalid payment amount"}, status=400)
         except stripe.StripeError as exc:
             return _stripe_error_response(exc)
 
         with transaction.atomic():
             if order is None:
+                order_user = request.user
+                attendee_code = str((body or {}).get("attendee_access_code", "")).strip()
+                if attendee_code:
+                    try:
+                        attendee = CheckInService.lookup_attendee(
+                            conference=self.conference,
+                            access_code=attendee_code,
+                        )
+                        order_user = attendee.user
+                    except Attendee.DoesNotExist:
+                        return JsonResponse({"error": "Attendee not found"}, status=404)
+
                 order = Order.objects.create(
                     conference=self.conference,
-                    user=request.user,
+                    user=order_user,
                     status=Order.Status.PENDING,
                     subtotal=amount,
                     total=amount,
-                    billing_name=str(getattr(request.user, "get_full_name", lambda: "")()),
-                    billing_email=str(getattr(request.user, "email", "")),
+                    billing_name=str(getattr(order_user, "get_full_name", lambda: "")()),
+                    billing_email=str(getattr(order_user, "email", "")),
                     reference=_generate_order_reference(),
                 )
 
@@ -225,14 +253,6 @@ class CreatePaymentIntentView(StaffRequiredMixin, View):
                 capture_status=TerminalPayment.CaptureStatus.AUTHORIZED,
             )
 
-        reader_action = {}
-        if hasattr(reader_result, "action") and reader_result.action:
-            action = reader_result.action
-            reader_action = {
-                "status": getattr(action, "status", None),
-                "type": getattr(action, "type", None),
-            }
-
         return JsonResponse(
             {
                 "payment_intent_id": intent.id,
@@ -240,7 +260,6 @@ class CreatePaymentIntentView(StaffRequiredMixin, View):
                 "order_id": order.pk,
                 "order_reference": str(order.reference),
                 "client_secret": intent.client_secret,
-                "reader_action": reader_action,
             }
         )
 
@@ -333,7 +352,6 @@ class CancelPaymentView(StaffRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
         payment_intent_id = str(body.get("payment_intent_id", "")).strip()
-        reader_id = str(body.get("reader_id", "")).strip()
 
         if not payment_intent_id:
             return JsonResponse({"error": "payment_intent_id is required"}, status=400)
@@ -351,8 +369,9 @@ class CancelPaymentView(StaffRequiredMixin, View):
             return JsonResponse({"error": str(exc)}, status=400)
 
         try:
-            if reader_id:
-                client.cancel_reader_action(reader_id)
+            stored_reader_id = str(terminal_payment.reader_id)
+            if stored_reader_id:
+                client.cancel_reader_action(stored_reader_id)
             client.client.v1.payment_intents.cancel(payment_intent_id)
         except stripe.StripeError as exc:
             return _stripe_error_response(exc)
@@ -619,9 +638,7 @@ class CartOperationsView(StaffRequiredMixin, View):
             }
         )
 
-    def _add_cart_item(
-        self, cart: Cart, item_data: object
-    ) -> dict[str, object] | JsonResponse | None:
+    def _add_cart_item(self, cart: Cart, item_data: object) -> dict[str, object] | JsonResponse | None:
         """Process a single cart item from the request payload."""
         if not isinstance(item_data, dict):
             return None
@@ -629,7 +646,7 @@ class CartOperationsView(StaffRequiredMixin, View):
         addon_id = item_data.get("addon_id")
         try:
             quantity = int(item_data.get("quantity", 1))  # type: ignore[arg-type]
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return JsonResponse({"error": "Invalid quantity value"}, status=400)
 
         if ticket_type_id:
@@ -638,34 +655,38 @@ class CartOperationsView(StaffRequiredMixin, View):
             return self._add_addon_item(cart, addon_id, quantity)
         return None
 
-    def _add_ticket_item(
-        self, cart: Cart, ticket_type_id: object, quantity: int
-    ) -> dict[str, object] | None:
+    def _add_ticket_item(self, cart: Cart, ticket_type_id: object, quantity: int) -> dict[str, object] | None:
         """Create a ticket CartItem and return its data."""
         try:
             tt = TicketType.objects.get(pk=int(ticket_type_id), conference=self.conference)  # type: ignore[arg-type]
-        except (TicketType.DoesNotExist, TypeError, ValueError):
+        except TicketType.DoesNotExist, TypeError, ValueError:
             return None
         ci = CartItem.objects.create(cart=cart, ticket_type=tt, quantity=quantity)
         line_total = tt.price * quantity
         return {
-            "id": ci.pk, "ticket_type_id": tt.pk, "name": str(tt.name),
-            "quantity": quantity, "unit_price": str(tt.price), "line_total": str(line_total),
+            "id": ci.pk,
+            "ticket_type_id": tt.pk,
+            "name": str(tt.name),
+            "quantity": quantity,
+            "unit_price": str(tt.price),
+            "line_total": str(line_total),
         }
 
-    def _add_addon_item(
-        self, cart: Cart, addon_id: object, quantity: int
-    ) -> dict[str, object] | None:
+    def _add_addon_item(self, cart: Cart, addon_id: object, quantity: int) -> dict[str, object] | None:
         """Create an addon CartItem and return its data."""
         try:
             addon = AddOn.objects.get(pk=int(addon_id), conference=self.conference)  # type: ignore[arg-type]
-        except (AddOn.DoesNotExist, TypeError, ValueError):
+        except AddOn.DoesNotExist, TypeError, ValueError:
             return None
         ci = CartItem.objects.create(cart=cart, addon=addon, quantity=quantity)
         line_total = addon.price * quantity
         return {
-            "id": ci.pk, "addon_id": addon.pk, "name": str(addon.name),
-            "quantity": quantity, "unit_price": str(addon.price), "line_total": str(line_total),
+            "id": ci.pk,
+            "addon_id": addon.pk,
+            "name": str(addon.name),
+            "quantity": quantity,
+            "unit_price": str(addon.price),
+            "line_total": str(line_total),
         }
 
     def _handle_checkout(self, request: HttpRequest, body: dict[str, object]) -> JsonResponse:
