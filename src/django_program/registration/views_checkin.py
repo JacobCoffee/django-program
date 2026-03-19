@@ -90,12 +90,12 @@ def _serialize_line_item(item: OrderLineItem) -> dict[str, object]:
 
 
 def _get_ticket_type_name(order: Order | None) -> str:
-    """Extract the ticket type name from an order's line items."""
+    """Extract the ticket type name from an order's prefetched line items."""
     if order is None:
         return ""
-    ticket_item = order.line_items.filter(ticket_type__isnull=False).select_related("ticket_type").first()
-    if ticket_item and ticket_item.ticket_type:
-        return str(ticket_item.ticket_type.name)
+    for item in order.line_items.all():
+        if item.ticket_type is not None:
+            return str(item.ticket_type.name)
     return ""
 
 
@@ -103,7 +103,7 @@ def _parse_json_body(request: HttpRequest) -> dict[str, object] | None:
     """Parse JSON from request body, returning None on failure."""
     try:
         return json.loads(request.body)  # type: ignore[no-any-return]
-    except json.JSONDecodeError, ValueError:
+    except (json.JSONDecodeError, ValueError):
         return None
 
 
@@ -163,9 +163,7 @@ class ScanView(StaffRequiredMixin, View):
         order = attendee.order
         products = []
         if order is not None:
-            products = [
-                _serialize_line_item(item) for item in order.line_items.select_related("ticket_type", "addon").all()
-            ]
+            products = [_serialize_line_item(item) for item in order.line_items.all()]
 
         return JsonResponse(
             {
@@ -176,6 +174,7 @@ class ScanView(StaffRequiredMixin, View):
                     "ticket_type": _get_ticket_type_name(order),
                 },
                 "products": products,
+                "order_status": str(order.status) if order else None,
                 "checkin_id": checkin.pk,
                 "checked_in_at": checkin.checked_in_at.isoformat(),
             }
@@ -212,7 +211,7 @@ class LookupView(StaffRequiredMixin, View):
         products: list[dict[str, object]] = []
         redeemable: list[dict[str, object]] = []
         if order is not None:
-            line_items = list(order.line_items.select_related("ticket_type", "addon").all())
+            line_items = list(order.line_items.all())
             products = [_serialize_line_item(item) for item in line_items]
 
             redeemed_counts: dict[int, int] = {}
