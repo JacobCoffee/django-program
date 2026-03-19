@@ -1033,6 +1033,7 @@
     {% if conference %}
     <nav class="sidebar" aria-label="Conference navigation">
       {# ── Conference ── #}
+      {% if user_perms.conference %}
       <div class="sidebar-section" data-section="conference">
         <div class="sidebar-section-title">{{ conference.name }} <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
@@ -1041,18 +1042,23 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx=".5"/><rect x="9" y="2" width="5" height="5" rx=".5"/><rect x="2" y="9" width="5" height="5" rx=".5"/><rect x="9" y="9" width="5" height="5" rx=".5"/></svg></span> Dashboard
             </a>
           </li>
+          {% if user_perms.settings %}
           <li>
             <a href="{% url 'manage:conference-edit' conference.slug %}" class="{% if active_nav == 'conference-edit' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2m0 10v2M1 8h2m10 0h2M3.2 3.2l1.4 1.4m6.8 6.8l1.4 1.4M3.2 12.8l1.4-1.4m6.8-6.8l1.4-1.4"/></svg></span> Settings
             </a>
           </li>
+          {% endif %}
         </ul>
       </div>
+      {% endif %}
 
       {# ── Program ── #}
+      {% if user_perms.program or user_perms.activities or user_perms.travel_grants %}
       <div class="sidebar-section" data-section="program">
         <div class="sidebar-section-title">Program <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
+          {% if user_perms.program %}
           <li>
             <a href="{% url 'manage:section-list' conference.slug %}" class="{% if active_nav == 'sections' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 1.5 5.5 8 9l6.5-3.5L8 2z"/><path d="m1.5 8 6.5 3.5L14.5 8"/><path d="m1.5 10.5 6.5 3.5 6.5-3.5"/></svg></span> Sections
@@ -1099,23 +1105,31 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5.5 1.5v3M10.5 1.5v3"/></svg></span> Schedule
             </a>
           </li>
+          {% endif %}
+          {% if user_perms.activities %}
           <li>
             <a href="{% url 'manage:activity-list' conference.slug %}" class="{% if active_nav == 'activities' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.5 1.5L4 8.5h4l-1 6 5.5-7H8.5l1-6z"/></svg></span> Activities
             </a>
           </li>
+          {% endif %}
+          {% if user_perms.travel_grants %}
           <li>
             <a href="{% url 'manage:travel-grant-list' conference.slug %}" class="{% if active_nav == 'travel-grants' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.5 1.5l-13 5 5 2.5m8-7.5l-4.5 12-3.5-4.5m8-7.5l-8 7.5"/></svg></span> Travel Grants
             </a>
           </li>
+          {% endif %}
         </ul>
       </div>
+      {% endif %}
 
       {# ── Registration ── #}
+      {% if user_perms.registration_people or user_perms.registration_commerce or user_perms.badges %}
       <div class="sidebar-section" data-section="registration">
         <div class="sidebar-section-title">Registration <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
+          {% if user_perms.registration_people %}
           <li class="sidebar-sublabel">People</li>
           <li>
             <a href="{% url 'manage:attendee-list' conference.slug %}" class="{% if active_nav == 'attendees' %}active{% endif %}">
@@ -1132,11 +1146,15 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h10v11H3z"/><path d="M5.5 5.5h5M5.5 7.5h5M5.5 9.5h3"/><path d="M10 1v3M6 1v3"/></svg></span> Visa Letters
             </a>
           </li>
+          {% endif %}
+          {% if user_perms.badges %}
           <li>
             <a href="{% url 'manage:badge-list' conference.slug %}" class="{% if active_nav == 'badges' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="7" cy="7" r="1.5"/><path d="M9.5 10V6.5h1"/><path d="M12 10V8.5"/></svg></span> Badges
             </a>
           </li>
+          {% endif %}
+          {% if user_perms.registration_commerce %}
           <li class="sidebar-sublabel">Commerce</li>
           <li>
             <a href="{% url 'manage:ticket-type-list' conference.slug %}" class="{% if active_nav == 'ticket-types' %}active{% endif %}">
@@ -1158,15 +1176,20 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v4M8 11v4M1 8h4M11 8h4M3.05 3.05l2.83 2.83M10.12 10.12l2.83 2.83M12.95 3.05l-2.83 2.83M5.88 10.12l-2.83 2.83"/></svg></span> Conditions
             </a>
           </li>
+          {% endif %}
+          {% if user_perms.bulk_purchases %}
           <li>
             <a href="{% url 'manage:bulk-purchase-list' conference.slug %}" class="{% if active_nav == 'bulk-purchases' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="5" cy="12" r="1"/></svg></span> Bulk Purchases
             </a>
           </li>
+          {% endif %}
         </ul>
       </div>
+      {% endif %}
 
       {# ── Sponsors ── #}
+      {% if user_perms.sponsors %}
       <div class="sidebar-section" data-section="sponsors">
         <div class="sidebar-section-title">Sponsors <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
@@ -1182,8 +1205,10 @@
           </li>
         </ul>
       </div>
+      {% endif %}
 
       {# ── On-site ── #}
+      {% if user_perms.onsite %}
       <div class="sidebar-section" data-section="onsite">
         <div class="sidebar-section-title">On-site <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
@@ -1199,11 +1224,14 @@
           </li>
         </ul>
       </div>
+      {% endif %}
 
       {# ── Finance & Insights ── #}
+      {% if user_perms.finance or user_perms.reports %}
       <div class="sidebar-section" data-section="finance">
         <div class="sidebar-section-title">Finance & Insights <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
+          {% if user_perms.finance %}
           <li>
             <a href="{% url 'manage:financial-dashboard' conference.slug %}" class="{% if active_nav == 'financial' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14h12M4 10h2v4H4zM7 7h2v7H7zM10 4h2v10h-2z"/></svg></span> Financial
@@ -1214,6 +1242,8 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4z"/><path d="M6 5h4M6 7.5h4M6 10h2.5"/><path d="M2 4v10h10"/></svg></span> Expenses
             </a>
           </li>
+          {% endif %}
+          {% if user_perms.reports %}
           <li>
             <a href="{% url 'manage:analytics-dashboard' conference.slug %}" class="{% if active_nav == 'analytics' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14h12M3 11h2v3H3zM6.5 8h2v6h-2zM10 5h2v9h-2z"/><circle cx="4" cy="5" r="1"/><circle cx="8" cy="3" r="1"/><circle cx="12" cy="1.5" r="1"/><path d="M4.8 4.5L7.2 3.5M8.8 2.5L11.2 1.8"/></svg></span> Analytics
@@ -1224,10 +1254,13 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13V5l3-3h5l3 3v8a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><path d="M7 7h2M6 9.5h4"/></svg></span> Reports
             </a>
           </li>
+          {% endif %}
         </ul>
       </div>
+      {% endif %}
 
       {# ── Sync & Overrides (utility) ── #}
+      {% if user_perms.overrides or user_perms.settings %}
       <hr class="sidebar-utility-separator">
       <div class="sidebar-section" data-section="sync-overrides">
         <div class="sidebar-section-title">Sync & Overrides <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
@@ -1251,6 +1284,7 @@
           </li>
         </ul>
       </div>
+      {% endif %}
     </nav>
     {% endif %}
 
