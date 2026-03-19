@@ -163,6 +163,8 @@ class TestWebhookRegistry:
             "payment_intent.payment_failed",
             "charge.refunded",
             "charge.dispute.created",
+            "checkout.session.completed",
+            "checkout.session.expired",
         }
         assert set(registry.keys()) == expected
 

@@ -1,0 +1,216 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Bulk Deal #{{ purchase.pk }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:bulk-purchase-list' conference.slug %}">Bulk Deals</a>
+  <span class="breadcrumb-separator"></span>
+  <span>#{{ purchase.pk }}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Bulk Deal #{{ purchase.pk }}</h1>
+<p>{% if purchase.product_description %}{{ purchase.product_description }}{% endif %}</p>
+{% endblock %}
+
+{% block content %}
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Sponsor</div>
+    <div class="info-item-value">{% if purchase.sponsor %}{{ purchase.sponsor.name }}{% else %}--{% endif %}</div>
+  </div>
+  {% if purchase.ticket_type %}
+  <div class="info-item">
+    <div class="info-item-label">Ticket Type</div>
+    <div class="info-item-value">{{ purchase.ticket_type.name }}</div>
+  </div>
+  {% endif %}
+  {% if purchase.addon %}
+  <div class="info-item">
+    <div class="info-item-label">Add-on</div>
+    <div class="info-item-value">{{ purchase.addon.name }}</div>
+  </div>
+  {% endif %}
+  {% if purchase.product_description %}
+  <div class="info-item">
+    <div class="info-item-label">Deal Name</div>
+    <div class="info-item-value">{{ purchase.product_description }}</div>
+  </div>
+  {% endif %}
+  <div class="info-item">
+    <div class="info-item-label">Number of Codes</div>
+    <div class="info-item-value">{{ purchase.quantity }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Price per Unit</div>
+    <div class="info-item-value">${{ purchase.unit_price }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Total Amount</div>
+    <div class="info-item-value" style="font-weight: 700;">${{ purchase.total_amount }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Payment Status</div>
+    <div class="info-item-value">
+      {% if purchase.payment_status == "paid" %}
+      <span class="badge badge--active">Paid</span>
+      {% elif purchase.payment_status == "approved" %}
+      <span class="badge badge--accepted">Approved</span>
+      {% elif purchase.payment_status == "pending" %}
+      <span class="badge badge--warning">Pending</span>
+      {% elif purchase.payment_status == "processing" %}
+      <span class="badge badge--warning">Processing</span>
+      {% elif purchase.payment_status == "failed" %}
+      <span class="badge badge--inactive">Failed</span>
+      {% elif purchase.payment_status == "refunded" %}
+      <span class="badge badge--other">Refunded</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Fulfilled</div>
+    <div class="info-item-value">
+      {% if purchase.is_fulfilled %}
+      <span class="badge badge--active">Yes</span>
+      {% else %}
+      {{ purchase.vouchers_generated }} / {{ purchase.quantity }}
+      {% endif %}
+    </div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Requested By</div>
+    <div class="info-item-value">{% if purchase.requested_by %}{{ purchase.requested_by.get_full_name|default:purchase.requested_by.username }}{% else %}--{% endif %}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Approved By</div>
+    <div class="info-item-value">{% if purchase.approved_by %}{{ purchase.approved_by.get_full_name|default:purchase.approved_by.username }}{% else %}--{% endif %}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Created</div>
+    <div class="info-item-value">{{ purchase.created_at|date:"N j, Y, P" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Updated</div>
+    <div class="info-item-value">{{ purchase.updated_at|date:"N j, Y, P" }}</div>
+  </div>
+</div>
+
+{% if purchase.voucher_config %}
+<h2 class="section-heading">Voucher Configuration</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  {% with vc=purchase.voucher_config %}
+  <div class="info-item">
+    <div class="info-item-label">Discount Type</div>
+    <div class="info-item-value">
+      {% if vc.voucher_type == "comp" %}Complimentary (100% off)
+      {% elif vc.voucher_type == "percentage" %}Percentage discount
+      {% elif vc.voucher_type == "fixed_amount" %}Fixed amount off
+      {% else %}{{ vc.voucher_type|default:"--" }}
+      {% endif %}
+    </div>
+  </div>
+  {% if vc.voucher_type != "comp" %}
+  <div class="info-item">
+    <div class="info-item-label">Discount Amount</div>
+    <div class="info-item-value">
+      {% if vc.voucher_type == "percentage" %}{{ vc.discount_value }}%
+      {% elif vc.voucher_type == "fixed_amount" %}&dollar;{{ vc.discount_value }}
+      {% else %}{{ vc.discount_value|default:"0" }}
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  <div class="info-item">
+    <div class="info-item-label">Uses per Code</div>
+    <div class="info-item-value">{{ vc.max_uses|default:"1" }}</div>
+  </div>
+  {% if vc.valid_from %}
+  <div class="info-item">
+    <div class="info-item-label">Valid From</div>
+    <div class="info-item-value">{{ vc.valid_from }}</div>
+  </div>
+  {% endif %}
+  {% if vc.valid_until %}
+  <div class="info-item">
+    <div class="info-item-label">Valid Until</div>
+    <div class="info-item-value">{{ vc.valid_until }}</div>
+  </div>
+  {% endif %}
+  {% endwith %}
+</div>
+{% endif %}
+
+<div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 2rem;">
+  {% if purchase.payment_status == "pending" %}
+  <form method="post" action="{% url 'manage:bulk-purchase-approve' conference.slug purchase.pk %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary" onclick="return confirm('Approve this bulk deal?');">Approve</button>
+  </form>
+  <span style="font-size: 0.82rem; color: var(--color-text-muted);">Approving marks this deal as ready. You can then mark it paid and generate voucher codes.</span>
+  {% endif %}
+
+  {% if purchase.payment_status == "approved" and not purchase.is_fulfilled %}
+  <form method="post" action="{% url 'manage:bulk-purchase-fulfill' conference.slug purchase.pk %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary" onclick="return confirm('Generate {{ purchase.quantity }} voucher codes?');">Generate Vouchers</button>
+  </form>
+  <span style="font-size: 0.82rem; color: var(--color-text-muted);">This will create {{ purchase.quantity }} unique voucher codes using the configuration above.</span>
+  {% endif %}
+
+  {% if purchase.payment_status == "paid" and not purchase.is_fulfilled %}
+  <form method="post" action="{% url 'manage:bulk-purchase-fulfill' conference.slug purchase.pk %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary" onclick="return confirm('Generate {{ purchase.quantity }} voucher codes?');">Generate Vouchers</button>
+  </form>
+  <span style="font-size: 0.82rem; color: var(--color-text-muted);">This will create {{ purchase.quantity }} unique voucher codes using the configuration above.</span>
+  {% endif %}
+
+  <a href="{% url 'manage:bulk-purchase-list' conference.slug %}" class="btn btn-secondary">Back to List</a>
+</div>
+
+{% if voucher_links %}
+<h2 class="section-heading">Generated Voucher Codes</h2>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Type</th>
+      <th>Discount</th>
+      <th>Uses</th>
+      <th>Status</th>
+      <th>Generated</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for link in voucher_links %}
+    <tr>
+      <td class="mono">{{ link.voucher.code }}</td>
+      <td>{{ link.voucher.get_voucher_type_display }}</td>
+      <td>
+        {% if link.voucher.voucher_type == "comp" %}
+        100% off
+        {% elif link.voucher.voucher_type == "percentage" %}
+        {{ link.voucher.discount_value }}% off
+        {% elif link.voucher.voucher_type == "fixed_amount" %}
+        ${{ link.voucher.discount_value }} off
+        {% endif %}
+      </td>
+      <td>{{ link.voucher.times_used }} / {{ link.voucher.max_uses }}</td>
+      <td>
+        {% if link.voucher.is_active %}
+        <span class="badge badge--active">Active</span>
+        {% else %}
+        <span class="badge badge--inactive">Inactive</span>
+        {% endif %}
+      </td>
+      <td>{{ link.created_at|date:"M j, Y g:i A" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

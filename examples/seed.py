@@ -47,7 +47,7 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
-from django_program.sponsors.models import Sponsor, SponsorBenefit, SponsorLevel
+from django_program.sponsors.models import BulkPurchase, BulkPurchaseVoucher, Sponsor, SponsorBenefit, SponsorLevel
 
 User = get_user_model()
 
@@ -103,31 +103,34 @@ BIOS = [
 # fmt: on
 
 TICKET_TYPES = [
-    ("Early Bird", "early-bird", Decimal("199.00"), 100),
-    ("Regular", "regular", Decimal("349.00"), 200),
-    ("Student", "student", Decimal("99.00"), 50),
-    ("Corporate", "corporate", Decimal("599.00"), 75),
-    ("Speaker", "speaker", Decimal("0.00"), 30),
+    # (name, slug, price, quantity, bulk_enabled, available_from_offset_days, available_until_offset_days)
+    ("Early Bird", "early-bird", Decimal("199.00"), 100, False, -90, -14),
+    ("Regular", "regular", Decimal("349.00"), 200, True, -14, 60),
+    ("Student", "student", Decimal("99.00"), 50, False, -60, 60),
+    ("Corporate", "corporate", Decimal("599.00"), 75, True, -30, 45),
+    ("Speaker", "speaker", Decimal("0.00"), 30, False, None, None),
 ]
 
 ADDONS = [
-    ("Tutorial Day Pass", "tutorial", Decimal("150.00")),
-    ("Conference T-Shirt", "t-shirt", Decimal("35.00")),
-    ("Catered Lunch (3 days)", "lunch", Decimal("75.00")),
-    ("Sprints Workshop", "workshop", Decimal("50.00")),
+    # (name, slug, price, bulk_enabled)
+    ("Tutorial Day Pass", "tutorial", Decimal("150.00"), True),
+    ("Conference T-Shirt", "t-shirt", Decimal("35.00"), True),
+    ("Catered Lunch (3 days)", "lunch", Decimal("75.00"), False),
+    ("Sprints Workshop", "workshop", Decimal("50.00"), True),
 ]
 
 VOUCHER_DEFS = [
-    ("SPEAKER2027", "comp", Decimal(0), 30, 18),
-    ("EARLY20", "percentage", Decimal(20), 50, 37),
-    ("SPONSOR50", "fixed_amount", Decimal(50), 20, 14),
-    ("VOLUNTEER", "comp", Decimal(0), 15, 12),
-    ("STUDENT10", "percentage", Decimal(10), 100, 61),
-    ("FLASH25", "fixed_amount", Decimal(25), 10, 10),
-    ("PYLADIES", "comp", Decimal(0), 20, 9),
-    ("CORP-BULK", "percentage", Decimal(15), 30, 22),
-    ("TUTORIAL-FREE", "comp", Decimal(0), 10, 7),
-    ("RETURNING", "fixed_amount", Decimal(75), 40, 28),
+    # (code, type, value, max_uses, times_used, unlocks_hidden, valid_from_offset, valid_until_offset)
+    ("SPEAKER2027", "comp", Decimal(0), 30, 18, True, -60, 60),
+    ("EARLY20", "percentage", Decimal(20), 50, 37, False, -90, -14),
+    ("SPONSOR50", "fixed_amount", Decimal(50), 20, 14, False, -30, 45),
+    ("VOLUNTEER", "comp", Decimal(0), 15, 12, True, -30, 60),
+    ("STUDENT10", "percentage", Decimal(10), 100, 61, False, -60, 60),
+    ("FLASH25", "fixed_amount", Decimal(25), 10, 10, False, -7, 0),
+    ("PYLADIES", "comp", Decimal(0), 20, 9, True, -45, 60),
+    ("CORP-BULK", "percentage", Decimal(15), 30, 22, False, -30, 30),
+    ("TUTORIAL-FREE", "comp", Decimal(0), 10, 7, True, -14, 60),
+    ("RETURNING", "fixed_amount", Decimal(75), 40, 28, False, -60, 30),
 ]
 
 
@@ -174,6 +177,7 @@ class Seeder:
         self._create_surveys(conference, users)
         self._create_travel_grants(conference, users)
         self._create_more_carts(conference, users, ticket_types, addons)
+        self._create_bulk_purchases(conference, sponsors, ticket_types, addons, users)
 
         n_attendees = Attendee.objects.filter(conference=conference).count()
         n_orders = Order.objects.filter(conference=conference).count()
@@ -196,6 +200,7 @@ class Seeder:
         print(f"  Activities: {Activity.objects.filter(conference=conference).count()}")
         print(f"  Travel grants: {TravelGrant.objects.filter(conference=conference).count()}")
         print(f"  Surveys: {Survey.objects.filter(conference=conference).count()}")
+        print(f"  Bulk purchases: {BulkPurchase.objects.filter(conference=conference).count()}")
         for prev_conf in prev_conferences:
             prev_att = Attendee.objects.filter(conference=prev_conf).count()
             prev_talks = Talk.objects.filter(conference=prev_conf).count()
@@ -256,20 +261,40 @@ class Seeder:
         existing = list(TicketType.objects.filter(conference=conference).order_by("order"))
         if existing:
             return existing
+        now = timezone.now()
         result = []
-        for idx, (name, slug, price, qty) in enumerate(TICKET_TYPES):
-            tt, _ = TicketType.objects.get_or_create(
+        for idx, (name, slug, price, qty, bulk, from_off, until_off) in enumerate(TICKET_TYPES):
+            defaults: dict[str, object] = {
+                "name": name,
+                "price": price,
+                "total_quantity": qty,
+                "order": idx,
+                "is_active": True,
+                "requires_voucher": slug == "speaker",
+                "bulk_enabled": bulk,
+            }
+            if from_off is not None:
+                defaults["available_from"] = now + datetime.timedelta(days=from_off)
+            if until_off is not None:
+                defaults["available_until"] = now + datetime.timedelta(days=until_off)
+            tt, created = TicketType.objects.get_or_create(
                 conference=conference,
                 slug=slug,
-                defaults={
-                    "name": name,
-                    "price": price,
-                    "total_quantity": qty,
-                    "order": idx,
-                    "is_active": True,
-                    "requires_voucher": slug == "speaker",
-                },
+                defaults=defaults,
             )
+            if not created:
+                update_fields = []
+                if tt.bulk_enabled != bulk:
+                    tt.bulk_enabled = bulk
+                    update_fields.append("bulk_enabled")
+                if not tt.available_from and from_off is not None:
+                    tt.available_from = now + datetime.timedelta(days=from_off)
+                    update_fields.append("available_from")
+                if not tt.available_until and until_off is not None:
+                    tt.available_until = now + datetime.timedelta(days=until_off)
+                    update_fields.append("available_until")
+                if update_fields:
+                    tt.save(update_fields=update_fields)
             result.append(tt)
         return result
 
@@ -279,19 +304,25 @@ class Seeder:
         if existing:
             return existing
         result = []
-        for idx, (name, slug, price) in enumerate(ADDONS):
-            addon, _ = AddOn.objects.get_or_create(
+        for idx, (name, slug, price, bulk) in enumerate(ADDONS):
+            addon, created = AddOn.objects.get_or_create(
                 conference=conference,
                 slug=slug,
-                defaults={"name": name, "price": price, "order": idx, "is_active": True},
+                defaults={"name": name, "price": price, "order": idx, "is_active": True, "bulk_enabled": bulk},
             )
+            if not created and addon.bulk_enabled != bulk:
+                addon.bulk_enabled = bulk
+                addon.save(update_fields=["bulk_enabled"])
             result.append(addon)
         return result
 
     def _create_vouchers(self, conference: Conference) -> list[Voucher]:
-        """Create vouchers with realistic usage counts."""
+        """Create vouchers with realistic usage counts and validity windows."""
+        now = timezone.now()
         result = []
-        for code, vtype, value, max_uses, times_used in VOUCHER_DEFS:
+        for code, vtype, value, max_uses, times_used, unlocks, from_off, until_off in VOUCHER_DEFS:
+            valid_from = now + datetime.timedelta(days=from_off) if from_off is not None else None
+            valid_until = now + datetime.timedelta(days=until_off) if until_off is not None else None
             voucher, created = Voucher.objects.get_or_create(
                 conference=conference,
                 code=code,
@@ -301,11 +332,24 @@ class Seeder:
                     "max_uses": max_uses,
                     "times_used": times_used,
                     "is_active": True,
+                    "unlocks_hidden_tickets": unlocks,
+                    "valid_from": valid_from,
+                    "valid_until": valid_until,
                 },
             )
             if not created:
+                update_fields = ["times_used"]
                 voucher.times_used = times_used
-                voucher.save(update_fields=["times_used"])
+                if not voucher.unlocks_hidden_tickets and unlocks:
+                    voucher.unlocks_hidden_tickets = unlocks
+                    update_fields.append("unlocks_hidden_tickets")
+                if not voucher.valid_from and valid_from:
+                    voucher.valid_from = valid_from
+                    update_fields.append("valid_from")
+                if not voucher.valid_until and valid_until:
+                    voucher.valid_until = valid_until
+                    update_fields.append("valid_until")
+                voucher.save(update_fields=update_fields)
             result.append(voucher)
         return result
 
@@ -1313,6 +1357,164 @@ class Seeder:
                 CartItem.objects.create(cart=cart, ticket_type=self.rng.choice(ticket_types), quantity=1)
                 if addons and self.rng.random() < 0.4:
                     CartItem.objects.create(cart=cart, addon=self.rng.choice(addons), quantity=1)
+
+    def _create_bulk_purchases(
+        self,
+        conference: Conference,
+        sponsors: list[Sponsor],
+        ticket_types: list[TicketType],
+        addons: list[AddOn],
+        users: list,
+    ) -> None:
+        """Create bulk purchase deals in various states."""
+        from django_program.registration.services.voucher_service import VoucherBulkConfig, generate_voucher_codes
+
+        admin = User.objects.filter(is_superuser=True).first()
+        bulk_tickets = [t for t in ticket_types if t.bulk_enabled]
+        bulk_addons = [a for a in addons if a.bulk_enabled]
+
+        if not bulk_tickets and not bulk_addons:
+            return
+
+        # 1. Fulfilled sponsor deal — 20 corporate tickets at 15% off (PAID + vouchers generated)
+        if sponsors and bulk_tickets:
+            bp1, created = BulkPurchase.objects.get_or_create(
+                conference=conference,
+                product_description="MegaCorp Employee Tickets",
+                defaults={
+                    "sponsor": sponsors[0],
+                    "ticket_type": bulk_tickets[0],
+                    "quantity": 20,
+                    "unit_price": bulk_tickets[0].price,
+                    "total_amount": bulk_tickets[0].price * 20,
+                    "payment_status": BulkPurchase.PaymentStatus.PAID,
+                    "requested_by": admin,
+                    "approved_by": admin,
+                    "voucher_config": {
+                        "voucher_type": "percentage",
+                        "discount_value": "15",
+                        "max_uses": 1,
+                    },
+                },
+            )
+            if created:
+                config = VoucherBulkConfig(
+                    conference=conference,
+                    prefix="MEGA-CORP-",
+                    count=20,
+                    voucher_type="percentage",
+                    discount_value=Decimal(15),
+                    max_uses=1,
+                )
+                vouchers = generate_voucher_codes(config)
+                for v in vouchers:
+                    BulkPurchaseVoucher.objects.get_or_create(bulk_purchase=bp1, voucher=v)
+                # Mark some as used
+                for v in vouchers[:12]:
+                    v.times_used = 1
+                    v.save(update_fields=["times_used"])
+
+        # 2. T-shirt bulk deal — no sponsor, 50 shirts at $5 off (PAID + fulfilled)
+        tshirt = next((a for a in bulk_addons if a.slug == "t-shirt"), None)
+        if tshirt:
+            bp2, created = BulkPurchase.objects.get_or_create(
+                conference=conference,
+                product_description="Staff T-Shirt Pack",
+                defaults={
+                    "addon": tshirt,
+                    "quantity": 50,
+                    "unit_price": tshirt.price,
+                    "total_amount": tshirt.price * 50,
+                    "payment_status": BulkPurchase.PaymentStatus.PAID,
+                    "requested_by": admin,
+                    "approved_by": admin,
+                    "voucher_config": {
+                        "voucher_type": "fixed_amount",
+                        "discount_value": "5",
+                        "max_uses": 1,
+                    },
+                },
+            )
+            if created:
+                config = VoucherBulkConfig(
+                    conference=conference,
+                    prefix="TSHIRT-",
+                    count=50,
+                    voucher_type="fixed_amount",
+                    discount_value=Decimal(5),
+                    max_uses=1,
+                )
+                vouchers = generate_voucher_codes(config)
+                for v in vouchers:
+                    BulkPurchaseVoucher.objects.get_or_create(bulk_purchase=bp2, voucher=v)
+
+        # 3. Tutorial bundle — sponsor deal, pending approval
+        tutorial = next((a for a in bulk_addons if a.slug == "tutorial"), None)
+        if sponsors and tutorial:
+            BulkPurchase.objects.get_or_create(
+                conference=conference,
+                product_description="DataFlow Tutorial Bundle",
+                defaults={
+                    "sponsor": sponsors[2] if len(sponsors) > 2 else sponsors[0],
+                    "addon": tutorial,
+                    "quantity": 10,
+                    "unit_price": tutorial.price,
+                    "total_amount": tutorial.price * 10,
+                    "payment_status": BulkPurchase.PaymentStatus.PENDING,
+                    "requested_by": users[5] if len(users) > 5 else None,
+                    "voucher_config": {
+                        "voucher_type": "comp",
+                        "discount_value": "0",
+                        "max_uses": 1,
+                    },
+                },
+            )
+
+        # 4. Approved but not yet fulfilled — workshop bulk
+        workshop = next((a for a in bulk_addons if a.slug == "workshop"), None)
+        if workshop:
+            BulkPurchase.objects.get_or_create(
+                conference=conference,
+                product_description="Community Sprint Passes",
+                defaults={
+                    "addon": workshop,
+                    "quantity": 15,
+                    "unit_price": Decimal("0.00"),
+                    "total_amount": Decimal("0.00"),
+                    "payment_status": BulkPurchase.PaymentStatus.APPROVED,
+                    "requested_by": admin,
+                    "approved_by": admin,
+                    "voucher_config": {
+                        "voucher_type": "comp",
+                        "discount_value": "0",
+                        "max_uses": 1,
+                    },
+                },
+            )
+
+        # 5. Corporate ticket comp — 5 free tickets for a platinum sponsor
+        if len(sponsors) > 3 and bulk_tickets:
+            BulkPurchase.objects.get_or_create(
+                conference=conference,
+                product_description="PyStack Comp Tickets",
+                defaults={
+                    "sponsor": sponsors[3],
+                    "ticket_type": bulk_tickets[0],
+                    "quantity": 5,
+                    "unit_price": Decimal("0.00"),
+                    "total_amount": Decimal("0.00"),
+                    "payment_status": BulkPurchase.PaymentStatus.PAID,
+                    "requested_by": admin,
+                    "approved_by": admin,
+                    "voucher_config": {
+                        "voucher_type": "comp",
+                        "discount_value": "0",
+                        "max_uses": 1,
+                    },
+                },
+            )
+
+        print(f"  Bulk purchases: {BulkPurchase.objects.filter(conference=conference).count()}")
 
 
 if __name__ == "__main__":

@@ -272,6 +272,8 @@ urlpatterns = [
         BadgeDownloadView.as_view(),
         name="badge-download",
     ),
+    # --- Bulk Purchases ---
+    path("<slug:conference_slug>/bulk-purchases/", include("django_program.manage.urls_bulk_purchases")),
     # --- Voucher Bulk Generation ---
     path("<slug:conference_slug>/vouchers/bulk/", include("django_program.manage.urls_vouchers")),
     # --- Financial Dashboard ---

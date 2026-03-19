@@ -1,0 +1,114 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Bulk Deals{% endblock %}
+
+{% block page_title %}
+<h1>Bulk Deals</h1>
+<p>Bulk deals for tickets, add-ons, and sponsor codes</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:bulk-purchase-add' conference.slug %}" class="btn btn-primary">New Bulk Deal</a>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+  <form method="get" style="display: flex; align-items: center; gap: 0.75rem;">
+    <label for="status-filter" style="font-size: 0.82rem; font-weight: 600; color: var(--color-text-secondary);">Filter by status:</label>
+    <select id="status-filter" name="status" onchange="this.form.submit();" style="padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.88rem;">
+      <option value="">All</option>
+      {% for value, label in status_choices %}
+      <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+{% if bulk_purchases %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Product</th>
+      <th>Sponsor</th>
+      <th>Qty</th>
+      <th>Discount</th>
+      <th style="text-align: right;">Unit Price</th>
+      <th style="text-align: right;">Total</th>
+      <th>Status</th>
+      <th>Fulfilled</th>
+      <th>Created</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for purchase in bulk_purchases %}
+    <tr>
+      <td>{{ purchase.pk }}</td>
+      <td>
+        {% if purchase.ticket_type %}
+          <span class="badge badge--talk" style="margin-right: 0.25rem;">Ticket</span>{{ purchase.ticket_type.name }}
+        {% elif purchase.addon %}
+          <span class="badge badge--other" style="margin-right: 0.25rem;">Add-on</span>{{ purchase.addon.name }}
+        {% elif purchase.product_description %}
+          {{ purchase.product_description }}
+        {% else %}
+          <span style="color: var(--color-text-muted);">--</span>
+        {% endif %}
+      </td>
+      <td>{% if purchase.sponsor %}{{ purchase.sponsor.name }}{% else %}<span style="color: var(--color-text-muted);">--</span>{% endif %}</td>
+      <td>{{ purchase.quantity }}</td>
+      <td>
+        {% with vc=purchase.voucher_config %}
+          {% if vc.voucher_type == "comp" %}
+            <span class="badge badge--active">Comp</span>
+          {% elif vc.voucher_type == "percentage" %}
+            {{ vc.discount_value }}% off
+          {% elif vc.voucher_type == "fixed_amount" %}
+            ${{ vc.discount_value }} off
+          {% else %}
+            <span style="color: var(--color-text-muted);">--</span>
+          {% endif %}
+        {% endwith %}
+      </td>
+      <td style="text-align: right;">${{ purchase.unit_price }}</td>
+      <td style="text-align: right;">${{ purchase.total_amount }}</td>
+      <td>
+        {% if purchase.payment_status == "paid" %}
+        <span class="badge badge--active">Paid</span>
+        {% elif purchase.payment_status == "approved" %}
+        <span class="badge badge--accepted">Approved</span>
+        {% elif purchase.payment_status == "pending" %}
+        <span class="badge badge--warning">Pending</span>
+        {% elif purchase.payment_status == "processing" %}
+        <span class="badge badge--warning">Processing</span>
+        {% elif purchase.payment_status == "failed" %}
+        <span class="badge badge--inactive">Failed</span>
+        {% elif purchase.payment_status == "refunded" %}
+        <span class="badge badge--other">Refunded</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if purchase.is_fulfilled %}
+        <span class="badge badge--active">Yes</span>
+        {% else %}
+        {{ purchase.vouchers_generated }} / {{ purchase.quantity }}
+        {% endif %}
+      </td>
+      <td>{{ purchase.created_at|date:"M j, Y" }}</td>
+      <td>
+        <a href="{% url 'manage:bulk-purchase-detail' conference.slug purchase.pk %}" class="btn btn-sm btn-secondary">View</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+{% else %}
+<div class="empty-state">
+  <p>No bulk deals{% if current_status %} with status "{{ current_status }}"{% endif %} for this conference yet.</p>
+  <p><a href="{% url 'manage:bulk-purchase-add' conference.slug %}" class="btn btn-primary">Create First Bulk Deal</a></p>
+</div>
+{% endif %}
+{% endblock %}

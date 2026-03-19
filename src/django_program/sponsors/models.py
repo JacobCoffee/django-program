@@ -1,9 +1,14 @@
-"""Sponsor level, sponsor, and benefit models for django-program."""
+"""Sponsor level, sponsor, benefit, and bulk purchase models for django-program."""
+
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
+
+if TYPE_CHECKING:
+    from decimal import Decimal
 
 from django_program.pretalx.models import AbstractOverride
 
@@ -318,3 +323,159 @@ class SponsorBenefit(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} - {self.sponsor.name}"
+
+
+class BulkPurchase(models.Model):
+    """Tracks a sponsor's bulk voucher purchase order.
+
+    Represents a request by a sponsor to purchase a batch of voucher codes
+    (e.g. discounted or comp tickets for employees/clients). Stores the
+    payment lifecycle, Stripe references, and the voucher generation
+    configuration used when the purchase is fulfilled.
+    """
+
+    class PaymentStatus(models.TextChoices):
+        """Payment lifecycle states for a bulk purchase."""
+
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        PROCESSING = "processing", "Processing"
+        PAID = "paid", "Paid"
+        FAILED = "failed", "Failed"
+        REFUNDED = "refunded", "Refunded"
+
+    conference = models.ForeignKey(
+        "program_conference.Conference",
+        on_delete=models.CASCADE,
+        related_name="bulk_purchases",
+    )
+    sponsor = models.ForeignKey(
+        Sponsor,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bulk_purchases",
+        help_text="The sponsor this deal is for (leave blank for non-sponsor deals).",
+    )
+    quantity = models.PositiveIntegerField(
+        help_text="Number of voucher codes to generate.",
+    )
+    product_description = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        help_text="Description of the ticket type or product this purchase covers.",
+    )
+    ticket_type = models.ForeignKey(
+        "program_registration.TicketType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bulk_purchases",
+        help_text="Optional link to the ticket type these vouchers are for.",
+    )
+    addon = models.ForeignKey(
+        "program_registration.AddOn",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bulk_purchases",
+        help_text="Optional link to the add-on these vouchers are for (shirts, tutorials, etc.).",
+    )
+    payment_status = models.CharField(
+        max_length=20,
+        choices=PaymentStatus.choices,
+        default=PaymentStatus.PENDING,
+    )
+    stripe_payment_intent_id = models.CharField(max_length=200, blank=True, default="")
+    stripe_checkout_session_id = models.CharField(max_length=200, blank=True, default="")
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    voucher_config = models.JSONField(
+        default=dict,
+        help_text=("Voucher generation parameters: voucher_type, discount_value, max_uses, valid_from, valid_until."),
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_bulk_purchases",
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_bulk_purchases",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        sponsor_name = self.sponsor.name if self.sponsor else "No sponsor"
+        return f"BulkPurchase #{self.pk} - {sponsor_name} x{self.quantity}"
+
+    def clean(self) -> None:
+        """Validate sponsor/conference consistency and bulk eligibility."""
+        if self.sponsor_id and self.conference_id and self.sponsor.conference_id != self.conference_id:
+            msg = "Sponsor must belong to the same conference as the bulk purchase."
+            raise ValidationError({"sponsor": msg})
+        if self.ticket_type_id and self.conference_id and self.ticket_type.conference_id != self.conference_id:
+            msg = "Ticket type must belong to the same conference as the bulk purchase."
+            raise ValidationError({"ticket_type": msg})
+        if self.addon_id and self.conference_id and self.addon.conference_id != self.conference_id:
+            msg = "Add-on must belong to the same conference as the bulk purchase."
+            raise ValidationError({"addon": msg})
+        if self.ticket_type_id and not self.ticket_type.bulk_enabled:
+            msg = "This ticket type does not have bulk purchasing enabled."
+            raise ValidationError({"ticket_type": msg})
+        if self.addon_id and not self.addon.bulk_enabled:
+            msg = "This add-on does not have bulk purchasing enabled."
+            raise ValidationError({"addon": msg})
+
+    @property
+    def computed_total(self) -> Decimal:
+        """Return unit_price * quantity for verification against total_amount."""
+        return self.unit_price * self.quantity
+
+    @property
+    def vouchers_generated(self) -> int:
+        """Return the number of vouchers already generated for this purchase."""
+        return self.vouchers.count()
+
+    @property
+    def is_fulfilled(self) -> bool:
+        """Return True when all vouchers have been generated."""
+        return self.vouchers_generated >= self.quantity
+
+
+class BulkPurchaseVoucher(models.Model):
+    """Links a bulk purchase to its generated voucher codes.
+
+    Acts as a join table between ``BulkPurchase`` and the registration
+    app's ``Voucher`` model, tracking which vouchers were created as
+    part of a given bulk order.
+    """
+
+    bulk_purchase = models.ForeignKey(
+        BulkPurchase,
+        on_delete=models.CASCADE,
+        related_name="vouchers",
+    )
+    voucher = models.ForeignKey(
+        "program_registration.Voucher",
+        on_delete=models.CASCADE,
+        related_name="bulk_purchase_links",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = [("bulk_purchase", "voucher")]
+
+    def __str__(self) -> str:
+        return f"{self.bulk_purchase} → {self.voucher.code}"
