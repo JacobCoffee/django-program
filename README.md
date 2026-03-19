@@ -5,6 +5,12 @@
 [![CI](https://github.com/JacobCoffee/django-program/actions/workflows/ci.yml/badge.svg)](https://github.com/JacobCoffee/django-program/actions/workflows/ci.yml)
 
 Modern conference management for Django — registration, ticketing, Pretalx schedule sync, sponsors, and program activities.
+> [!WARNING]  
+> This is almost 80% vibe codded. My plan is to build out this proof-of-concept to migrate off of Symposion, Registrasion, and Pinax-Stripe
+> to something that fits better and flows better.
+> Then contract or hire someone to flesh this out as a literal package with real security and perf reviews.
+> So... use at your own risk :)
+
 
 | Link | |
 |------|---|
