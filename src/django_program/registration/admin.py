@@ -28,6 +28,12 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
+from django_program.registration.purchase_order import (
+    PurchaseOrder,
+    PurchaseOrderCreditNote,
+    PurchaseOrderLineItem,
+    PurchaseOrderPayment,
+)
 from django_program.registration.terminal import TerminalPayment
 
 
@@ -482,3 +488,66 @@ class TerminalPaymentAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request: HttpRequest, obj: TerminalPayment | None = None) -> bool:  # noqa: ARG002, D102
         return False
+
+
+# -- Purchase Order admin -----------------------------------------------------
+
+
+class PurchaseOrderLineItemInline(admin.TabularInline):
+    """Inline display of purchase order line items.
+
+    Line items are pricing snapshots and ``line_total`` is read-only to
+    prevent manual edits that would desynchronize the PO totals.
+    """
+
+    model = PurchaseOrderLineItem
+    extra = 0
+    readonly_fields = ("line_total",)
+
+
+class PurchaseOrderPaymentInline(admin.TabularInline):
+    """Inline display of payments recorded against a purchase order."""
+
+    model = PurchaseOrderPayment
+    extra = 0
+
+
+class PurchaseOrderCreditNoteInline(admin.TabularInline):
+    """Inline display of credit notes issued against a purchase order."""
+
+    model = PurchaseOrderCreditNote
+    extra = 0
+
+
+@admin.register(PurchaseOrder)
+class PurchaseOrderAdmin(admin.ModelAdmin):
+    """Admin interface for managing corporate purchase orders.
+
+    Displays the PO reference, organization, status, and financial summary.
+    Money fields are read-only to prevent manual edits; changes should flow
+    through the payment recording and credit note workflows.
+    """
+
+    list_display = (
+        "reference",
+        "organization_name",
+        "conference",
+        "status",
+        "total",
+        "balance_due_display",
+        "created_at",
+    )
+    list_filter = ("conference", "status")
+    search_fields = ("reference", "organization_name", "contact_email")
+    readonly_fields = ("reference", "subtotal", "total", "balance_due_display", "total_paid_display")
+    inlines = (PurchaseOrderLineItemInline, PurchaseOrderPaymentInline, PurchaseOrderCreditNoteInline)
+
+    @admin.display(description="Balance Due")
+    def balance_due_display(self, obj: PurchaseOrder) -> str:
+        """Render the computed balance due for the list and detail views."""
+        return str(obj.balance_due)
+
+    @admin.display(description="Total Paid")
+    def total_paid_display(self, obj: PurchaseOrder) -> str:
+        """Render the computed total paid for the detail view."""
+        return str(obj.total_paid)
