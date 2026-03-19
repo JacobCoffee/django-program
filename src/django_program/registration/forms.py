@@ -4,6 +4,8 @@ from decimal import Decimal
 
 from django import forms
 
+from django_program.registration.letter import LetterRequest
+
 
 class CartItemForm(forms.Form):
     """Form for adding an item to the cart.
@@ -54,3 +56,41 @@ class RefundForm(forms.Form):
         min_value=Decimal("0.01"),
     )
     reason = forms.CharField(widget=forms.Textarea, required=False)
+
+
+class LetterRequestForm(forms.ModelForm):
+    """Form for attendees to request a visa invitation letter.
+
+    Collects passport details, travel dates, and destination information
+    needed to produce a formal letter for embassy submission.
+    """
+
+    class Meta:
+        model = LetterRequest
+        fields = [
+            "passport_name",
+            "passport_number",
+            "nationality",
+            "date_of_birth",
+            "travel_from",
+            "travel_until",
+            "destination_address",
+            "embassy_name",
+        ]
+        widgets = {
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}),
+            "travel_from": forms.DateInput(attrs={"type": "date"}),
+            "travel_until": forms.DateInput(attrs={"type": "date"}),
+            "destination_address": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def clean(self) -> dict:
+        """Validate that travel_from is before travel_until."""
+        cleaned = super().clean()
+        travel_from = cleaned.get("travel_from")
+        travel_until = cleaned.get("travel_until")
+
+        if travel_from and travel_until and travel_from >= travel_until:
+            raise forms.ValidationError("Travel start date must be before the end date.")
+
+        return cleaned

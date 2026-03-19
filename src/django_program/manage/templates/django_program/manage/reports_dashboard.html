@@ -18,17 +18,17 @@
 {% block content %}
 
 <!-- Hero KPI Row -->
-<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem;">
-  <a href="{% url 'manage:report-sales-by-date' conference.slug %}" style="text-decoration: none; color: inherit;">
-    <div style="background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%); border-radius: 10px; padding: 1.5rem; color: #fff; box-shadow: 0 4px 20px rgba(67,56,202,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease;"
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem; align-items: stretch;">
+  <a href="{% url 'manage:report-sales-by-date' conference.slug %}" style="text-decoration: none; color: inherit; display: flex;">
+    <div style="flex: 1; background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%); border-radius: 10px; padding: 1.5rem; color: #fff; box-shadow: 0 4px 20px rgba(67,56,202,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease;"
          onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(67,56,202,0.35)'"
          onmouseleave="this.style.transform='none';this.style.boxShadow='0 4px 20px rgba(67,56,202,0.25)'">
       <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; margin-bottom: 0.5rem;">Total Revenue (30d)</div>
-      <div style="font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;">${{ recent_sales_total }}</div>
+      <div style="font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;">${{ recent_sales_total|floatformat:2 }}</div>
     </div>
   </a>
-  <a href="{% url 'manage:report-attendee-manifest' conference.slug %}" style="text-decoration: none; color: inherit;">
-    <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+  <a href="{% url 'manage:report-attendee-manifest' conference.slug %}" style="text-decoration: none; color: inherit; display: flex;">
+    <div style="flex: 1; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
          onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
          onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
       <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Attendees</div>
@@ -36,8 +36,8 @@
       {% if attendee_summary.checked_in %}<div style="font-size: 0.75rem; color: var(--color-success); font-weight: 600; margin-top: 0.4rem;">{{ attendee_summary.checked_in }} checked in</div>{% endif %}
     </div>
   </a>
-  <a href="{% url 'manage:report-voucher-usage' conference.slug %}" style="text-decoration: none; color: inherit;">
-    <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+  <a href="{% url 'manage:report-voucher-usage' conference.slug %}" style="text-decoration: none; color: inherit; display: flex;">
+    <div style="flex: 1; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
          onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
          onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
       <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Vouchers</div>
@@ -45,8 +45,8 @@
       {% if voucher_summary.used %}<div style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; margin-top: 0.4rem;">{{ voucher_summary.used }} redeemed</div>{% endif %}
     </div>
   </a>
-  <a href="{% url 'manage:report-speaker-registration' conference.slug %}" style="text-decoration: none; color: inherit;">
-    <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
+  <a href="{% url 'manage:report-speaker-registration' conference.slug %}" style="text-decoration: none; color: inherit; display: flex;">
+    <div style="flex: 1; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1.5rem; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;"
          onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 30px rgba(0,0,0,0.08)';this.style.borderColor='#4338ca'"
          onmouseleave="this.style.transform='none';this.style.boxShadow='none';this.style.borderColor='var(--color-border)'">
       <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.5rem;">Speakers</div>
@@ -142,6 +142,13 @@
     <div class="card-body">
       <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Registration Flow</div>
       <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Daily flow of new registrations and cancellations with net change tracking.</div>
+    </div>
+  </a>
+  <a href="{% url 'manage:report-visa-letters' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
+    <div class="card-body">
+      <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Visa & Invitation Letters</div>
+      <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Letter request status, nationality breakdown, processing times, and completion rates.</div>
+      {% if letter_pending_count %}<div style="font-size: 0.75rem; color: var(--color-warning); font-weight: 600; margin-top: 0.3rem;">{{ letter_pending_count }} pending review</div>{% endif %}
     </div>
   </a>
 </div>

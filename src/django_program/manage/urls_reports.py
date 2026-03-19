@@ -20,6 +20,8 @@ from django_program.manage.views_reports import (
     SalesByDateView,
     SpeakerRegistrationExportView,
     SpeakerRegistrationView,
+    VisaLetterExportView,
+    VisaLetterReportView,
     VoucherUsageExportView,
     VoucherUsageReportView,
 )
@@ -44,4 +46,6 @@ urlpatterns = [
     path("reconciliation/export/", ReconciliationExportView.as_view(), name="report-reconciliation-export"),
     path("flow/", RegistrationFlowView.as_view(), name="report-registration-flow"),
     path("flow/export/", RegistrationFlowExportView.as_view(), name="report-registration-flow-export"),
+    path("visa-letters/", VisaLetterReportView.as_view(), name="report-visa-letters"),
+    path("visa-letters/export/", VisaLetterExportView.as_view(), name="report-visa-letters-export"),
 ]

@@ -86,6 +86,14 @@ from django_program.manage.views import (
     VoucherListView,
 )
 from django_program.manage.views_checkin import CheckInDashboardView, CheckInScannerView
+from django_program.manage.views_letters import (
+    LetterRequestBulkGenerateView,
+    LetterRequestDownloadView,
+    LetterRequestGenerateView,
+    LetterRequestListView,
+    LetterRequestReviewView,
+    LetterRequestSendView,
+)
 from django_program.manage.views_terminal import TerminalPOSView
 
 app_name = "manage"
@@ -279,6 +287,29 @@ urlpatterns = [
     path("<slug:conference_slug>/checkin/scanner/", CheckInScannerView.as_view(), name="checkin-scanner"),
     # --- Terminal POS ---
     path("<slug:conference_slug>/terminal/", TerminalPOSView.as_view(), name="terminal-pos"),
+    # --- Visa/Invitation Letters ---
+    path("<slug:conference_slug>/letters/", LetterRequestListView.as_view(), name="letter-list"),
+    path("<slug:conference_slug>/letters/<int:pk>/", LetterRequestReviewView.as_view(), name="letter-review"),
+    path(
+        "<slug:conference_slug>/letters/<int:pk>/generate/",
+        LetterRequestGenerateView.as_view(),
+        name="letter-generate",
+    ),
+    path(
+        "<slug:conference_slug>/letters/<int:pk>/send/",
+        LetterRequestSendView.as_view(),
+        name="letter-send",
+    ),
+    path(
+        "<slug:conference_slug>/letters/<int:pk>/download/",
+        LetterRequestDownloadView.as_view(),
+        name="letter-download",
+    ),
+    path(
+        "<slug:conference_slug>/letters/bulk-generate/",
+        LetterRequestBulkGenerateView.as_view(),
+        name="letter-bulk-generate",
+    ),
     # --- Bulk Purchases ---
     path("<slug:conference_slug>/bulk-purchases/", include("django_program.manage.urls_bulk_purchases")),
     # --- Voucher Bulk Generation ---

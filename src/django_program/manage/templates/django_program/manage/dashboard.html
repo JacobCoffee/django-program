@@ -217,6 +217,7 @@
         <a href="{% url 'manage:voucher-list' conference.slug %}" class="dir-link">Vouchers <span class="dir-link-n">{{ stats.vouchers }}</span></a>
         <a href="{% url 'manage:sponsor-manage-list' conference.slug %}" class="dir-link">Sponsors <span class="dir-link-n">{{ stats.sponsors }}</span></a>
         <a href="{% url 'manage:travel-grant-list' conference.slug %}" class="dir-link">Travel Grants <span class="dir-link-n">{{ stats.travel_grants }}</span></a>
+        <a href="{% url 'manage:letter-list' conference.slug %}" class="dir-link">Visa Letters <span class="dir-link-n">{{ stats.visa_letters }}{% if stats.visa_letters_pending %}<span style="color: var(--color-warning); margin-left: 0.25rem;" title="Pending review">({{ stats.visa_letters_pending }})</span>{% endif %}</span></a>
         <a href="{% url 'manage:reports-dashboard' conference.slug %}" class="dir-link">Reports</a>
       </div>
     </div>

@@ -1,0 +1,184 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Review Letter Request{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:letter-list' conference.slug %}">Visa Letters</a>
+  <span class="breadcrumb-separator"></span>
+  <span>Review</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Review Letter Request</h1>
+{% endblock %}
+
+{% block content %}
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Applicant</div>
+    <div class="info-item-value">{{ letter_request.user.get_full_name|default:letter_request.user.username }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Email</div>
+    <div class="info-item-value">{{ letter_request.user.email|default:"--" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Status</div>
+    <div class="info-item-value">
+      {% if letter_request.status == "submitted" %}
+      <span class="badge badge--active">Submitted</span>
+      {% elif letter_request.status == "under_review" %}
+      <span class="badge badge--warning">Under Review</span>
+      {% elif letter_request.status == "approved" %}
+      <span class="badge badge--active">Approved</span>
+      {% elif letter_request.status == "generated" %}
+      <span class="badge badge--active">Generated</span>
+      {% elif letter_request.status == "sent" %}
+      <span class="badge badge--active">Sent</span>
+      {% elif letter_request.status == "rejected" %}
+      <span class="badge badge--inactive">Rejected</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Submitted</div>
+    <div class="info-item-value">{{ letter_request.created_at|date:"N j, Y, P" }}</div>
+  </div>
+  {% if letter_request.reviewed_by %}
+  <div class="info-item">
+    <div class="info-item-label">Reviewed By</div>
+    <div class="info-item-value">
+      {{ letter_request.reviewed_by.get_full_name|default:letter_request.reviewed_by.username }}
+      {% if letter_request.reviewed_at %}<br><span style="font-size: 0.78rem; color: var(--color-text-muted);">{{ letter_request.reviewed_at|date:"N j, Y, P" }}</span>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% if letter_request.sent_at %}
+  <div class="info-item">
+    <div class="info-item-label">Sent At</div>
+    <div class="info-item-value">{{ letter_request.sent_at|date:"N j, Y, P" }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<h2 class="section-heading">Passport Information</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Passport Name</div>
+    <div class="info-item-value">{{ letter_request.passport_name }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Passport Number</div>
+    <div class="info-item-value mono">{{ letter_request.passport_number }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Nationality</div>
+    <div class="info-item-value">{{ letter_request.nationality }}</div>
+  </div>
+  {% if letter_request.date_of_birth %}
+  <div class="info-item">
+    <div class="info-item-label">Date of Birth</div>
+    <div class="info-item-value">{{ letter_request.date_of_birth|date:"M j, Y" }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<h2 class="section-heading">Travel Details</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Travel From</div>
+    <div class="info-item-value">{{ letter_request.travel_from|date:"M j, Y" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Travel Until</div>
+    <div class="info-item-value">{{ letter_request.travel_until|date:"M j, Y" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Destination Address</div>
+    <div class="info-item-value">{{ letter_request.destination_address }}</div>
+  </div>
+  {% if letter_request.embassy_name %}
+  <div class="info-item">
+    <div class="info-item-label">Embassy / Consulate</div>
+    <div class="info-item-value">{{ letter_request.embassy_name }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if letter_request.status == "rejected" and letter_request.rejection_reason %}
+<h2 class="section-heading">Rejection Reason</h2>
+<div style="margin-bottom: 2rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); background: var(--color-danger-bg); border: 1px solid var(--color-danger-border, #fecaca); color: var(--color-danger); font-size: 0.9rem;">
+  {{ letter_request.rejection_reason }}
+</div>
+{% endif %}
+
+{% if can_download %}
+<h2 class="section-heading">Generated Letter</h2>
+<div style="margin-bottom: 2rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden;">
+  <iframe src="{% url 'manage:letter-download' conference.slug letter_request.pk %}?inline=1" style="width: 100%; height: 600px; border: none;"></iframe>
+</div>
+{% endif %}
+
+{% if can_approve or can_reject or can_generate or can_send or can_download %}
+<h2 class="section-heading">Actions</h2>
+<div style="display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; margin-bottom: 2rem;">
+
+  {% if letter_request.status == "submitted" %}
+  <form method="post" action="{% url 'manage:letter-review' conference.slug letter_request.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="under_review">
+    <button type="submit" class="btn btn-secondary">Mark Under Review</button>
+  </form>
+  {% endif %}
+
+  {% if can_approve %}
+  <form method="post" action="{% url 'manage:letter-review' conference.slug letter_request.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="approve">
+    <button type="submit" class="btn btn-primary" onclick="return confirm('Approve this letter request?');">Approve</button>
+  </form>
+  {% endif %}
+
+  {% if can_generate %}
+  <form method="post" action="{% url 'manage:letter-generate' conference.slug letter_request.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary" onclick="return confirm('Generate PDF for this letter request?');">Generate PDF</button>
+  </form>
+  {% endif %}
+
+  {% if can_send %}
+  <form method="post" action="{% url 'manage:letter-send' conference.slug letter_request.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary" onclick="return confirm('Send this invitation letter to the applicant?');">Send Letter</button>
+  </form>
+  {% endif %}
+
+  {% if can_download %}
+  <a href="{% url 'manage:letter-download' conference.slug letter_request.pk %}" class="btn btn-secondary">Download PDF</a>
+  {% endif %}
+
+  {% if can_reject %}
+  <div style="flex: 1; min-width: 300px;">
+    <form method="post" action="{% url 'manage:letter-review' conference.slug letter_request.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="reject">
+      <div class="form-group" style="margin-bottom: 0.5rem;">
+        <label for="id_rejection_reason">Reject with reason</label>
+        <textarea id="id_rejection_reason" name="rejection_reason" rows="3" required></textarea>
+      </div>
+      <button type="submit" class="btn btn-danger">Reject</button>
+    </form>
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+<div style="margin-top: 1rem;">
+  <a href="{% url 'manage:letter-list' conference.slug %}" class="btn btn-secondary">Back to Letter Requests</a>
+</div>
+{% endblock %}

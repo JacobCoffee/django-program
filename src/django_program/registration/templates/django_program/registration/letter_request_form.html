@@ -1,0 +1,108 @@
+{% extends "django_program/base.html" %}
+
+{% block title %}Request Visa Invitation Letter{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Request Visa Invitation Letter</h1>
+  <p>Submit your passport and travel details to receive a formal invitation letter for your visa application.</p>
+</div>
+
+<form method="post" action="{% url 'registration:letter-request' conference.slug %}">
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+  <ul class="errorlist">
+    {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <h2 class="section-heading mt-0">Passport Information</h2>
+
+  <div class="form-group">
+    <label for="id_passport_name">Full Name (as on passport)</label>
+    {{ form.passport_name }}
+    {% if form.passport_name.errors %}
+    <ul class="errorlist">
+      {% for error in form.passport_name.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="form-group">
+    <label for="id_passport_number">Passport Number</label>
+    {{ form.passport_number }}
+    {% if form.passport_number.errors %}
+    <ul class="errorlist">
+      {% for error in form.passport_number.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="form-group">
+    <label for="id_nationality">Nationality</label>
+    {{ form.nationality }}
+    {% if form.nationality.errors %}
+    <ul class="errorlist">
+      {% for error in form.nationality.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="form-group">
+    <label for="id_date_of_birth">Date of Birth <span style="font-weight: 400; color: var(--color-text-muted);">(optional)</span></label>
+    {{ form.date_of_birth }}
+    {% if form.date_of_birth.errors %}
+    <ul class="errorlist">
+      {% for error in form.date_of_birth.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <h2 class="section-heading">Travel Details</h2>
+
+  <div class="form-group">
+    <label for="id_travel_from">Travel From (date)</label>
+    {{ form.travel_from }}
+    {% if form.travel_from.errors %}
+    <ul class="errorlist">
+      {% for error in form.travel_from.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="form-group">
+    <label for="id_travel_until">Travel Until (date)</label>
+    {{ form.travel_until }}
+    {% if form.travel_until.errors %}
+    <ul class="errorlist">
+      {% for error in form.travel_until.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="form-group">
+    <label for="id_destination_address">Destination Address</label>
+    {{ form.destination_address }}
+    {% if form.destination_address.errors %}
+    <ul class="errorlist">
+      {% for error in form.destination_address.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="form-group">
+    <label for="id_embassy_name">Embassy / Consulate Name <span style="font-weight: 400; color: var(--color-text-muted);">(optional)</span></label>
+    {{ form.embassy_name }}
+    {% if form.embassy_name.errors %}
+    <ul class="errorlist">
+      {% for error in form.embassy_name.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary btn-lg">Submit Request</button>
+  </div>
+</form>
+{% endblock %}

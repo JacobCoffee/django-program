@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 from django_program.pretalx.models import Room, ScheduleSlot, Speaker, Talk
 from django_program.programs.models import Activity, ActivitySignup, TravelGrant
+from django_program.registration.letter import LetterRequest
 from django_program.registration.models import (
     AddOn,
     Attendee,
@@ -1451,4 +1452,56 @@ def get_content_analytics(conference: Conference) -> dict[str, Any]:
         "total_rooms": total_rooms,
         "total_schedule_slots": total_schedule_slots,
         "slot_types": slot_types,
+    }
+
+
+def get_letter_request_summary(conference: Conference) -> dict[str, Any]:
+    """Return summary statistics for visa invitation letter requests.
+
+    Aggregates letter requests by status, top nationalities, average
+    processing time, and completion rate for the given conference.
+
+    Args:
+        conference: The conference to scope the query to.
+
+    Returns:
+        A dict with total, by_status, by_nationality (top 10),
+        avg_processing_days, pending_count, and completion_rate.
+    """
+    qs = LetterRequest.objects.filter(conference=conference)
+
+    total = qs.count()
+
+    # Count by status
+    by_status: dict[str, int] = {}
+    for row in qs.values("status").annotate(count=Count("id")):
+        by_status[row["status"]] = row["count"]
+
+    # Top 10 nationalities
+    by_nationality = list(qs.values("nationality").annotate(count=Count("id")).order_by("-count")[:10])
+
+    # Average processing days (created_at -> reviewed_at) for reviewed requests
+    reviewed = qs.filter(reviewed_at__isnull=False)
+    avg_processing_agg = reviewed.aggregate(
+        avg_days=Avg(F("reviewed_at") - F("created_at")),
+    )
+    avg_td = avg_processing_agg["avg_days"]
+    avg_processing_days: float | None = avg_td.total_seconds() / 86400 if avg_td else None
+
+    # Pending = SUBMITTED + UNDER_REVIEW
+    pending_count = qs.filter(
+        status__in=[LetterRequest.Status.SUBMITTED, LetterRequest.Status.UNDER_REVIEW],
+    ).count()
+
+    # Completion rate = percentage that reached SENT
+    sent_count = by_status.get(LetterRequest.Status.SENT, 0)
+    completion_rate = (sent_count / total * 100) if total else 0.0
+
+    return {
+        "total": total,
+        "by_status": by_status,
+        "by_nationality": by_nationality,
+        "avg_processing_days": avg_processing_days,
+        "pending_count": pending_count,
+        "completion_rate": completion_rate,
     }
