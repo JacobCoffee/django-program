@@ -18,7 +18,9 @@
 {% endblock %}
 
 {% block page_actions %}
+{% if perms.program_conference.export_reports %}
 <a href="{% url 'manage:report-speaker-export' conference.slug %}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endif %}
 {% endblock %}
 
 {% block content %}
