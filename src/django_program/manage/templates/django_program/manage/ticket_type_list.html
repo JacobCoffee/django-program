@@ -31,6 +31,7 @@
       <th>Available From</th>
       <th>Available Until</th>
       <th>Voucher Required</th>
+      <th>Bulk</th>
       <th>Status</th>
       <th>Actions</th>
     </tr>
@@ -49,6 +50,13 @@
       <td>
         {% if tt.requires_voucher %}
         <span class="badge badge--warning">Yes</span>
+        {% else %}
+        --
+        {% endif %}
+      </td>
+      <td>
+        {% if tt.bulk_enabled %}
+        <span class="badge badge--active">On</span>
         {% else %}
         --
         {% endif %}

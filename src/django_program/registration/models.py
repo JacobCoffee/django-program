@@ -39,6 +39,10 @@ class TicketType(models.Model):
         help_text="When True, this ticket type is hidden unless unlocked by a voucher.",
     )
     is_active = models.BooleanField(default=True)
+    bulk_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow this ticket type to be offered in bulk purchase deals.",
+    )
     order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -125,6 +129,10 @@ class AddOn(models.Model):
         help_text="Maximum number available. 0 means unlimited.",
     )
     is_active = models.BooleanField(default=True)
+    bulk_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow this add-on to be offered in bulk purchase deals.",
+    )
     order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -393,6 +393,7 @@ class TicketTypeForm(forms.ModelForm):
             "limit_per_user",
             "requires_voucher",
             "is_active",
+            "bulk_enabled",
             "order",
         ]
         widgets = {
@@ -425,6 +426,7 @@ class AddOnForm(forms.ModelForm):
             "available_until",
             "total_quantity",
             "is_active",
+            "bulk_enabled",
             "order",
         ]
         widgets = {

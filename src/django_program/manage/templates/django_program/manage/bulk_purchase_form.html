@@ -1,0 +1,251 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}New Bulk Deal{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:bulk-purchase-list' conference.slug %}">Bulk Deals</a>
+  <span class="breadcrumb-separator"></span>
+  <span>New</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>New Bulk Deal</h1>
+<p>Create a bulk voucher deal for tickets, add-ons, or sponsor codes</p>
+{% endblock %}
+
+{% block content %}
+<style>
+  .deal-form { max-width: 720px; }
+  .deal-form .form-row {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .deal-form .form-row--3 {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .fieldset {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+  .fieldset:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  .fieldset-legend {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+  }
+  .fieldset-note {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+  }
+  .collapsible-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: none;
+    background: none;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 0.75rem;
+    transition: color 0.15s ease;
+  }
+  .collapsible-toggle:hover { color: var(--color-primary); }
+  .collapsible-toggle svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.2s ease;
+  }
+  .collapsible-toggle.open svg { transform: rotate(90deg); }
+  .collapsible-body {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.25s ease;
+  }
+  .collapsible-body.open { max-height: 400px; }
+  @media (max-width: 720px) {
+    .deal-form .form-row,
+    .deal-form .form-row--3 { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="deal-form">
+  {% if form.non_field_errors %}
+  <ul class="errorlist" style="margin-bottom: 1rem;">
+    {% for error in form.non_field_errors %}
+    <li>{{ error }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="fieldset">
+      <div class="fieldset-legend">What's being sold</div>
+      <div class="form-group">
+        <label for="{{ form.product_description.id_for_label }}">{{ form.product_description.label }}</label>
+        {{ form.product_description }}
+        {% if form.product_description.help_text %}<span class="helptext">{{ form.product_description.help_text }}</span>{% endif %}
+        {% for error in form.product_description.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="{{ form.ticket_type.id_for_label }}">{{ form.ticket_type.label }}</label>
+          {{ form.ticket_type }}
+          {% if form.ticket_type.help_text %}<span class="helptext">{{ form.ticket_type.help_text }}</span>{% endif %}
+          {% for error in form.ticket_type.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.addon.id_for_label }}">{{ form.addon.label }}</label>
+          {{ form.addon }}
+          {% if form.addon.help_text %}<span class="helptext">{{ form.addon.help_text }}</span>{% endif %}
+          {% for error in form.addon.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+      </div>
+      <div class="fieldset-note">
+        Only items with <strong>bulk purchasing enabled</strong> appear above.
+        Enable it in <a href="{% url 'manage:ticket-type-list' conference.slug %}">Ticket Types</a>
+        or <a href="{% url 'manage:addon-list' conference.slug %}">Add-ons</a> settings.
+      </div>
+      <div class="form-group" style="max-width: 50%;">
+        <label for="{{ form.quantity.id_for_label }}">{{ form.quantity.label }}</label>
+        {{ form.quantity }}
+        {% if form.quantity.help_text %}<span class="helptext">{{ form.quantity.help_text }}</span>{% endif %}
+        {% for error in form.quantity.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+      </div>
+    </div>
+
+    <div class="fieldset">
+      <div class="fieldset-legend">Discount</div>
+      <div class="form-row--3">
+        <div class="form-group">
+          <label for="{{ form.voucher_type.id_for_label }}">{{ form.voucher_type.label }}</label>
+          {{ form.voucher_type }}
+          {% if form.voucher_type.help_text %}<span class="helptext">{{ form.voucher_type.help_text }}</span>{% endif %}
+          {% for error in form.voucher_type.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+        <div class="form-group" id="discount-value-group">
+          <label for="{{ form.discount_value.id_for_label }}">{{ form.discount_value.label }}</label>
+          {{ form.discount_value }}
+          <span class="helptext" id="discount-help">Percentage (0-100) or fixed dollar amount, depending on the discount type above.</span>
+          {% for error in form.discount_value.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.unit_price.id_for_label }}">{{ form.unit_price.label }}</label>
+          {{ form.unit_price }}
+          {% if form.unit_price.help_text %}<span class="helptext">{{ form.unit_price.help_text }}</span>{% endif %}
+          {% for error in form.unit_price.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="fieldset">
+      <div class="fieldset-legend">Who gets it <span style="font-weight: 400; text-transform: none; letter-spacing: normal; font-size: 0.75rem;">(optional)</span></div>
+      <div class="form-group" style="max-width: 50%;">
+        <label for="{{ form.sponsor.id_for_label }}">{{ form.sponsor.label }}</label>
+        {{ form.sponsor }}
+        {% if form.sponsor.help_text %}<span class="helptext">{{ form.sponsor.help_text }}</span>{% endif %}
+        {% for error in form.sponsor.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+      </div>
+    </div>
+
+    <div class="fieldset">
+      <button type="button" class="collapsible-toggle" id="validity-toggle" onclick="toggleValidity()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4l4 4-4 4"/></svg>
+        Validity &amp; Limits <span style="font-weight: 400; text-transform: none; letter-spacing: normal; font-size: 0.75rem;">(optional)</span>
+      </button>
+      <div class="collapsible-body" id="validity-body">
+        <div class="form-row--3">
+          <div class="form-group">
+            <label for="{{ form.max_uses_per_voucher.id_for_label }}">{{ form.max_uses_per_voucher.label }}</label>
+            {{ form.max_uses_per_voucher }}
+            {% if form.max_uses_per_voucher.help_text %}<span class="helptext">{{ form.max_uses_per_voucher.help_text }}</span>{% endif %}
+            {% for error in form.max_uses_per_voucher.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.valid_from.id_for_label }}">Valid from</label>
+            {{ form.valid_from }}
+            {% if form.valid_from.help_text %}<span class="helptext">{{ form.valid_from.help_text }}</span>{% endif %}
+            {% for error in form.valid_from.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+          </div>
+          <div class="form-group">
+            <label for="{{ form.valid_until.id_for_label }}">Valid until</label>
+            {{ form.valid_until }}
+            {% if form.valid_until.help_text %}<span class="helptext">{{ form.valid_until.help_text }}</span>{% endif %}
+            {% for error in form.valid_until.errors %}<ul class="errorlist"><li>{{ error }}</li></ul>{% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Create Bulk Deal</button>
+      <a href="{% url 'manage:bulk-purchase-list' conference.slug %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var voucherType = document.getElementById('id_voucher_type');
+  var discountGroup = document.getElementById('discount-value-group');
+  var discountHelp = document.getElementById('discount-help');
+
+  function updateDiscountVisibility() {
+    var val = voucherType.value;
+    if (val === 'comp') {
+      discountGroup.style.opacity = '0.4';
+      discountGroup.style.pointerEvents = 'none';
+      discountHelp.textContent = 'Not applicable for complimentary vouchers (always 100% off).';
+    } else {
+      discountGroup.style.opacity = '1';
+      discountGroup.style.pointerEvents = 'auto';
+      if (val === 'percentage') {
+        discountHelp.textContent = 'Percentage off the ticket price (0-100).';
+      } else {
+        discountHelp.textContent = 'Fixed dollar amount off the ticket price.';
+      }
+    }
+  }
+
+  if (voucherType) {
+    voucherType.addEventListener('change', updateDiscountVisibility);
+    updateDiscountVisibility();
+  }
+})();
+
+function toggleValidity() {
+  var btn = document.getElementById('validity-toggle');
+  var body = document.getElementById('validity-body');
+  btn.classList.toggle('open');
+  body.classList.toggle('open');
+}
+</script>
+{% endblock %}

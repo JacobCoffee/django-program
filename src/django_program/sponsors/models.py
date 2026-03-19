@@ -338,6 +338,7 @@ class BulkPurchase(models.Model):
         """Payment lifecycle states for a bulk purchase."""
 
         PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
         PROCESSING = "processing", "Processing"
         PAID = "paid", "Paid"
         FAILED = "failed", "Failed"
@@ -350,8 +351,11 @@ class BulkPurchase(models.Model):
     )
     sponsor = models.ForeignKey(
         Sponsor,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="bulk_purchases",
+        help_text="The sponsor this deal is for (leave blank for non-sponsor deals).",
     )
     quantity = models.PositiveIntegerField(
         help_text="Number of voucher codes to generate.",
@@ -369,6 +373,14 @@ class BulkPurchase(models.Model):
         blank=True,
         related_name="bulk_purchases",
         help_text="Optional link to the ticket type these vouchers are for.",
+    )
+    addon = models.ForeignKey(
+        "program_registration.AddOn",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bulk_purchases",
+        help_text="Optional link to the add-on these vouchers are for (shirts, tutorials, etc.).",
     )
     payment_status = models.CharField(
         max_length=20,
@@ -407,13 +419,22 @@ class BulkPurchase(models.Model):
         return f"BulkPurchase #{self.pk} - {self.sponsor.name} x{self.quantity}"
 
     def clean(self) -> None:
-        """Validate that the sponsor belongs to the same conference."""
+        """Validate sponsor/conference consistency and bulk eligibility."""
         if self.sponsor_id and self.conference_id and self.sponsor.conference_id != self.conference_id:
             msg = "Sponsor must belong to the same conference as the bulk purchase."
             raise ValidationError({"sponsor": msg})
         if self.ticket_type_id and self.conference_id and self.ticket_type.conference_id != self.conference_id:
             msg = "Ticket type must belong to the same conference as the bulk purchase."
             raise ValidationError({"ticket_type": msg})
+        if self.addon_id and self.conference_id and self.addon.conference_id != self.conference_id:
+            msg = "Add-on must belong to the same conference as the bulk purchase."
+            raise ValidationError({"addon": msg})
+        if self.ticket_type_id and not self.ticket_type.bulk_enabled:
+            msg = "This ticket type does not have bulk purchasing enabled."
+            raise ValidationError({"ticket_type": msg})
+        if self.addon_id and not self.addon.bulk_enabled:
+            msg = "This add-on does not have bulk purchasing enabled."
+            raise ValidationError({"addon": msg})
 
     @property
     def computed_total(self) -> Decimal:

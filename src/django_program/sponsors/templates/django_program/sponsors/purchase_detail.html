@@ -1,0 +1,104 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Purchase #{{ purchase.pk }} - Sponsor Portal{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'sponsors:portal-home' conference.slug %}">Sponsor Portal</a>
+  <span class="breadcrumb-separator"></span>
+  <span>Purchase #{{ purchase.pk }}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Purchase #{{ purchase.pk }}</h1>
+<p>{{ purchase.quantity }} voucher codes &mdash;
+  {% if purchase.payment_status == "paid" %}
+  <span class="badge badge--active">Paid</span>
+  {% elif purchase.payment_status == "pending" %}
+  <span class="badge badge--warning">Pending</span>
+  {% elif purchase.payment_status == "processing" %}
+  <span class="badge badge--accepted">Processing</span>
+  {% elif purchase.payment_status == "failed" %}
+  <span class="badge badge--inactive">Failed</span>
+  {% elif purchase.payment_status == "refunded" %}
+  <span class="badge badge--inactive">Refunded</span>
+  {% endif %}
+</p>
+{% endblock %}
+
+{% block page_actions %}
+{% if voucher_links %}
+<a href="{% url 'sponsors:portal-purchase-export' conference.slug purchase.pk %}" class="btn btn-primary">Export CSV</a>
+{% endif %}
+<a href="{% url 'sponsors:portal-home' conference.slug %}" class="btn btn-secondary">Back to Portal</a>
+{% endblock %}
+
+{% block content %}
+<div class="info-grid" style="margin-bottom: 1.5rem;">
+  <div class="info-item">
+    <div class="info-item-label">Sponsor</div>
+    <div class="info-item-value">{{ sponsor.name }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Ticket Type</div>
+    <div class="info-item-value">{{ purchase.product_description|default:purchase.ticket_type.name|default:"--" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Total Redemptions</div>
+    <div class="info-item-value">{{ total_uses }} / {{ total_max }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Vouchers Generated</div>
+    <div class="info-item-value">{{ voucher_links|length }} / {{ purchase.quantity }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Created</div>
+    <div class="info-item-value">{{ purchase.created_at|date:"N j, Y, P" }}</div>
+  </div>
+</div>
+
+{% if voucher_links %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Times Used</th>
+      <th>Max Uses</th>
+      <th>Status</th>
+      <th>Valid From</th>
+      <th>Valid Until</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for link in voucher_links %}
+    <tr>
+      <td class="mono">{{ link.voucher.code }}</td>
+      <td>{{ link.voucher.times_used }}</td>
+      <td>{{ link.voucher.max_uses }}</td>
+      <td>
+        {% if link.voucher.is_valid %}
+        <span class="badge badge--active">Valid</span>
+        {% elif not link.voucher.is_active %}
+        <span class="badge badge--inactive">Inactive</span>
+        {% elif link.voucher.times_used >= link.voucher.max_uses %}
+        <span class="badge badge--inactive">Exhausted</span>
+        {% else %}
+        <span class="badge badge--warning">Expired</span>
+        {% endif %}
+      </td>
+      <td>{{ link.voucher.valid_from|date:"N j, Y"|default:"--" }}</td>
+      <td>{{ link.voucher.valid_until|date:"N j, Y"|default:"--" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No voucher codes have been generated for this purchase yet.</p>
+  {% if purchase.payment_status == "pending" %}
+  <p>This purchase is still pending approval by the conference organizers.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

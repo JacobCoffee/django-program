@@ -47,8 +47,8 @@ class TicketTypeAdmin(admin.ModelAdmin):
     slug, and auto-population of the slug from the ticket name.
     """
 
-    list_display = ("name", "conference", "price", "is_active", "order")
-    list_filter = ("conference", "is_active")
+    list_display = ("name", "conference", "price", "is_active", "bulk_enabled", "order")
+    list_filter = ("conference", "is_active", "bulk_enabled")
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
 
@@ -61,8 +61,8 @@ class AddOnAdmin(admin.ModelAdmin):
     field to provide a friendlier selection widget.
     """
 
-    list_display = ("name", "conference", "price", "is_active")
-    list_filter = ("conference", "is_active")
+    list_display = ("name", "conference", "price", "is_active", "bulk_enabled")
+    list_filter = ("conference", "is_active", "bulk_enabled")
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ("requires_ticket_types",)

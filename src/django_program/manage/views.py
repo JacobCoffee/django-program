@@ -12,7 +12,7 @@ import json
 import logging
 import time
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -3604,7 +3604,7 @@ class ExpenseCategoryListView(ManagePermissionMixin, ListView):
         """Add budget summary and active nav to context."""
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "expenses"
-        categories = context["categories"]
+        categories = cast("QuerySet[ExpenseCategory]", context["categories"])
         context["total_budget"] = sum(c.budget_amount or Decimal("0.00") for c in categories)
         context["total_spent"] = sum(c.total_spent for c in categories)
         return context

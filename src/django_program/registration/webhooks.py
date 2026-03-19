@@ -383,6 +383,96 @@ class ChargeDisputeCreatedWebhook(Webhook):
         )
 
 
+class CheckoutSessionCompletedWebhook(Webhook):
+    """Handles ``checkout.session.completed`` events.
+
+    Dispatches to the sponsor bulk purchase fulfillment flow when the
+    session metadata contains a ``bulk_purchase_id``. Sessions without
+    that key are ignored (they belong to other checkout flows).
+    """
+
+    name = "checkout.session.completed"
+
+    def process_webhook(self) -> None:
+        """Fulfill a bulk purchase if the session belongs to one.
+
+        Skips fulfillment when ``payment_status`` is not ``"paid"`` to avoid
+        issuing vouchers before funds settle (e.g. async payment methods).
+        """
+        from django_program.sponsors.services import BulkPurchaseService  # noqa: PLC0415
+
+        session = _event_data_object(self.event)
+        session_id = str(session.get("id", ""))
+
+        metadata = session.get("metadata", {})
+        if not isinstance(metadata, dict) or "bulk_purchase_id" not in metadata:
+            logger.debug(
+                "checkout.session.completed %s has no bulk_purchase_id, skipping",
+                session_id,
+            )
+            return
+
+        payment_status = str(session.get("payment_status", ""))
+        if payment_status != "paid":
+            logger.info(
+                "checkout.session.completed %s has payment_status=%r, deferring fulfillment",
+                session_id,
+                payment_status,
+            )
+            return
+
+        payment_intent_id = str(session.get("payment_intent", ""))
+        if payment_intent_id:
+            from django_program.sponsors.models import BulkPurchase  # noqa: PLC0415
+
+            BulkPurchase.objects.filter(
+                stripe_checkout_session_id=session_id,
+                stripe_payment_intent_id="",
+            ).update(stripe_payment_intent_id=payment_intent_id)
+
+        result = BulkPurchaseService.handle_checkout_webhook(session_id)
+        if result is not None:
+            logger.info(
+                "Fulfilled BulkPurchase #%s via checkout.session.completed (session=%s)",
+                result.pk,
+                session_id,
+            )
+
+
+class CheckoutSessionExpiredWebhook(Webhook):
+    """Handles ``checkout.session.expired`` events.
+
+    Marks the associated bulk purchase as FAILED when a checkout session
+    expires without payment.
+    """
+
+    name = "checkout.session.expired"
+
+    def process_webhook(self) -> None:
+        """Mark the bulk purchase as failed if the session belongs to one.
+
+        Delegates to ``mark_failed()`` which guards against overwriting
+        already-fulfilled (PAID) or refunded purchases.
+        """
+        from django_program.sponsors.models import BulkPurchase  # noqa: PLC0415
+        from django_program.sponsors.services import BulkPurchaseService  # noqa: PLC0415
+
+        session = _event_data_object(self.event)
+        session_id = str(session.get("id", ""))
+
+        try:
+            bp = BulkPurchase.objects.get(stripe_checkout_session_id=session_id)
+        except BulkPurchase.DoesNotExist:
+            return
+
+        BulkPurchaseService.mark_failed(bp)
+        logger.info(
+            "Processed expired session %s for BulkPurchase #%s (mark_failed applied status guard)",
+            session_id,
+            bp.pk,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Handler registration
 # ---------------------------------------------------------------------------
@@ -391,6 +481,8 @@ registry.register("payment_intent.succeeded", PaymentIntentSucceededWebhook)
 registry.register("payment_intent.payment_failed", PaymentIntentPaymentFailedWebhook)
 registry.register("charge.refunded", ChargeRefundedWebhook)
 registry.register("charge.dispute.created", ChargeDisputeCreatedWebhook)
+registry.register("checkout.session.completed", CheckoutSessionCompletedWebhook)
+registry.register("checkout.session.expired", CheckoutSessionExpiredWebhook)
 
 
 # ---------------------------------------------------------------------------

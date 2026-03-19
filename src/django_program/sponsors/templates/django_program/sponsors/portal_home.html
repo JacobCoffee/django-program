@@ -1,0 +1,76 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Sponsor Portal - {{ sponsor.name }}{% endblock %}
+
+{% block page_title %}
+<h1>{{ sponsor.name }}</h1>
+<p>{{ sponsor.level.name }} sponsor &mdash; self-service portal</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'sponsors:portal-purchase-request' conference.slug %}" class="btn btn-primary">Request New Purchase</a>
+{% endblock %}
+
+{% block content %}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">{{ purchases|length }}</div>
+    <div class="stat-card-label">Bulk Purchases</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ sponsor.level.name }}</div>
+    <div class="stat-card-label">Sponsor Level</div>
+  </div>
+</div>
+
+{% if purchases %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Quantity</th>
+      <th>Ticket Type</th>
+      <th>Status</th>
+      <th>Created</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for purchase in purchases %}
+    <tr>
+      <td class="mono">#{{ purchase.pk }}</td>
+      <td>{{ purchase.quantity }}</td>
+      <td>{{ purchase.product_description|default:purchase.ticket_type.name|default:"--" }}</td>
+      <td>
+        {% if purchase.payment_status == "paid" %}
+        <span class="badge badge--active">Paid</span>
+        {% elif purchase.payment_status == "pending" %}
+        <span class="badge badge--warning">Pending</span>
+        {% elif purchase.payment_status == "processing" %}
+        <span class="badge badge--accepted">Processing</span>
+        {% elif purchase.payment_status == "failed" %}
+        <span class="badge badge--inactive">Failed</span>
+        {% elif purchase.payment_status == "refunded" %}
+        <span class="badge badge--inactive">Refunded</span>
+        {% endif %}
+      </td>
+      <td>{{ purchase.created_at|date:"N j, Y" }}</td>
+      <td>
+        {% if purchase.payment_status == "paid" %}
+        <a href="{% url 'sponsors:portal-purchase-detail' conference.slug purchase.pk %}" class="btn btn-sm btn-secondary">View Codes</a>
+        <a href="{% url 'sponsors:portal-purchase-export' conference.slug purchase.pk %}" class="btn btn-sm btn-secondary">CSV</a>
+        {% else %}
+        <a href="{% url 'sponsors:portal-purchase-detail' conference.slug purchase.pk %}" class="btn btn-sm btn-secondary">Details</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>No bulk purchases yet.</p>
+  <p><a href="{% url 'sponsors:portal-purchase-request' conference.slug %}" class="btn btn-primary">Request Your First Purchase</a></p>
+</div>
+{% endif %}
+{% endblock %}
