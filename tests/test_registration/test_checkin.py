@@ -766,3 +766,70 @@ class TestOfflinePreloadView:
         data = response.json()
         assert data["count"] == 1
         assert data["attendees"][0]["ticket_type"] == "VIP"
+
+
+# -- Manage Dashboard/Scanner View Tests -------------------------------------
+
+
+@pytest.mark.integration
+class TestCheckInDashboardView:
+    """Tests for the manage check-in dashboard."""
+
+    def _url(self, conference: Conference) -> str:
+        return reverse("manage:checkin-dashboard", args=[conference.slug])
+
+    def test_anonymous_redirected(self) -> None:
+        conf = _make_conference()
+        client = Client()
+        response = client.get(self._url(conf))
+        assert response.status_code == 302
+
+    def test_non_permitted_user_denied(self) -> None:
+        conf = _make_conference()
+        user = _make_user(password="testpass123")
+        client = Client()
+        client.force_login(user)
+        response = client.get(self._url(conf))
+        assert response.status_code == 403
+
+    def test_staff_with_permission_gets_200(self) -> None:
+        conf = _make_conference()
+        staff = _make_staff_user()
+        client = Client()
+        client.force_login(staff)
+        response = client.get(self._url(conf))
+        assert response.status_code == 200
+
+    def test_context_contains_stats(self) -> None:
+        conf = _make_conference()
+        user = _make_user()
+        Attendee.objects.create(user=user, conference=conf)
+        staff = _make_staff_user()
+        client = Client()
+        client.force_login(staff)
+        response = client.get(self._url(conf))
+        assert response.context["total_attendees"] == 1
+        assert response.context["checked_in_count"] == 0
+        assert response.context["check_in_rate"] == 0
+
+
+@pytest.mark.integration
+class TestCheckInScannerView:
+    """Tests for the manage scanner page."""
+
+    def _url(self, conference: Conference) -> str:
+        return reverse("manage:checkin-scanner", args=[conference.slug])
+
+    def test_anonymous_redirected(self) -> None:
+        conf = _make_conference()
+        client = Client()
+        response = client.get(self._url(conf))
+        assert response.status_code == 302
+
+    def test_staff_with_permission_gets_200(self) -> None:
+        conf = _make_conference()
+        staff = _make_staff_user()
+        client = Client()
+        client.force_login(staff)
+        response = client.get(self._url(conf))
+        assert response.status_code == 200

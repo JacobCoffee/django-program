@@ -386,9 +386,10 @@ class OfflinePreloadView(StaffRequiredMixin, View):
         ticket_type_name = ""
 
         if order is not None:
+            # Use prefetched redemptions to avoid N+1 queries
             redeemed_counts: dict[int, int] = {}
-            for r in attendee.redemptions.values("order_line_item_id").annotate(count=Count("id")):
-                redeemed_counts[r["order_line_item_id"]] = r["count"]
+            for redemption in attendee.redemptions.all():
+                redeemed_counts[redemption.order_line_item_id] = redeemed_counts.get(redemption.order_line_item_id, 0) + 1
             for item in order.line_items.all():
                 product_data = _serialize_line_item(item)
                 product_data["redeemed_count"] = redeemed_counts.get(item.pk, 0)
