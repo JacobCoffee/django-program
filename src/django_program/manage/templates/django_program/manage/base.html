@@ -1210,6 +1210,11 @@
             </a>
           </li>
           <li>
+            <a href="{% url 'manage:purchase-order-list' conference.slug %}" class="{% if active_nav == 'purchase-orders' %}active{% endif %}">
+              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 1.5h10v13H3z"/><path d="M5.5 4.5h5M5.5 7h5M5.5 9.5h3"/><path d="M7 12.5h2"/></svg></span> Purchase Orders
+            </a>
+          </li>
+          <li>
             <a href="{% url 'manage:expense-list' conference.slug %}" class="{% if active_nav == 'expenses' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4z"/><path d="M6 5h4M6 7.5h4M6 10h2.5"/><path d="M2 4v10h10"/></svg></span> Expenses
             </a>

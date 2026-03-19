@@ -51,6 +51,17 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
+from django_program.registration.purchase_order import (
+    PurchaseOrder,
+    PurchaseOrderCreditNote,
+    PurchaseOrderPayment,
+)
+from django_program.registration.services.purchase_orders import (
+    cancel_purchase_order,
+    create_purchase_order,
+    issue_credit_note,
+    record_payment,
+)
 from django_program.sponsors.models import BulkPurchase, BulkPurchaseVoucher, Sponsor, SponsorBenefit, SponsorLevel
 
 User = get_user_model()
@@ -179,6 +190,7 @@ class Seeder:
         self._create_more_carts(conference, users, ticket_types, addons)
         self._create_bulk_purchases(conference, sponsors, ticket_types, addons, users)
         self._create_letter_requests(conference, users)
+        self._create_purchase_orders(conference, users, ticket_types, addons)
         self._create_badges(conference)
 
         # Set up permission groups
@@ -212,6 +224,7 @@ class Seeder:
         n_grants = TravelGrant.objects.filter(conference=conference).count()
         n_surveys = Survey.objects.filter(conference=conference).count()
         n_bulk = BulkPurchase.objects.filter(conference=conference).count()
+        n_pos = PurchaseOrder.objects.filter(conference=conference).count()
         n_letters = LetterRequest.objects.filter(conference=conference).count()
         n_sponsors = Sponsor.objects.filter(conference=conference).count()
         n_badge_templates = BadgeTemplate.objects.filter(conference=conference).count()
@@ -249,6 +262,7 @@ class Seeder:
         print(f"\n  {'--- Finance ---':{W}}")
         print(f"  {'Sponsors':{W}} {n_sponsors}")
         print(f"  {'Bulk purchases':{W}} {n_bulk}")
+        print(f"  {'Purchase orders':{W}} {n_pos}")
         print(f"  {'Expenses':{W}} {n_expenses}")
         print(f"  {'Travel grants':{W}} {n_grants}")
 
@@ -1557,6 +1571,334 @@ class Seeder:
                 },
             )
 
+    def _create_purchase_orders(
+        self,
+        conference: Conference,
+        _users: list,
+        ticket_types: list[TicketType],
+        addons: list[AddOn],
+    ) -> None:
+        """Create purchase orders across all lifecycle states."""
+        if PurchaseOrder.objects.filter(conference=conference).exists():
+            print("  Purchase orders already exist, skipping.")
+            return
+
+        admin = User.objects.filter(is_superuser=True).first()
+        today = datetime.datetime.now(tz=datetime.UTC).date()
+
+        # Find a corporate ticket and a useful addon
+        corp_ticket = next((t for t in ticket_types if "corporate" in str(t.slug).lower()), ticket_types[0])
+        workshop_addon = next(
+            (a for a in addons if str(a.slug) in ("workshop", "tutorial")),
+            addons[0] if addons else None,
+        )
+        tshirt_addon = next(
+            (a for a in addons if "shirt" in str(a.slug).lower()),
+            addons[1] if len(addons) > 1 else None,
+        )
+        tutorial_addon = next(
+            (a for a in addons if str(a.slug) == "tutorial"),
+            addons[0] if addons else None,
+        )
+
+        corp_price = corp_ticket.price
+
+        # 1. Draft PO — Acme Corp, 10x Corporate, no payments
+        print("  Creating purchase orders...")
+        po_draft = create_purchase_order(
+            conference=conference,
+            organization_name="Acme Corp",
+            contact_email="procurement@acmecorp.example.com",
+            contact_name="Janet Reeves",
+            billing_address="100 Innovation Drive, Suite 400\nSan Francisco, CA 94105",
+            line_items=[
+                {
+                    "description": str(corp_ticket.name),
+                    "quantity": 10,
+                    "unit_price": corp_price,
+                    "ticket_type": corp_ticket,
+                },
+            ],
+            notes="Awaiting internal budget approval before sending.",
+            created_by=admin,
+        )
+        print(f"    {po_draft.reference}: Draft — Acme Corp (10x {corp_ticket.name})")
+
+        # 2. Sent/awaiting payment — TechStart Inc, 5x Corporate + 5x Workshop
+        po_sent = create_purchase_order(
+            conference=conference,
+            organization_name="TechStart Inc",
+            contact_email="accounting@techstart.example.com",
+            contact_name="Marcus Chen",
+            billing_address="2200 Startup Blvd\nAustin, TX 78701",
+            line_items=[
+                {
+                    "description": str(corp_ticket.name),
+                    "quantity": 5,
+                    "unit_price": corp_price,
+                    "ticket_type": corp_ticket,
+                },
+            ]
+            + (
+                [
+                    {
+                        "description": str(workshop_addon.name),
+                        "quantity": 5,
+                        "unit_price": workshop_addon.price,
+                        "addon": workshop_addon,
+                    },
+                ]
+                if workshop_addon
+                else []
+            ),
+            notes="Invoice sent via email on request. Net 30 terms.",
+            created_by=admin,
+        )
+        po_sent.status = PurchaseOrder.Status.SENT
+        po_sent.save(update_fields=["status", "updated_at"])
+        print(f"    {po_sent.reference}: Sent — TechStart Inc (5x tickets + 5x addons)")
+
+        # 3. Partially paid — Global Systems Ltd, 20x Corporate, ~60% paid
+        po_partial = create_purchase_order(
+            conference=conference,
+            organization_name="Global Systems Ltd",
+            contact_email="finance@globalsystems.example.com",
+            contact_name="Priya Kapoor",
+            billing_address="45 Enterprise Way\nChicago, IL 60601",
+            line_items=[
+                {
+                    "description": str(corp_ticket.name),
+                    "quantity": 20,
+                    "unit_price": corp_price,
+                    "ticket_type": corp_ticket,
+                },
+            ],
+            notes="First wire received. Remainder expected by end of month.",
+            created_by=admin,
+        )
+        partial_amount = (po_partial.total * Decimal("0.6")).quantize(Decimal("0.01"))
+        record_payment(
+            po_partial,
+            amount=partial_amount,
+            method=PurchaseOrderPayment.Method.WIRE,
+            reference="WIRE-GS-20270301",
+            payment_date=today - datetime.timedelta(days=12),
+            entered_by=admin,
+            note="First installment via international wire.",
+        )
+        print(
+            f"    {po_partial.reference}: Partially paid — Global Systems Ltd"
+            f" (20x, {partial_amount} of {po_partial.total})"
+        )
+
+        # 4. Fully paid — DataFlow Analytics, 8x Corporate + 8x T-shirt, two payments
+        line_items_df: list[dict[str, object]] = [
+            {
+                "description": str(corp_ticket.name),
+                "quantity": 8,
+                "unit_price": corp_price,
+                "ticket_type": corp_ticket,
+            },
+        ]
+        if tshirt_addon:
+            line_items_df.append(
+                {
+                    "description": str(tshirt_addon.name),
+                    "quantity": 8,
+                    "unit_price": tshirt_addon.price,
+                    "addon": tshirt_addon,
+                },
+            )
+        po_paid = create_purchase_order(
+            conference=conference,
+            organization_name="DataFlow Analytics",
+            contact_email="ap@dataflow.example.com",
+            contact_name="Tomás Rivera",
+            billing_address="800 Data Center Pkwy\nSeattle, WA 98101",
+            line_items=line_items_df,
+            notes="Paid in full across two installments.",
+            created_by=admin,
+        )
+        first_payment = (po_paid.total * Decimal("0.7")).quantize(Decimal("0.01"))
+        second_payment = po_paid.total - first_payment
+        record_payment(
+            po_paid,
+            amount=first_payment,
+            method=PurchaseOrderPayment.Method.WIRE,
+            reference="WIRE-DF-20270215",
+            payment_date=today - datetime.timedelta(days=25),
+            entered_by=admin,
+            note="Initial wire transfer.",
+        )
+        record_payment(
+            po_paid,
+            amount=second_payment,
+            method=PurchaseOrderPayment.Method.ACH,
+            reference="ACH-DF-20270228",
+            payment_date=today - datetime.timedelta(days=10),
+            entered_by=admin,
+            note="Final ACH payment.",
+        )
+        print(f"    {po_paid.reference}: Paid — DataFlow Analytics (8x tickets + 8x addons)")
+
+        # 5. Overpaid — Innovation Hub Co, 3x Corporate, payment exceeds total by $50
+        po_over = create_purchase_order(
+            conference=conference,
+            organization_name="Innovation Hub Co",
+            contact_email="billing@innovationhub.example.com",
+            contact_name="Sana Al-Rashid",
+            billing_address="350 Catalyst Lane\nBoston, MA 02101",
+            line_items=[
+                {
+                    "description": str(corp_ticket.name),
+                    "quantity": 3,
+                    "unit_price": corp_price,
+                    "ticket_type": corp_ticket,
+                },
+            ],
+            notes="Overpayment of $50 — refund or credit pending.",
+            created_by=admin,
+        )
+        po_over.status = PurchaseOrder.Status.SENT
+        po_over.save(update_fields=["status", "updated_at"])
+        record_payment(
+            po_over,
+            amount=po_over.total + Decimal("50.00"),
+            method=PurchaseOrderPayment.Method.WIRE,
+            reference="WIRE-IH-20270305",
+            payment_date=today - datetime.timedelta(days=8),
+            entered_by=admin,
+            note="Wire transfer exceeded invoice total.",
+        )
+        print(f"    {po_over.reference}: Overpaid — Innovation Hub Co (3x, +$50 over)")
+
+        # 6. Cancelled — CloudNine Enterprises, 15x Corporate
+        po_cancelled = create_purchase_order(
+            conference=conference,
+            organization_name="CloudNine Enterprises",
+            contact_email="events@cloudnine.example.com",
+            contact_name="Derek O'Sullivan",
+            billing_address="900 Nimbus Ave\nDenver, CO 80202",
+            line_items=[
+                {
+                    "description": str(corp_ticket.name),
+                    "quantity": 15,
+                    "unit_price": corp_price,
+                    "ticket_type": corp_ticket,
+                },
+            ],
+            notes="Cancelled — company withdrew conference sponsorship.",
+            created_by=admin,
+        )
+        cancel_purchase_order(po_cancelled)
+        print(f"    {po_cancelled.reference}: Cancelled — CloudNine Enterprises (15x)")
+
+        # 7. PO with credit note — Digital Frontier Inc, 12x Corporate, paid, then credit for 2 tickets
+        po_credit = create_purchase_order(
+            conference=conference,
+            organization_name="Digital Frontier Inc",
+            contact_email="finance@digitalfrontier.example.com",
+            contact_name="Elena Vasquez",
+            billing_address="1500 Binary Blvd\nPortland, OR 97201",
+            line_items=[
+                {
+                    "description": str(corp_ticket.name),
+                    "quantity": 12,
+                    "unit_price": corp_price,
+                    "ticket_type": corp_ticket,
+                },
+            ],
+            notes="2 attendees cancelled, credit note issued for their tickets.",
+            created_by=admin,
+        )
+        po_credit.status = PurchaseOrder.Status.SENT
+        po_credit.save(update_fields=["status", "updated_at"])
+        record_payment(
+            po_credit,
+            amount=po_credit.total,
+            method=PurchaseOrderPayment.Method.ACH,
+            reference="ACH-DF-20270220",
+            payment_date=today - datetime.timedelta(days=20),
+            entered_by=admin,
+            note="Full payment received.",
+        )
+        credit_amount = corp_price * 2
+        issue_credit_note(
+            po_credit,
+            amount=credit_amount,
+            reason="2 attendees unable to attend — tickets cancelled per organization request.",
+            issued_by=admin,
+        )
+        print(f"    {po_credit.reference}: Paid + credit note — Digital Frontier Inc (12x, credit for 2)")
+
+        # 8. Multi-payment PO — Enterprise Solutions Group, 25x Corporate + 10x Tutorial, 3 payments
+        line_items_es: list[dict[str, object]] = [
+            {
+                "description": str(corp_ticket.name),
+                "quantity": 25,
+                "unit_price": corp_price,
+                "ticket_type": corp_ticket,
+            },
+        ]
+        if tutorial_addon:
+            line_items_es.append(
+                {
+                    "description": str(tutorial_addon.name),
+                    "quantity": 10,
+                    "unit_price": tutorial_addon.price,
+                    "addon": tutorial_addon,
+                },
+            )
+        po_multi = create_purchase_order(
+            conference=conference,
+            organization_name="Enterprise Solutions Group",
+            contact_email="accounts@enterprisesolutions.example.com",
+            contact_name="Wesley Park",
+            billing_address="7000 Commerce Tower, 12th Floor\nNew York, NY 10001",
+            line_items=line_items_es,
+            notes="Large corporate deal — staggered payments per contract terms.",
+            created_by=admin,
+        )
+        po_multi.status = PurchaseOrder.Status.SENT
+        po_multi.save(update_fields=["status", "updated_at"])
+        remaining = po_multi.total
+        payment_1 = (remaining * Decimal("0.4")).quantize(Decimal("0.01"))
+        payment_2 = (remaining * Decimal("0.35")).quantize(Decimal("0.01"))
+        payment_3 = remaining - payment_1 - payment_2
+        record_payment(
+            po_multi,
+            amount=payment_1,
+            method=PurchaseOrderPayment.Method.CHECK,
+            reference="CHK-ES-10042",
+            payment_date=today - datetime.timedelta(days=30),
+            entered_by=admin,
+            note="First installment — check received.",
+        )
+        record_payment(
+            po_multi,
+            amount=payment_2,
+            method=PurchaseOrderPayment.Method.WIRE,
+            reference="WIRE-ES-20270301",
+            payment_date=today - datetime.timedelta(days=15),
+            entered_by=admin,
+            note="Second installment — wire transfer.",
+        )
+        record_payment(
+            po_multi,
+            amount=payment_3,
+            method=PurchaseOrderPayment.Method.ACH,
+            reference="ACH-ES-20270310",
+            payment_date=today - datetime.timedelta(days=5),
+            entered_by=admin,
+            note="Final installment — ACH.",
+        )
+        print(f"    {po_multi.reference}: Paid (3 payments) — Enterprise Solutions Group (25x tickets + 10x addons)")
+
+        n_pos = PurchaseOrder.objects.filter(conference=conference).count()
+        n_payments = PurchaseOrderPayment.objects.filter(purchase_order__conference=conference).count()
+        n_credits = PurchaseOrderCreditNote.objects.filter(purchase_order__conference=conference).count()
+        print(f"  Created {n_pos} purchase orders, {n_payments} payments, {n_credits} credit notes.")
+
     def _create_letter_requests(self, conference: Conference, users: list) -> None:
         """Create visa invitation letter requests across various workflow statuses."""
         from django_program.registration.services.letters import generate_invitation_letter
@@ -1728,69 +2070,23 @@ class Seeder:
         if BadgeTemplate.objects.filter(conference=conference).exists():
             return
 
-        # Template definitions: (name, slug, is_default, accent, bg, text, show_email,
-        #                        show_company, show_qr, banner_pos)
+        # Each template varies by accent color, which fields are visible, and
+        # banner position so the badge list / preview shows realistic variety.
+        #
+        # (name, slug, is_default, accent, bg, text,
+        #  show_email, show_company, show_qr, banner_pos)
+        BPos = BadgeTemplate.BannerPosition
         template_defs = [
-            (
-                "Default Badge",
-                "default",
-                True,
-                "#4338CA",
-                "#FFFFFF",
-                "#000000",
-                False,
-                False,
-                True,
-                BadgeTemplate.BannerPosition.BELOW_HEADER,
-            ),
-            (
-                "Speaker Badge",
-                "speaker",
-                False,
-                "#DC2626",
-                "#FEF2F2",
-                "#1F2937",
-                True,
-                True,
-                True,
-                BadgeTemplate.BannerPosition.ABOVE_NAME,
-            ),
-            (
-                "Staff Badge",
-                "staff",
-                False,
-                "#059669",
-                "#F0FDF4",
-                "#1F2937",
-                True,
-                False,
-                True,
-                BadgeTemplate.BannerPosition.BELOW_NAME,
-            ),
-            (
-                "Sponsor Badge",
-                "sponsor",
-                False,
-                "#D97706",
-                "#FFFBEB",
-                "#1F2937",
-                True,
-                True,
-                True,
-                BadgeTemplate.BannerPosition.BOTTOM,
-            ),
-            (
-                "Press Badge",
-                "press",
-                False,
-                "#7C3AED",
-                "#F5F3FF",
-                "#1F2937",
-                False,
-                True,
-                False,
-                BadgeTemplate.BannerPosition.BELOW_HEADER,
-            ),
+            # Attendee — clean white, indigo accent, name + QR only
+            ("Default Badge", "default", True, "#4338CA", "#FFFFFF", "#000000", False, False, True, BPos.BELOW_HEADER),
+            # Speaker — white, red accent, show company & email
+            ("Speaker Badge", "speaker", False, "#B91C1C", "#FFFFFF", "#111827", True, True, True, BPos.BELOW_HEADER),
+            # Staff — white, emerald accent, no company/email
+            ("Staff Badge", "staff", False, "#047857", "#FFFFFF", "#111827", False, False, True, BPos.BELOW_HEADER),
+            # Sponsor — white, amber accent, show company
+            ("Sponsor Badge", "sponsor", False, "#B45309", "#FFFFFF", "#111827", False, True, True, BPos.BELOW_HEADER),
+            # Press — white, purple accent, show company, no QR
+            ("Press Badge", "press", False, "#6D28D9", "#FFFFFF", "#111827", False, True, False, BPos.BELOW_HEADER),
         ]
 
         templates: dict[str, BadgeTemplate] = {}

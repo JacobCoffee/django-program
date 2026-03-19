@@ -1,0 +1,258 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}{{ purchase_order.reference }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:purchase-order-list' conference.slug %}">Purchase Orders</a>
+  <span class="breadcrumb-separator"></span>
+  <span>{{ purchase_order.reference }}</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>{{ purchase_order.reference }}
+  {% if purchase_order.status == "draft" %}
+  <span class="badge badge--other" style="vertical-align: middle; font-size: 0.7rem;">Draft</span>
+  {% elif purchase_order.status == "sent" %}
+  <span class="badge badge--accepted" style="vertical-align: middle; font-size: 0.7rem;">Sent</span>
+  {% elif purchase_order.status == "partially_paid" %}
+  <span class="badge badge--warning" style="vertical-align: middle; font-size: 0.7rem;">Partially Paid</span>
+  {% elif purchase_order.status == "paid" %}
+  <span class="badge badge--active" style="vertical-align: middle; font-size: 0.7rem;">Paid</span>
+  {% elif purchase_order.status == "overpaid" %}
+  <span class="badge badge--synced" style="vertical-align: middle; font-size: 0.7rem;">Overpaid</span>
+  {% elif purchase_order.status == "cancelled" %}
+  <span class="badge badge--inactive" style="vertical-align: middle; font-size: 0.7rem;">Cancelled</span>
+  {% endif %}
+</h1>
+<p>{{ purchase_order.organization_name }}</p>
+{% endblock %}
+
+{% block content %}
+{# ── Contact & Billing Info ── #}
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Organization</div>
+    <div class="info-item-value">{{ purchase_order.organization_name }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Contact Name</div>
+    <div class="info-item-value">{% if purchase_order.contact_name %}{{ purchase_order.contact_name }}{% else %}--{% endif %}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Contact Email</div>
+    <div class="info-item-value"><a href="mailto:{{ purchase_order.contact_email }}">{{ purchase_order.contact_email }}</a></div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Billing Address</div>
+    <div class="info-item-value">{% if purchase_order.billing_address %}{{ purchase_order.billing_address|linebreaksbr }}{% else %}--{% endif %}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Created By</div>
+    <div class="info-item-value">{% if purchase_order.created_by %}{{ purchase_order.created_by.get_full_name|default:purchase_order.created_by.username }}{% else %}--{% endif %}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Created</div>
+    <div class="info-item-value">{{ purchase_order.created_at|date:"N j, Y, P" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Updated</div>
+    <div class="info-item-value">{{ purchase_order.updated_at|date:"N j, Y, P" }}</div>
+  </div>
+  {% if purchase_order.notes %}
+  <div class="info-item" style="grid-column: 1 / -1;">
+    <div class="info-item-label">Notes</div>
+    <div class="info-item-value">{{ purchase_order.notes|linebreaksbr }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Line Items ── #}
+<h2 class="section-heading">Line Items</h2>
+{% if line_items %}
+<table class="data-table" style="margin-bottom: 1.5rem;">
+  <thead>
+    <tr>
+      <th>Description</th>
+      <th style="text-align: right;">Qty</th>
+      <th style="text-align: right;">Unit Price</th>
+      <th style="text-align: right;">Line Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in line_items %}
+    <tr>
+      <td>{{ item.description }}</td>
+      <td style="text-align: right;">{{ item.quantity }}</td>
+      <td style="text-align: right;">${{ item.unit_price }}</td>
+      <td style="text-align: right;">${{ item.line_total }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="border-top: 2px solid var(--color-border);">
+      <td colspan="3" style="text-align: right; font-weight: 700; padding: 0.75rem 1rem;">Subtotal</td>
+      <td style="text-align: right; font-weight: 700; padding: 0.75rem 1rem;">${{ purchase_order.subtotal }}</td>
+    </tr>
+    <tr>
+      <td colspan="3" style="text-align: right; font-weight: 700; padding: 0.5rem 1rem;">Total</td>
+      <td style="text-align: right; font-weight: 700; padding: 0.5rem 1rem; font-size: 1.05rem;">${{ purchase_order.total }}</td>
+    </tr>
+    <tr>
+      <td colspan="3" style="text-align: right; font-weight: 600; padding: 0.5rem 1rem; color: var(--color-success);">Total Paid</td>
+      <td style="text-align: right; font-weight: 600; padding: 0.5rem 1rem; color: var(--color-success);">${{ purchase_order.total_paid }}</td>
+    </tr>
+    {% if purchase_order.total_credited %}
+    <tr>
+      <td colspan="3" style="text-align: right; font-weight: 600; padding: 0.5rem 1rem; color: var(--color-accent);">Total Credits</td>
+      <td style="text-align: right; font-weight: 600; padding: 0.5rem 1rem; color: var(--color-accent);">${{ purchase_order.total_credited }}</td>
+    </tr>
+    {% endif %}
+    <tr style="border-top: 2px solid var(--color-border);">
+      <td colspan="3" style="text-align: right; font-weight: 700; padding: 0.75rem 1rem; font-size: 1.1rem;">Balance Due</td>
+      <td style="text-align: right; font-weight: 700; padding: 0.75rem 1rem; font-size: 1.1rem;
+        {% if purchase_order.balance_due > 0 %}color: var(--color-warning);
+        {% elif purchase_order.balance_due < 0 %}color: var(--color-accent);
+        {% else %}color: var(--color-success);{% endif %}">
+        ${{ purchase_order.balance_due }}
+      </td>
+    </tr>
+  </tfoot>
+</table>
+{% else %}
+<p style="color: var(--color-text-muted); margin-bottom: 1.5rem;">No line items.</p>
+{% endif %}
+
+{# ── Payments ── #}
+<h2 class="section-heading">Payments</h2>
+{% if payments %}
+<table class="data-table" style="margin-bottom: 1rem;">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th style="text-align: right;">Amount</th>
+      <th>Method</th>
+      <th>Reference</th>
+      <th>Entered By</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for payment in payments %}
+    <tr>
+      <td>{{ payment.payment_date|date:"M j, Y" }}</td>
+      <td style="text-align: right; font-weight: 600;">${{ payment.amount }}</td>
+      <td>{{ payment.get_method_display }}</td>
+      <td class="mono">{% if payment.reference %}{{ payment.reference }}{% else %}<span style="color: var(--color-text-muted);">--</span>{% endif %}</td>
+      <td>{% if payment.entered_by %}{{ payment.entered_by.get_full_name|default:payment.entered_by.username }}{% else %}--{% endif %}</td>
+      <td>{% if payment.note %}{{ payment.note|truncatewords:10 }}{% else %}<span style="color: var(--color-text-muted);">--</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color: var(--color-text-muted); margin-bottom: 1rem;">No payments recorded yet.</p>
+{% endif %}
+
+{% if purchase_order.status != "cancelled" and purchase_order.status != "paid" %}
+<div style="background: var(--color-bg); border: 1px solid var(--color-border-light); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 2rem;">
+  <h3 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--color-text-secondary);">Record Payment</h3>
+  <form method="post" action="{% url 'manage:purchase-order-payment' conference.slug purchase_order.pk %}" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; align-items: end;">
+    {% csrf_token %}
+    <div class="form-group" style="margin-bottom: 0;">
+      <label for="pay-amount">Amount ($)</label>
+      <input type="number" id="pay-amount" name="amount" step="0.01" min="0.01" required style="padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.88rem; width: 100%;">
+    </div>
+    <div class="form-group" style="margin-bottom: 0;">
+      <label for="pay-method">Method</label>
+      <select id="pay-method" name="method" style="padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.88rem; width: 100%;">
+        {% for value, label in payment_methods %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom: 0;">
+      <label for="pay-ref">Reference</label>
+      <input type="text" id="pay-ref" name="reference" placeholder="Wire transfer ID, check #, etc." style="padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.88rem; width: 100%;">
+    </div>
+    <div class="form-group" style="margin-bottom: 0;">
+      <label for="pay-date">Date</label>
+      <input type="date" id="pay-date" name="payment_date" value="{{ today }}" style="padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.88rem; width: 100%;">
+    </div>
+    <div class="form-group" style="margin-bottom: 0;">
+      <label for="pay-note">Note</label>
+      <input type="text" id="pay-note" name="note" placeholder="Optional note" style="padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.88rem; width: 100%;">
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary btn-sm">Record Payment</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{# ── Credit Notes ── #}
+<h2 class="section-heading">Credit Notes</h2>
+{% if credit_notes %}
+<table class="data-table" style="margin-bottom: 1rem;">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th style="text-align: right;">Amount</th>
+      <th>Reason</th>
+      <th>Issued By</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cn in credit_notes %}
+    <tr>
+      <td>{{ cn.created_at|date:"M j, Y" }}</td>
+      <td style="text-align: right; font-weight: 600;">${{ cn.amount }}</td>
+      <td>{{ cn.reason|truncatewords:20 }}</td>
+      <td>{% if cn.issued_by %}{{ cn.issued_by.get_full_name|default:cn.issued_by.username }}{% else %}--{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color: var(--color-text-muted); margin-bottom: 1rem;">No credit notes issued.</p>
+{% endif %}
+
+{% if purchase_order.status != "cancelled" %}
+<div style="background: var(--color-bg); border: 1px solid var(--color-border-light); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 2rem;">
+  <h3 style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--color-text-secondary);">Issue Credit Note</h3>
+  <form method="post" action="{% url 'manage:purchase-order-credit' conference.slug purchase_order.pk %}" style="display: grid; grid-template-columns: 1fr 2fr auto; gap: 0.75rem; align-items: end;">
+    {% csrf_token %}
+    <div class="form-group" style="margin-bottom: 0;">
+      <label for="credit-amount">Amount ($)</label>
+      <input type="number" id="credit-amount" name="amount" step="0.01" min="0.01" required style="padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.88rem; width: 100%;">
+    </div>
+    <div class="form-group" style="margin-bottom: 0;">
+      <label for="credit-reason">Reason</label>
+      <input type="text" id="credit-reason" name="reason" required placeholder="Reason for credit" style="padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.88rem; width: 100%;">
+    </div>
+    <div>
+      <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('Issue this credit note?');">Issue Credit</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{# ── Actions ── #}
+<div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 2rem;">
+  {% if purchase_order.status == "draft" %}
+  <span style="font-size: 0.82rem; color: var(--color-text-muted);">This PO is in draft. Mark it as sent when the invoice has been delivered to the organization.</span>
+  {% endif %}
+
+  {% if purchase_order.status != "cancelled" and purchase_order.status != "paid" %}
+  <form method="post" action="{% url 'manage:purchase-order-cancel' conference.slug purchase_order.pk %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm" style="color: var(--color-danger); border-color: var(--color-danger);" onclick="return confirm('Cancel this purchase order? This cannot be undone.');">Cancel PO</button>
+  </form>
+  {% endif %}
+
+  <a href="{% url 'manage:purchase-order-list' conference.slug %}" class="btn btn-secondary btn-sm">Back to List</a>
+</div>
+{% endblock %}
