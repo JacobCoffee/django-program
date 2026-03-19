@@ -485,6 +485,7 @@ class Payment(models.Model):
         """Supported payment methods."""
 
         STRIPE = "stripe", "Stripe"
+        TERMINAL = "terminal", "Terminal"
         COMP = "comp", "Complimentary"
         CREDIT = "credit", "Credit"
         MANUAL = "manual", "Manual"
@@ -693,6 +694,7 @@ from django_program.registration.conditions import (  # noqa: E402
     SpeakerCondition,
     TimeOrStockLimitCondition,
 )
+from django_program.registration.terminal import TerminalPayment  # noqa: E402
 
 __all__ = [
     "AddOn",
@@ -717,6 +719,7 @@ __all__ = [
     "SpeakerCondition",
     "StripeCustomer",
     "StripeEvent",
+    "TerminalPayment",
     "TicketType",
     "TimeOrStockLimitCondition",
     "Voucher",

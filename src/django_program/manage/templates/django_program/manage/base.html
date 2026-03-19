@@ -1113,6 +1113,11 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8l3 3 5-6"/><rect x="1.5" y="1.5" width="13" height="13" rx="2"/></svg></span> Check-in
             </a>
           </li>
+          <li>
+            <a href="{% url 'manage:terminal-pos' conference.slug %}" class="{% if active_nav == 'terminal' %}active{% endif %}">
+              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><path d="M4.5 9.5h2M9.5 9.5h2M1.5 6.5h13"/></svg></span> Terminal POS
+            </a>
+          </li>
         </ul>
       </div>
       <div class="sidebar-section">

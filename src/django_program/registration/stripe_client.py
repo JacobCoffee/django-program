@@ -198,3 +198,91 @@ class StripeClient:
             params=params,
             options={"idempotency_key": idempotency_key},
         )
+
+    # -- Terminal methods -----------------------------------------------------
+
+    def create_connection_token(self) -> str:
+        """Create a Stripe Terminal connection token for the JS SDK.
+
+        Returns:
+            The connection token secret string.
+        """
+        token = self.client.v1.terminal.connection_tokens.create()
+        return token.secret
+
+    def list_readers(self, *, location: str | None = None) -> list[stripe.terminal.Reader]:
+        """List available Terminal readers, optionally filtered by location.
+
+        Args:
+            location: Optional Stripe Location ID to filter by.
+
+        Returns:
+            List of reader objects.
+        """
+        params: dict[str, object] = {"limit": 100}
+        if location:
+            params["location"] = location
+        result = self.client.v1.terminal.readers.list(params=params)
+        return list(result.data)
+
+    def create_terminal_payment_intent(
+        self,
+        *,
+        amount: Decimal,
+        currency: str,
+        customer_id: str | None = None,
+        metadata: dict[str, str] | None = None,
+        description: str = "",
+    ) -> stripe.PaymentIntent:
+        """Create a PaymentIntent with capture_method=manual for Terminal pre-auth.
+
+        Args:
+            amount: Payment amount as Decimal.
+            currency: ISO 4217 currency code.
+            customer_id: Optional Stripe customer ID.
+            metadata: Optional metadata dict.
+            description: Optional description.
+
+        Returns:
+            The created PaymentIntent object.
+        """
+        api_amount = convert_amount_for_api(amount, currency)
+        params: dict[str, object] = {
+            "amount": api_amount,
+            "currency": currency.lower(),
+            "capture_method": "manual",
+            "payment_method_types": ["card_present"],
+        }
+        if customer_id:
+            params["customer"] = customer_id
+        if metadata:
+            params["metadata"] = metadata
+        if description:
+            params["description"] = description
+        return self.client.v1.payment_intents.create(params=params)
+
+    def process_terminal_payment(self, *, reader_id: str, payment_intent_id: str) -> stripe.terminal.Reader:
+        """Send a PaymentIntent to a Terminal reader for card collection.
+
+        Args:
+            reader_id: The Stripe Terminal Reader ID.
+            payment_intent_id: The PaymentIntent ID to collect.
+
+        Returns:
+            The updated Reader object with action status.
+        """
+        return self.client.v1.terminal.readers.process_payment_intent(
+            reader_id,
+            params={"payment_intent": payment_intent_id},
+        )
+
+    def cancel_reader_action(self, reader_id: str) -> stripe.terminal.Reader:
+        """Cancel the current action on a Terminal reader.
+
+        Args:
+            reader_id: The Stripe Terminal Reader ID.
+
+        Returns:
+            The updated Reader object.
+        """
+        return self.client.v1.terminal.readers.cancel_action(reader_id)
