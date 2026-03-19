@@ -43,7 +43,12 @@ class StaffRequiredMixin:
         """
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required"}, status=401)
-        if not (request.user.is_superuser or request.user.has_perm("program_conference.change_conference")):
+        if not (
+            request.user.is_superuser
+            or request.user.has_perm("program_conference.change_conference")
+            or request.user.has_perm("program_conference.view_checkin")
+            or request.user.has_perm("program_conference.use_terminal")
+        ):
             return JsonResponse({"error": "Staff access required"}, status=403)
         self.conference = get_object_or_404(Conference, slug=kwargs.get("conference_slug"))
         return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]

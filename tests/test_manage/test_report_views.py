@@ -5,7 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group, Permission, User
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
@@ -43,9 +43,12 @@ def regular_user(db):
 
 @pytest.fixture
 def reports_user(db):
-    """A user belonging to the 'Program: Reports' group."""
+    """A user with view_reports and export_reports permissions via the Reports Viewer group."""
     user = User.objects.create_user(username="reporter", password="password", email="reporter@test.com")
-    group, _created = Group.objects.get_or_create(name="Program: Reports")
+    group, _created = Group.objects.get_or_create(name="Reports Viewer")
+    for codename in ("view_reports", "export_reports"):
+        perm = Permission.objects.get(content_type__app_label="program_conference", codename=codename)
+        group.permissions.add(perm)
     user.groups.add(group)
     return user
 
@@ -356,7 +359,6 @@ class TestReportsDashboard:
         assert resp.status_code == 200
         ctx = resp.context
         assert ctx["conference"] == conference
-        assert ctx["active_nav"] == "reports"
 
     def test_contains_attendee_summary(self, client_logged_in_super, report_data):
         conference = report_data["conference"]

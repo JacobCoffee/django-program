@@ -32,6 +32,7 @@ class TalkOverrideListView(ManagePermissionMixin, ListView):
     """List all talk overrides for the current conference."""
 
     template_name = "django_program/manage/override_list.html"
+    required_permission = "view_overrides"
     context_object_name = "overrides"
     paginate_by = 50
 
@@ -55,6 +56,7 @@ class TalkOverrideCreateView(ManagePermissionMixin, CreateView):
     """Create a new talk override for the current conference."""
 
     template_name = "django_program/manage/override_form.html"
+    required_permission = "change_overrides"
     form_class = TalkOverrideForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -96,6 +98,7 @@ class TalkOverrideEditView(ManagePermissionMixin, UpdateView):
     """Edit an existing talk override."""
 
     template_name = "django_program/manage/override_form.html"
+    required_permission = "change_overrides"
     form_class = TalkOverrideForm
 
     def get_queryset(self) -> QuerySet[TalkOverride]:
@@ -142,6 +145,7 @@ class SpeakerOverrideListView(ManagePermissionMixin, ListView):
     """List all speaker overrides for the current conference."""
 
     template_name = "django_program/manage/speaker_override_list.html"
+    required_permission = "view_overrides"
     context_object_name = "overrides"
     paginate_by = 50
 
@@ -165,6 +169,7 @@ class SpeakerOverrideCreateView(ManagePermissionMixin, CreateView):
     """Create a new speaker override."""
 
     template_name = "django_program/manage/speaker_override_form.html"
+    required_permission = "change_overrides"
     form_class = SpeakerOverrideForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -206,6 +211,7 @@ class SpeakerOverrideEditView(ManagePermissionMixin, UpdateView):
     """Edit an existing speaker override."""
 
     template_name = "django_program/manage/speaker_override_form.html"
+    required_permission = "change_overrides"
     form_class = SpeakerOverrideForm
 
     def get_queryset(self) -> QuerySet[SpeakerOverride]:
@@ -252,6 +258,7 @@ class RoomOverrideListView(ManagePermissionMixin, ListView):
     """List all room overrides for the current conference."""
 
     template_name = "django_program/manage/room_override_list.html"
+    required_permission = "view_overrides"
     context_object_name = "overrides"
     paginate_by = 50
 
@@ -275,6 +282,7 @@ class RoomOverrideCreateView(ManagePermissionMixin, CreateView):
     """Create a new room override."""
 
     template_name = "django_program/manage/room_override_form.html"
+    required_permission = "change_overrides"
     form_class = RoomOverrideForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -316,6 +324,7 @@ class RoomOverrideEditView(ManagePermissionMixin, UpdateView):
     """Edit an existing room override."""
 
     template_name = "django_program/manage/room_override_form.html"
+    required_permission = "change_overrides"
     form_class = RoomOverrideForm
 
     def get_queryset(self) -> QuerySet[RoomOverride]:
@@ -362,6 +371,7 @@ class SponsorOverrideListView(ManagePermissionMixin, ListView):
     """List all sponsor overrides for the current conference."""
 
     template_name = "django_program/manage/sponsor_override_list.html"
+    required_permission = "view_overrides"
     context_object_name = "overrides"
     paginate_by = 50
 
@@ -385,6 +395,7 @@ class SponsorOverrideCreateView(ManagePermissionMixin, CreateView):
     """Create a new sponsor override."""
 
     template_name = "django_program/manage/sponsor_override_form.html"
+    required_permission = "change_overrides"
     form_class = SponsorOverrideForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -426,6 +437,7 @@ class SponsorOverrideEditView(ManagePermissionMixin, UpdateView):
     """Edit an existing sponsor override."""
 
     template_name = "django_program/manage/sponsor_override_form.html"
+    required_permission = "change_overrides"
     form_class = SponsorOverrideForm
 
     def get_queryset(self) -> QuerySet[SponsorOverride]:
@@ -472,6 +484,7 @@ class SubmissionTypeDefaultListView(ManagePermissionMixin, ListView):
     """List all submission type defaults for the current conference."""
 
     template_name = "django_program/manage/submission_type_default_list.html"
+    required_permission = "view_overrides"
     context_object_name = "type_defaults"
     paginate_by = 50
 
@@ -495,6 +508,7 @@ class SubmissionTypeDefaultCreateView(ManagePermissionMixin, CreateView):
     """Create a new submission type default for the current conference."""
 
     template_name = "django_program/manage/submission_type_default_form.html"
+    required_permission = "change_overrides"
     form_class = SubmissionTypeDefaultForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -526,6 +540,7 @@ class SubmissionTypeDefaultEditView(ManagePermissionMixin, UpdateView):
     """Edit an existing submission type default."""
 
     template_name = "django_program/manage/submission_type_default_form.html"
+    required_permission = "change_overrides"
     form_class = SubmissionTypeDefaultForm
 
     def get_queryset(self) -> QuerySet[SubmissionTypeDefault]:

@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group, Permission, User
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
@@ -36,9 +36,11 @@ def regular_user(db):
 
 @pytest.fixture
 def reports_user(db):
-    """A user belonging to the 'Program: Reports' group."""
+    """A user with the view_reports permission via the Reports Viewer group."""
     user = User.objects.create_user(username="reporter", password="password", email="reporter@test.com")
-    group, _created = Group.objects.get_or_create(name="Program: Reports")
+    group, _created = Group.objects.get_or_create(name="Reports Viewer")
+    perm = Permission.objects.get(content_type__app_label="program_conference", codename="view_reports")
+    group.permissions.add(perm)
     user.groups.add(group)
     return user
 

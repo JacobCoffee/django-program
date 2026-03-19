@@ -18,7 +18,9 @@
 {% endblock %}
 
 {% block page_actions %}
+{% if perms.program_conference.export_reports %}
 <a href="{% url 'manage:report-registration-flow-export' conference.slug %}?date_from={{ current_date_from }}&date_until={{ current_date_until }}" class="btn btn-secondary btn-sm">Export CSV</a>
+{% endif %}
 {% endblock %}
 
 {% block content %}

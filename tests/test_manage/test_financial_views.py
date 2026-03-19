@@ -36,24 +36,18 @@ def regular_user(db):
 
 @pytest.fixture
 def finance_user(db):
-    """A user belonging to the 'Program: Finance & Accounting' group with its standard permissions."""
+    """A user with the Finance Team group permissions (including view_finance)."""
     user = User.objects.create_user(username="finance", password="password", email="finance@test.com")
-    group, _created = Group.objects.get_or_create(name="Program: Finance & Accounting")
-    # Assign the permissions that setup_groups defines for this group.
+    group, _created = Group.objects.get_or_create(name="Finance Team")
     perm_specs = [
         ("program_conference", "view_conference"),
-        ("program_registration", "view_order"),
-        ("program_registration", "change_order"),
-        ("program_registration", "view_orderlineitem"),
-        ("program_registration", "view_payment"),
-        ("program_registration", "add_payment"),
-        ("program_registration", "change_payment"),
-        ("program_registration", "view_credit"),
-        ("program_registration", "add_credit"),
-        ("program_registration", "change_credit"),
-        ("program_registration", "view_voucher"),
-        ("program_registration", "view_tickettype"),
-        ("program_registration", "view_addon"),
+        ("program_conference", "view_dashboard"),
+        ("program_conference", "view_finance"),
+        ("program_conference", "change_finance"),
+        ("program_conference", "view_reports"),
+        ("program_conference", "export_reports"),
+        ("program_conference", "view_registration"),
+        ("program_conference", "view_commerce"),
     ]
     perms = Permission.objects.filter(
         content_type__app_label__in={app for app, _ in perm_specs},

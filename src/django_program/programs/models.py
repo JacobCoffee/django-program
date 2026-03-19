@@ -459,6 +459,8 @@ class TravelGrant(models.Model):
         unique_together = [("conference", "user")]
         permissions = [
             ("review_travel_grant", "Can review travel grant applications"),
+            ("view_travel_grant", "Can view travel grant applications"),
+            ("disburse_travel_grant", "Can disburse travel grant funds"),
         ]
 
     def __str__(self) -> str:

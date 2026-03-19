@@ -26,7 +26,7 @@ from django_program.manage.reports import (
     get_ticket_sales_ratio,
     get_travel_grant_analytics,
 )
-from django_program.manage.views_reports import ReportPermissionMixin
+from django_program.manage.views import ConferencePermissionMixin
 
 _ZERO = Decimal("0.00")
 
@@ -90,7 +90,7 @@ def _get_effective_targets(conference: object) -> dict[str, Any]:
     return targets
 
 
-class AnalyticsDashboardView(ReportPermissionMixin, TemplateView):
+class AnalyticsDashboardView(ConferencePermissionMixin, TemplateView):
     """Main analytics and KPI dashboard aggregating Tier 1 metrics.
 
     Provides revenue per attendee, cart funnel, check-in throughput,
@@ -99,6 +99,7 @@ class AnalyticsDashboardView(ReportPermissionMixin, TemplateView):
     """
 
     template_name = "django_program/manage/analytics_dashboard.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with all Tier 1 analytics KPIs and chart data.
@@ -200,7 +201,7 @@ class AnalyticsDashboardView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class SponsorAnalyticsView(ReportPermissionMixin, TemplateView):
+class SponsorAnalyticsView(ConferencePermissionMixin, TemplateView):
     """Sponsor analytics dashboard with revenue and goal tracking.
 
     Provides per-level sponsor counts, revenue, benefit fulfillment
@@ -208,6 +209,7 @@ class SponsorAnalyticsView(ReportPermissionMixin, TemplateView):
     """
 
     template_name = "django_program/manage/sponsor_analytics.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with sponsor analytics data.
@@ -240,7 +242,7 @@ class SponsorAnalyticsView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class CrossEventDashboardView(ReportPermissionMixin, TemplateView):
+class CrossEventDashboardView(ConferencePermissionMixin, TemplateView):
     """Cross-event intelligence dashboard with Tier 3 metrics.
 
     Provides year-over-year retention, attendee lifetime value,
@@ -248,6 +250,7 @@ class CrossEventDashboardView(ReportPermissionMixin, TemplateView):
     """
 
     template_name = "django_program/manage/cross_event_dashboard.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with cross-conference analytics.

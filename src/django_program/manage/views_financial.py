@@ -8,17 +8,13 @@ conference.
 import datetime
 import json
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q, QuerySet, Sum, Value
 from django.db.models.functions import Coalesce
-from django.http import HttpRequest, HttpResponse  # noqa: TC002
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.generic import TemplateView
 
-from django_program.conference.models import Conference
 from django_program.manage.reports import (
     get_aov_by_date,
     get_cashflow_waterfall,
@@ -29,7 +25,11 @@ from django_program.manage.reports import (
     get_sales_by_date,
     get_ticket_inventory,
 )
+from django_program.manage.views import ConferencePermissionMixin
 from django_program.programs.models import TravelGrant
+
+if TYPE_CHECKING:
+    from django_program.conference.models import Conference
 from django_program.registration.models import (
     Attendee,
     Cart,
@@ -45,8 +45,6 @@ from django_program.registration.purchase_order import (
 )
 
 _ZERO = Decimal("0.00")
-
-_FINANCE_GROUP_NAME = "Program: Finance & Accounting"
 
 
 def _build_chart_context(
@@ -221,80 +219,20 @@ def _build_financial_budget_context(conference: Conference, total_revenue: Decim
     return budget
 
 
-class FinancePermissionMixin(LoginRequiredMixin):
-    """Permission mixin for finance-scoped management views.
-
-    Resolves the conference from the ``conference_slug`` URL kwarg and
-    checks that the authenticated user satisfies at least one of:
-
-    * is a superuser,
-    * holds the ``program_conference.change_conference`` permission
-      (Conference Organizers), or
-    * belongs to the "Program: Finance & Accounting" group.
-
-    Stores the resolved conference on ``self.conference`` and injects it
-    into the template context alongside ``active_nav``.
-
-    Raises:
-        PermissionDenied: If the user fails all three checks.
-    """
-
-    conference: Conference
-    kwargs: dict[str, str]
-
-    def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
-        """Resolve the conference and enforce permissions before dispatch.
-
-        Args:
-            request: The incoming HTTP request.
-            *args: Positional arguments from the URL resolver.
-            **kwargs: Keyword arguments from the URL pattern.
-
-        Returns:
-            The HTTP response from the downstream view.
-
-        Raises:
-            PermissionDenied: If the user is not authorized.
-        """
-        if not request.user.is_authenticated:
-            return self.handle_no_permission()  # type: ignore[return-value]
-
-        self.conference = get_object_or_404(Conference, slug=kwargs.get("conference_slug", ""))
-
-        user = request.user
-        allowed = (
-            user.is_superuser
-            or user.has_perm("program_conference.change_conference")
-            or user.groups.filter(name=_FINANCE_GROUP_NAME).exists()
-        )
-        if not allowed:
-            raise PermissionDenied
-
-        return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
-
-    def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add the conference to the template context.
-
-        Args:
-            **kwargs: Additional context data.
-
-        Returns:
-            Template context with ``conference`` included.
-        """
-        context: dict[str, object] = super().get_context_data(**kwargs)
-        context["conference"] = self.conference
-        return context
+# Backward compatibility alias
+FinancePermissionMixin = ConferencePermissionMixin
 
 
-class FinancialDashboardView(FinancePermissionMixin, TemplateView):
+class FinancialDashboardView(ConferencePermissionMixin, TemplateView):
     """Comprehensive financial overview for a conference.
 
     Computes revenue totals, order/cart/payment breakdowns, ticket sales
     analytics, and surfaces recent orders and active carts.  All data is
-    scoped to ``self.conference`` (resolved by ``FinancePermissionMixin``).
+    scoped to ``self.conference``.
     """
 
     template_name = "django_program/manage/financial_dashboard.html"
+    required_permission = "view_finance"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:  # noqa: PLR0915
         """Build context with all financial metrics for the dashboard.
