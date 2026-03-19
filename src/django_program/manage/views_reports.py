@@ -10,6 +10,7 @@ import csv
 import datetime
 import json
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.db.models import Count, QuerySet, Sum
 from django.http import HttpRequest, HttpResponse
@@ -17,8 +18,6 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import ListView, TemplateView
 
-from django_program.conference.models import Conference
-from django_program.manage.views import ConferencePermissionMixin
 from django_program.manage.reports import (
     get_addon_inventory,
     get_attendee_manifest,
@@ -40,11 +39,14 @@ from django_program.manage.reports import (
     get_voucher_summary,
     get_voucher_usage,
 )
-from django_program.manage.views import _safe_csv_cell
+from django_program.manage.views import ConferencePermissionMixin, _safe_csv_cell
 from django_program.pretalx.models import Speaker
 from django_program.programs.models import TravelGrant
 from django_program.registration.letter import LetterRequest
 from django_program.registration.models import Attendee, Order, Payment, TicketType
+
+if TYPE_CHECKING:
+    from django_program.conference.models import Conference
 
 _REPORTS_GROUP_NAME = "Program: Reports"
 

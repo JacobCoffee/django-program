@@ -8,14 +8,13 @@ conference.
 import datetime
 import json
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.db.models import Count, Q, QuerySet, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.views.generic import TemplateView
 
-from django_program.conference.models import Conference
-from django_program.manage.views import ConferencePermissionMixin
 from django_program.manage.reports import (
     get_aov_by_date,
     get_cashflow_waterfall,
@@ -26,7 +25,11 @@ from django_program.manage.reports import (
     get_sales_by_date,
     get_ticket_inventory,
 )
+from django_program.manage.views import ConferencePermissionMixin
 from django_program.programs.models import TravelGrant
+
+if TYPE_CHECKING:
+    from django_program.conference.models import Conference
 from django_program.registration.models import (
     Attendee,
     Cart,

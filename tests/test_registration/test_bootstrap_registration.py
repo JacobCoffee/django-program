@@ -233,10 +233,16 @@ class TestSetupGroups:
         call_command("setup_groups")
 
         expected = [
-            "Program: Conference Organizers",
-            "Program: Registration & Ticket Support",
-            "Program: Finance & Accounting",
-            "Program: Read-Only Staff",
+            "Conference Organizer",
+            "Program Committee",
+            "Registration Manager",
+            "Finance Team",
+            "Travel Grant Reviewer",
+            "Sponsor Manager",
+            "Check-in Staff",
+            "Activity Organizer",
+            "Reports Viewer",
+            "Read-Only Staff",
         ]
         for name in expected:
             assert Group.objects.filter(name=name).exists(), f"Group '{name}' not created"
@@ -244,18 +250,18 @@ class TestSetupGroups:
     def test_groups_have_permissions(self):
         call_command("setup_groups")
 
-        organizers = Group.objects.get(name="Program: Conference Organizers")
+        organizers = Group.objects.get(name="Conference Organizer")
         assert organizers.permissions.count() > 0
 
-        readonly = Group.objects.get(name="Program: Read-Only Staff")
+        readonly = Group.objects.get(name="Read-Only Staff")
         codenames = set(readonly.permissions.values_list("codename", flat=True))
-        assert all(c.startswith("view_") for c in codenames)
+        assert all(c.startswith("view_") or c == "export_reports" for c in codenames)
 
     def test_idempotent(self):
         call_command("setup_groups")
         call_command("setup_groups")
 
-        assert Group.objects.filter(name__startswith="Program:").count() == 6
+        assert Group.objects.count() == 10
 
 
 # ---------------------------------------------------------------
