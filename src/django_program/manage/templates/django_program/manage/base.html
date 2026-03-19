@@ -159,6 +159,40 @@
       color: var(--color-text-muted);
       padding: 0 0.75rem;
       margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      border-radius: var(--radius-sm);
+      transition: color 0.15s ease;
+    }
+    .sidebar-section-title:hover {
+      color: var(--color-text-secondary);
+    }
+    .sidebar-section-title .sidebar-collapse-icon {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+      opacity: 0.5;
+      transition: transform 0.2s ease, opacity 0.15s ease;
+    }
+    .sidebar-section-title:hover .sidebar-collapse-icon {
+      opacity: 0.8;
+    }
+    .sidebar-section.collapsed .sidebar-collapse-icon {
+      transform: rotate(-90deg);
+    }
+    .sidebar-section.collapsed > .sidebar-nav {
+      max-height: 0;
+      overflow: hidden;
+      margin: 0;
+      opacity: 0;
+    }
+    .sidebar-section > .sidebar-nav {
+      max-height: 2000px;
+      opacity: 1;
+      transition: max-height 0.25s ease, opacity 0.2s ease;
     }
 
     .sidebar-sublabel {
@@ -999,8 +1033,8 @@
     {% if conference %}
     <nav class="sidebar" aria-label="Conference navigation">
       {# ── Conference ── #}
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">{{ conference.name }}</div>
+      <div class="sidebar-section" data-section="conference">
+        <div class="sidebar-section-title">{{ conference.name }} <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:dashboard' conference.slug %}" class="{% if active_nav == 'dashboard' %}active{% endif %}">
@@ -1016,8 +1050,8 @@
       </div>
 
       {# ── Program ── #}
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Program</div>
+      <div class="sidebar-section" data-section="program">
+        <div class="sidebar-section-title">Program <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:section-list' conference.slug %}" class="{% if active_nav == 'sections' %}active{% endif %}">
@@ -1079,8 +1113,8 @@
       </div>
 
       {# ── Registration ── #}
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Registration</div>
+      <div class="sidebar-section" data-section="registration">
+        <div class="sidebar-section-title">Registration <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li class="sidebar-sublabel">People</li>
           <li>
@@ -1133,8 +1167,8 @@
       </div>
 
       {# ── Sponsors ── #}
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Sponsors</div>
+      <div class="sidebar-section" data-section="sponsors">
+        <div class="sidebar-section-title">Sponsors <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:sponsor-level-list' conference.slug %}" class="{% if active_nav == 'sponsor-levels' %}active{% endif %}">
@@ -1150,8 +1184,8 @@
       </div>
 
       {# ── On-site ── #}
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">On-site</div>
+      <div class="sidebar-section" data-section="onsite">
+        <div class="sidebar-section-title">On-site <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:checkin-dashboard' conference.slug %}" class="{% if active_nav == 'checkin' %}active{% endif %}">
@@ -1167,8 +1201,8 @@
       </div>
 
       {# ── Finance & Insights ── #}
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Finance & Insights</div>
+      <div class="sidebar-section" data-section="finance">
+        <div class="sidebar-section-title">Finance & Insights <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:financial-dashboard' conference.slug %}" class="{% if active_nav == 'financial' %}active{% endif %}">
@@ -1195,8 +1229,8 @@
 
       {# ── Sync & Overrides (utility) ── #}
       <hr class="sidebar-utility-separator">
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Sync & Overrides</div>
+      <div class="sidebar-section" data-section="sync-overrides">
+        <div class="sidebar-section-title">Sync & Overrides <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <div class="sidebar-nav-expandable">
@@ -1245,5 +1279,29 @@
   </div>
 
   {% block extra_js %}{% endblock %}
+  <script>
+  (function() {
+    var KEY = 'manage-sidebar-collapsed';
+    var stored = {};
+    try { stored = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) {}
+
+    document.querySelectorAll('.sidebar-section[data-section]').forEach(function(section) {
+      var id = section.dataset.section;
+      var title = section.querySelector('.sidebar-section-title');
+
+      // Restore saved state (but never collapse a section that has the active nav item)
+      var hasActive = section.querySelector('.sidebar-nav li a.active, .sidebar-subnav li a.active');
+      if (stored[id] && !hasActive) {
+        section.classList.add('collapsed');
+      }
+
+      title.addEventListener('click', function() {
+        section.classList.toggle('collapsed');
+        stored[id] = section.classList.contains('collapsed');
+        try { localStorage.setItem(KEY, JSON.stringify(stored)); } catch(e) {}
+      });
+    });
+  })();
+  </script>
 </body>
 </html>
