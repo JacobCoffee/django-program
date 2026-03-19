@@ -41,8 +41,6 @@ from django_program.registration.models import (
 
 _ZERO = Decimal("0.00")
 
-_FINANCE_GROUP_NAME = "Program: Finance & Accounting"
-
 
 def _build_chart_context(
     conference: Conference,

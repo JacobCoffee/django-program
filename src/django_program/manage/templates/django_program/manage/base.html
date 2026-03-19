@@ -1033,7 +1033,7 @@
     {% if conference %}
     <nav class="sidebar" aria-label="Conference navigation">
       {# ── Conference ── #}
-      {% if user_perms.conference %}
+      {% if user_perms.conference or user_perms.settings %}
       <div class="sidebar-section" data-section="conference">
         <div class="sidebar-section-title">{{ conference.name }} <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">

@@ -166,7 +166,12 @@ class Command(BaseCommand):
                 content_type__app_label__in=app_labels,
             )
             matched = [p for p in permissions if (p.content_type.app_label, p.codename) in perm_set]
+            missing = perm_set - {(p.content_type.app_label, p.codename) for p in matched}
             group.permissions.set(matched)
+
+            if missing and verbosity > 0:
+                labels = ", ".join(f"{app}.{code}" for app, code in sorted(missing))
+                self.stdout.write(self.style.WARNING(f"  Warning: {group_name} missing permissions: {labels}"))
 
             if verbosity > 0:
                 self.stdout.write(self.style.SUCCESS(f"  {verb} group '{group_name}' with {len(matched)} permissions"))

@@ -48,8 +48,6 @@ from django_program.registration.models import Attendee, Order, Payment, TicketT
 if TYPE_CHECKING:
     from django_program.conference.models import Conference
 
-_REPORTS_GROUP_NAME = "Program: Reports"
-
 
 def _build_budget_context(conference: Conference) -> dict[str, object]:
     """Build budget-vs-actuals data for a conference.
@@ -239,6 +237,7 @@ class ReportsDashboardView(ConferencePermissionMixin, TemplateView):
                 {k: float(v) if isinstance(v, Decimal) else v for k, v in budget.items()}
             )
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -307,6 +306,7 @@ class AttendeeManifestView(ConferencePermissionMixin, ListView):
             else:
                 attendee.ticket_descriptions = ""  # type: ignore[attr-defined]
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -405,6 +405,7 @@ class InventoryReportView(ConferencePermissionMixin, TemplateView):
             ]
         )
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -516,6 +517,7 @@ class VoucherUsageReportView(ConferencePermissionMixin, TemplateView):
             ]
         )
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -604,6 +606,7 @@ class DiscountEffectivenessView(ConferencePermissionMixin, TemplateView):
             }
         )
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -714,6 +717,7 @@ class SalesByDateView(ConferencePermissionMixin, TemplateView):
             ]
         )
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -783,6 +787,7 @@ class CreditNotesView(ConferencePermissionMixin, TemplateView):
             }
         )
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -868,6 +873,7 @@ class SpeakerRegistrationView(ConferencePermissionMixin, TemplateView):
             }
         )
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -944,6 +950,7 @@ class ReconciliationView(ConferencePermissionMixin, TemplateView):
             ]
         )
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -1026,6 +1033,7 @@ class RegistrationFlowView(ConferencePermissionMixin, TemplateView):
             ]
         )
 
+        context["active_nav"] = "reports"
         return context
 
 
@@ -1103,6 +1111,7 @@ class VisaLetterReportView(ConferencePermissionMixin, TemplateView):
             }
         )
 
+        context["active_nav"] = "reports"
         return context
 
 

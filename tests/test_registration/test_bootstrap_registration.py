@@ -261,7 +261,19 @@ class TestSetupGroups:
         call_command("setup_groups")
         call_command("setup_groups")
 
-        assert Group.objects.count() == 10
+        expected_names = {
+            "Conference Organizer",
+            "Program Committee",
+            "Registration Manager",
+            "Finance Team",
+            "Travel Grant Reviewer",
+            "Sponsor Manager",
+            "Check-in Staff",
+            "Activity Organizer",
+            "Reports Viewer",
+            "Read-Only Staff",
+        }
+        assert Group.objects.filter(name__in=expected_names).count() == 10
 
 
 # ---------------------------------------------------------------
