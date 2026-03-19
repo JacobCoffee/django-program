@@ -100,9 +100,9 @@ class BulkPurchaseCreateView(ManagePermissionMixin, CreateView):
         form.fields["ticket_type"].queryset = TicketType.objects.filter(
             conference=self.conference, bulk_enabled=True
         ).order_by("name")
-        form.fields["addon"].queryset = AddOn.objects.filter(
-            conference=self.conference, bulk_enabled=True
-        ).order_by("name")
+        form.fields["addon"].queryset = AddOn.objects.filter(conference=self.conference, bulk_enabled=True).order_by(
+            "name"
+        )
         return form
 
     def form_valid(self, form: BulkPurchaseCreateForm) -> HttpResponse:

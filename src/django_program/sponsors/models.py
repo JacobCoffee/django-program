@@ -416,7 +416,8 @@ class BulkPurchase(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"BulkPurchase #{self.pk} - {self.sponsor.name} x{self.quantity}"
+        sponsor_name = self.sponsor.name if self.sponsor else "No sponsor"
+        return f"BulkPurchase #{self.pk} - {sponsor_name} x{self.quantity}"
 
     def clean(self) -> None:
         """Validate sponsor/conference consistency and bulk eligibility."""

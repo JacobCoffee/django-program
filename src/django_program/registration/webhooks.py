@@ -206,7 +206,13 @@ class PaymentIntentSucceededWebhook(Webhook):
         """Create a payment and mark the order as paid."""
         intent = _event_data_object(self.event)
         metadata = intent.get("metadata", {})
-        order_id = metadata["order_id"] if isinstance(metadata, dict) else str(metadata)
+        if not isinstance(metadata, dict) or not metadata.get("order_id"):
+            logger.info(
+                "payment_intent.succeeded %s has no order_id in metadata, skipping (likely a bulk purchase checkout)",
+                intent.get("id"),
+            )
+            return
+        order_id = metadata["order_id"]
         order = Order.objects.select_for_update().get(pk=order_id)
 
         config = get_config()
@@ -258,7 +264,9 @@ class PaymentIntentSucceededWebhook(Webhook):
         """Fire the ``order_paid`` signal for downstream listeners."""
         intent = _event_data_object(self.event)
         metadata = intent.get("metadata", {})
-        order_id = metadata["order_id"] if isinstance(metadata, dict) else str(metadata)
+        if not isinstance(metadata, dict) or not metadata.get("order_id"):
+            return
+        order_id = metadata["order_id"]
         order = Order.objects.get(pk=order_id)
         order_paid.send(sender=Order, order=order, user=order.user)
 
@@ -277,7 +285,13 @@ class PaymentIntentPaymentFailedWebhook(Webhook):
         """Mark the matching payment as failed and log the reason."""
         intent = _event_data_object(self.event)
         metadata = intent.get("metadata", {})
-        order_id = metadata["order_id"] if isinstance(metadata, dict) else str(metadata)
+        if not isinstance(metadata, dict) or not metadata.get("order_id"):
+            logger.info(
+                "payment_intent.payment_failed %s has no order_id in metadata, skipping",
+                intent.get("id"),
+            )
+            return
+        order_id = metadata["order_id"]
         intent_id = str(intent.get("id", ""))
 
         payment = (
@@ -360,6 +374,16 @@ class ChargeRefundedWebhook(Webhook):
             intent_id,
             order.reference,
         )
+
+        if is_full_refund:
+            from django_program.sponsors.models import BulkPurchase  # noqa: PLC0415
+            from django_program.sponsors.services import BulkPurchaseService  # noqa: PLC0415
+
+            try:
+                bp = BulkPurchase.objects.get(stripe_payment_intent_id=intent_id)
+                BulkPurchaseService.refund_bulk_purchase(bp)
+            except BulkPurchase.DoesNotExist:
+                pass
 
 
 class ChargeDisputeCreatedWebhook(Webhook):

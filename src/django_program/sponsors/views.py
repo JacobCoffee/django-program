@@ -165,18 +165,18 @@ class SponsorPortalMixin(LoginRequiredMixin):
                 return sponsors.first()  # type: ignore[return-value]
             raise PermissionDenied("No active sponsors found for this conference.")
 
-        sponsor = (
-            Sponsor.objects.filter(
-                conference=self.conference,
-                contact_email__iexact=request.user.email,
-                is_active=True,
-            )
-            .select_related("level")
-            .first()
+        user_email = request.user.email
+        if not user_email:
+            raise PermissionDenied("Your account has no email address configured.")
+
+        sponsors = Sponsor.objects.filter(conference=self.conference, is_active=True).select_related(
+            "level", "override"
         )
-        if sponsor is None:
-            raise PermissionDenied("You do not have access to any sponsor portal for this conference.")
-        return sponsor
+        for sponsor in sponsors:
+            if sponsor.effective_contact_email.lower() == user_email.lower():
+                return sponsor
+
+        raise PermissionDenied("You do not have access to any sponsor portal for this conference.")
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Inject conference and sponsor into the template context.

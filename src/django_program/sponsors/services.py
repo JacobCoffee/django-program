@@ -245,6 +245,13 @@ class BulkPurchaseService:
             msg = f"Cannot fulfill BulkPurchase #{bp.pk} in '{bp.get_payment_status_display()}' state."
             raise BulkPurchaseError(msg)
 
+        if bp.payment_status == BulkPurchase.PaymentStatus.APPROVED and bp.total_amount > Decimal(0):
+            msg = (
+                f"Cannot fulfill BulkPurchase #{bp.pk}: payment must be completed first. "
+                f"Only comp deals (total_amount=0) can be fulfilled from APPROVED state."
+            )
+            raise BulkPurchaseError(msg)
+
         vc = bp.voucher_config if isinstance(bp.voucher_config, dict) else {}
 
         if not vc.get("voucher_type") or vc.get("discount_value") is None:
@@ -258,8 +265,8 @@ class BulkPurchaseService:
         discount_value = Decimal(str(vc.get("discount_value", 0)))
         max_uses = int(vc.get("max_uses", 1))
 
-        sponsor_slug = (bp.sponsor.slug or "").upper()
-        prefix = str(vc.get("prefix", f"BULK-{sponsor_slug}-"))
+        sponsor_slug = (bp.sponsor.slug or "").upper() if bp.sponsor else ""
+        prefix = str(vc.get("prefix", f"BULK-{sponsor_slug}-" if sponsor_slug else "BULK-"))
 
         valid_from = _parse_datetime(vc.get("valid_from"))
         valid_until = _parse_datetime(vc.get("valid_until"))
@@ -294,11 +301,12 @@ class BulkPurchaseService:
         bp.payment_status = BulkPurchase.PaymentStatus.PAID
         bp.save(update_fields=["payment_status", "updated_at"])
 
+        sponsor_name = bp.sponsor.name if bp.sponsor else "No sponsor"
         logger.info(
             "Fulfilled BulkPurchase #%s: generated %d voucher codes for sponsor %s",
             bp.pk,
             len(vouchers),
-            bp.sponsor.name,
+            sponsor_name,
         )
 
         return vouchers
@@ -353,6 +361,34 @@ class BulkPurchaseService:
 
         bp.refresh_from_db()
         return bp
+
+    @staticmethod
+    @transaction.atomic
+    def refund_bulk_purchase(bulk_purchase: BulkPurchase) -> None:
+        """Mark a bulk purchase as REFUNDED and deactivate all linked vouchers.
+
+        Called when a ``charge.refunded`` webhook identifies a payment intent
+        belonging to a bulk purchase. Transitions the purchase to REFUNDED
+        and sets ``is_active=False`` on every voucher generated for it.
+
+        Args:
+            bulk_purchase: The bulk purchase to refund.
+        """
+        bp = BulkPurchase.objects.select_for_update().get(pk=bulk_purchase.pk)
+        bp.payment_status = BulkPurchase.PaymentStatus.REFUNDED
+        bp.save(update_fields=["payment_status", "updated_at"])
+
+        voucher_ids = list(BulkPurchaseVoucher.objects.filter(bulk_purchase=bp).values_list("voucher_id", flat=True))
+        if voucher_ids:
+            deactivated = Voucher.objects.filter(pk__in=voucher_ids, is_active=True).update(is_active=False)
+            logger.info(
+                "Refunded BulkPurchase #%s: deactivated %d of %d vouchers",
+                bp.pk,
+                deactivated,
+                len(voucher_ids),
+            )
+        else:
+            logger.info("Refunded BulkPurchase #%s: no vouchers to deactivate", bp.pk)
 
     @staticmethod
     def mark_failed(bulk_purchase: BulkPurchase) -> None:

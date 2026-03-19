@@ -1358,7 +1358,6 @@ class Seeder:
                 if addons and self.rng.random() < 0.4:
                     CartItem.objects.create(cart=cart, addon=self.rng.choice(addons), quantity=1)
 
-
     def _create_bulk_purchases(
         self,
         conference: Conference,
@@ -1404,7 +1403,7 @@ class Seeder:
                     prefix="MEGA-CORP-",
                     count=20,
                     voucher_type="percentage",
-                    discount_value=Decimal("15"),
+                    discount_value=Decimal(15),
                     max_uses=1,
                 )
                 vouchers = generate_voucher_codes(config)
@@ -1442,7 +1441,7 @@ class Seeder:
                     prefix="TSHIRT-",
                     count=50,
                     voucher_type="fixed_amount",
-                    discount_value=Decimal("5"),
+                    discount_value=Decimal(5),
                     max_uses=1,
                 )
                 vouchers = generate_voucher_codes(config)

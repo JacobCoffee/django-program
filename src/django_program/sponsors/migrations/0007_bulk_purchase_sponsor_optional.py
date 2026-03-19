@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("program_sponsors", "0006_bulkpurchase_addon"),
     ]
@@ -14,11 +13,29 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="bulkpurchase",
             name="payment_status",
-            field=models.CharField(choices=[("pending", "Pending"), ("approved", "Approved"), ("processing", "Processing"), ("paid", "Paid"), ("failed", "Failed"), ("refunded", "Refunded")], default="pending", max_length=20),
+            field=models.CharField(
+                choices=[
+                    ("pending", "Pending"),
+                    ("approved", "Approved"),
+                    ("processing", "Processing"),
+                    ("paid", "Paid"),
+                    ("failed", "Failed"),
+                    ("refunded", "Refunded"),
+                ],
+                default="pending",
+                max_length=20,
+            ),
         ),
         migrations.AlterField(
             model_name="bulkpurchase",
             name="sponsor",
-            field=models.ForeignKey(blank=True, help_text="The sponsor this deal is for (leave blank for non-sponsor deals).", null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="bulk_purchases", to="program_sponsors.sponsor"),
+            field=models.ForeignKey(
+                blank=True,
+                help_text="The sponsor this deal is for (leave blank for non-sponsor deals).",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="bulk_purchases",
+                to="program_sponsors.sponsor",
+            ),
         ),
     ]

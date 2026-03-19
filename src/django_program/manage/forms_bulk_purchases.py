@@ -88,9 +88,17 @@ class BulkPurchaseCreateForm(forms.ModelForm):
             "product_description": forms.TextInput(
                 attrs={"placeholder": "e.g. Gold Sponsor Comp Tickets"},
             ),
-            "quantity": forms.NumberInput(attrs={"min": "1", "placeholder": "10"}),
+            "quantity": forms.NumberInput(attrs={"min": "1", "max": "500", "placeholder": "10"}),
             "unit_price": forms.NumberInput(attrs={"step": "0.01", "min": "0", "placeholder": "0.00"}),
         }
+
+    def clean_quantity(self) -> int:
+        """Validate that quantity does not exceed the voucher service limit."""
+        quantity = self.cleaned_data["quantity"]
+        max_bulk_codes = 500
+        if quantity > max_bulk_codes:
+            raise forms.ValidationError(f"Cannot generate more than {max_bulk_codes} voucher codes per bulk purchase.")
+        return quantity
 
     def clean(self) -> dict[str, object]:
         """Compute total_amount and pack voucher_config from extra fields."""
