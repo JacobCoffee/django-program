@@ -31,7 +31,9 @@ _ALL_CONFERENCE_PERMS = [
     "change_overrides",
 ]
 
-_ALL_VIEW_CONFERENCE_PERMS = [p for p in _ALL_CONFERENCE_PERMS if p.startswith("view_") or p == "export_reports"]
+_ALL_VIEW_CONFERENCE_PERMS = [
+    p for p in _ALL_CONFERENCE_PERMS if (p.startswith("view_") or p == "export_reports") and p != "view_checkin"
+]
 
 # Mapping of group name -> list of (app_label, codename) permissions.
 _GROUP_PERMISSIONS: dict[str, list[tuple[str, str]]] = {

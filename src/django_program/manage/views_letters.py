@@ -310,10 +310,11 @@ class LetterRequestDownloadView(ManagePermissionMixin, View):
     """Download the generated PDF for a letter request.
 
     GET-only. Returns the PDF file as an attachment response. Only works
-    if a generated PDF exists on the letter request.
+    if a generated PDF exists on the letter request. Requires write-level
+    access because the PDF contains passport PII.
     """
 
-    required_permission = "view_registration"
+    required_permission = "change_registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Return the generated PDF as a downloadable attachment.

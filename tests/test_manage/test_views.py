@@ -71,7 +71,11 @@ def superuser(db):
 
 @pytest.fixture
 def staff_user(db):
-    return User.objects.create_user(username="staff", password="password", email="staff@test.com", is_staff=True)
+    user = User.objects.create_user(username="staff", password="password", email="staff@test.com", is_staff=True)
+    ct = ContentType.objects.get(app_label="program_conference", model="conference")
+    perm = Permission.objects.get(content_type=ct, codename="manage_conference_settings")
+    user.user_permissions.add(perm)
+    return user
 
 
 @pytest.fixture

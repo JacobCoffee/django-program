@@ -160,10 +160,11 @@ _SIDEBAR_PERM_KEYS = [
     "bulk_purchases",
     "activities",
     "travel_grants",
+    "checkin",
+    "terminal",
     "onsite",
     "finance",
     "reports",
-    "export_reports",
     "overrides",
 ]
 
@@ -257,7 +258,7 @@ class ConferencePermissionMixin(LoginRequiredMixin):
         """Build a dict of sidebar section visibility flags for the current user."""
         user = self.request.user
         if user.is_superuser or user.has_perm("program_conference.change_conference"):
-            return {k: True for k in _SIDEBAR_PERM_KEYS}
+            return dict.fromkeys(_SIDEBAR_PERM_KEYS, True)
 
         return {
             "conference": user.has_perm("program_conference.view_dashboard"),
@@ -270,13 +271,13 @@ class ConferencePermissionMixin(LoginRequiredMixin):
             "bulk_purchases": user.has_perm("program_conference.view_bulk_purchases"),
             "activities": user.has_perm("program_programs.view_activity"),
             "travel_grants": user.has_perm("program_programs.view_travel_grant"),
+            "checkin": user.has_perm("program_conference.view_checkin"),
+            "terminal": user.has_perm("program_conference.use_terminal"),
             "onsite": (
-                user.has_perm("program_conference.view_checkin")
-                or user.has_perm("program_conference.use_terminal")
+                user.has_perm("program_conference.view_checkin") or user.has_perm("program_conference.use_terminal")
             ),
             "finance": user.has_perm("program_conference.view_finance"),
             "reports": user.has_perm("program_conference.view_reports"),
-            "export_reports": user.has_perm("program_conference.export_reports"),
             "overrides": user.has_perm("program_conference.view_overrides"),
         }
 
@@ -311,10 +312,7 @@ class ConferenceListView(LoginRequiredMixin, ListView):
     paginate_by = 25
 
     def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
-        """Check that the user is a superuser or staff member.
-
-        Authentication is checked first; if the user is not logged in,
-        ``LoginRequiredMixin`` handles the redirect.
+        """Check that the user has at least one conference management permission.
 
         Args:
             request: The incoming HTTP request.
@@ -325,12 +323,13 @@ class ConferenceListView(LoginRequiredMixin, ListView):
             The HTTP response.
 
         Raises:
-            PermissionDenied: If the user is not superuser or staff.
+            PermissionDenied: If the user has no conference management permissions.
         """
         if not request.user.is_authenticated:
             return self.handle_no_permission()
 
-        if not (request.user.is_superuser or request.user.is_staff):
+        user = request.user
+        if not (user.is_superuser or any(p.startswith("program_conference.") for p in user.get_all_permissions())):
             raise PermissionDenied
 
         return super().dispatch(request, *args, **kwargs)
@@ -338,7 +337,7 @@ class ConferenceListView(LoginRequiredMixin, ListView):
     def get_queryset(self) -> QuerySet[Conference]:
         """Return conferences visible to the current user.
 
-        Superusers see all conferences; staff see active conferences only.
+        Superusers see all conferences; other permitted users see active ones.
 
         Returns:
             A queryset of Conference instances.
@@ -359,7 +358,7 @@ class ImportFromPretalxView(LoginRequiredMixin, TemplateView):
     template_name = "django_program/manage/import_pretalx.html"
 
     def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
-        """Check that the user is a superuser or staff member.
+        """Require ``manage_conference_settings`` permission for conference creation.
 
         Args:
             request: The incoming HTTP request.
@@ -370,12 +369,12 @@ class ImportFromPretalxView(LoginRequiredMixin, TemplateView):
             The HTTP response.
 
         Raises:
-            PermissionDenied: If the user is not superuser or staff.
+            PermissionDenied: If the user lacks the required permission.
         """
         if not request.user.is_authenticated:
             return self.handle_no_permission()
 
-        if not (request.user.is_superuser or request.user.is_staff):
+        if not (request.user.is_superuser or request.user.has_perm("program_conference.manage_conference_settings")):
             raise PermissionDenied
 
         return super().dispatch(request, *args, **kwargs)
@@ -493,10 +492,10 @@ class ImportPretalxStreamView(LoginRequiredMixin, View):
     """
 
     def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
-        """Enforce staff/superuser permissions."""
+        """Require ``manage_conference_settings`` permission for conference import."""
         if not request.user.is_authenticated:
             return self.handle_no_permission()
-        if not (request.user.is_superuser or request.user.is_staff):
+        if not (request.user.is_superuser or request.user.has_perm("program_conference.manage_conference_settings")):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
 
@@ -2508,7 +2507,7 @@ class PretalxEventSearchView(LoginRequiredMixin, View):
     """
 
     def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
-        """Enforce staff/superuser permissions.
+        """Require ``manage_conference_settings`` permission for event search.
 
         Args:
             request: The incoming HTTP request.
@@ -2519,11 +2518,11 @@ class PretalxEventSearchView(LoginRequiredMixin, View):
             The HTTP response.
 
         Raises:
-            PermissionDenied: If the user is not superuser or staff.
+            PermissionDenied: If the user lacks the required permission.
         """
         if not request.user.is_authenticated:
             return self.handle_no_permission()
-        if not (request.user.is_superuser or request.user.is_staff):
+        if not (request.user.is_superuser or request.user.has_perm("program_conference.manage_conference_settings")):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
 

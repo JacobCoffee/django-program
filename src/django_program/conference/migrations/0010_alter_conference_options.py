@@ -4,14 +4,39 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('program_conference', '0009_featureflags_visa_letters_enabled'),
+        ("program_conference", "0009_featureflags_visa_letters_enabled"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='conference',
-            options={'ordering': ['-start_date'], 'permissions': [('view_dashboard', 'Can view conference dashboard'), ('manage_conference_settings', 'Can edit conference settings and sync'), ('view_program', 'Can view program content'), ('change_program', 'Can edit program content'), ('view_registration', 'Can view attendees and orders'), ('change_registration', 'Can manage orders and visa letters'), ('view_commerce', 'Can view ticket types, add-ons, vouchers'), ('change_commerce', 'Can manage ticket types, add-ons, vouchers'), ('view_badges', 'Can view badges and templates'), ('change_badges', 'Can manage badges and templates'), ('view_sponsors', 'Can view sponsors'), ('change_sponsors', 'Can manage sponsors'), ('view_bulk_purchases', 'Can view bulk purchases'), ('change_bulk_purchases', 'Can manage bulk purchases'), ('view_finance', 'Can view financial dashboard and expenses'), ('change_finance', 'Can manage expenses'), ('view_reports', 'Can view reports and analytics'), ('export_reports', 'Can export report data'), ('view_checkin', 'Can access check-in'), ('use_terminal', 'Can use Terminal POS'), ('view_overrides', 'Can view Pretalx overrides'), ('change_overrides', 'Can manage Pretalx overrides')]},
+            name="conference",
+            options={
+                "ordering": ["-start_date"],
+                "permissions": [
+                    ("view_dashboard", "Can view conference dashboard"),
+                    ("manage_conference_settings", "Can edit conference settings and sync"),
+                    ("view_program", "Can view program content"),
+                    ("change_program", "Can edit program content"),
+                    ("view_registration", "Can view attendees and orders"),
+                    ("change_registration", "Can manage orders and visa letters"),
+                    ("view_commerce", "Can view ticket types, add-ons, vouchers"),
+                    ("change_commerce", "Can manage ticket types, add-ons, vouchers"),
+                    ("view_badges", "Can view badges and templates"),
+                    ("change_badges", "Can manage badges and templates"),
+                    ("view_sponsors", "Can view sponsors"),
+                    ("change_sponsors", "Can manage sponsors"),
+                    ("view_bulk_purchases", "Can view bulk purchases"),
+                    ("change_bulk_purchases", "Can manage bulk purchases"),
+                    ("view_finance", "Can view financial dashboard and expenses"),
+                    ("change_finance", "Can manage expenses"),
+                    ("view_reports", "Can view reports and analytics"),
+                    ("export_reports", "Can export report data"),
+                    ("view_checkin", "Can access check-in"),
+                    ("use_terminal", "Can use Terminal POS"),
+                    ("view_overrides", "Can view Pretalx overrides"),
+                    ("change_overrides", "Can manage Pretalx overrides"),
+                ],
+            },
         ),
     ]

@@ -4,14 +4,20 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('program_programs', '0010_survey_surveyresponse'),
+        ("program_programs", "0010_survey_surveyresponse"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='travelgrant',
-            options={'ordering': ['-created_at'], 'permissions': [('review_travel_grant', 'Can review travel grant applications'), ('view_travel_grant', 'Can view travel grant applications'), ('disburse_travel_grant', 'Can disburse travel grant funds')]},
+            name="travelgrant",
+            options={
+                "ordering": ["-created_at"],
+                "permissions": [
+                    ("review_travel_grant", "Can review travel grant applications"),
+                    ("view_travel_grant", "Can view travel grant applications"),
+                    ("disburse_travel_grant", "Can disburse travel grant funds"),
+                ],
+            },
         ),
     ]

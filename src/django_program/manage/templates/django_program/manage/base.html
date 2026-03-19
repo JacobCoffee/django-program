@@ -1125,7 +1125,7 @@
       {% endif %}
 
       {# ── Registration ── #}
-      {% if user_perms.registration_people or user_perms.registration_commerce or user_perms.badges %}
+      {% if user_perms.registration_people or user_perms.registration_commerce or user_perms.badges or user_perms.bulk_purchases %}
       <div class="sidebar-section" data-section="registration">
         <div class="sidebar-section-title">Registration <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
@@ -1212,16 +1212,20 @@
       <div class="sidebar-section" data-section="onsite">
         <div class="sidebar-section-title">On-site <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
+          {% if user_perms.checkin %}
           <li>
             <a href="{% url 'manage:checkin-dashboard' conference.slug %}" class="{% if active_nav == 'checkin' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8l3 3 5-6"/><rect x="1.5" y="1.5" width="13" height="13" rx="2"/></svg></span> Check-in
             </a>
           </li>
+          {% endif %}
+          {% if user_perms.terminal %}
           <li>
             <a href="{% url 'manage:terminal-pos' conference.slug %}" class="{% if active_nav == 'terminal' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><path d="M4.5 9.5h2M9.5 9.5h2M1.5 6.5h13"/></svg></span> Terminal POS
             </a>
           </li>
+          {% endif %}
         </ul>
       </div>
       {% endif %}
@@ -1260,7 +1264,7 @@
       {% endif %}
 
       {# ── Sync & Overrides (utility) ── #}
-      {% if user_perms.overrides or user_perms.settings %}
+      {% if user_perms.overrides %}
       <hr class="sidebar-utility-separator">
       <div class="sidebar-section" data-section="sync-overrides">
         <div class="sidebar-section-title">Sync & Overrides <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
