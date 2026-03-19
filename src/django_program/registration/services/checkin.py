@@ -264,32 +264,30 @@ class RedemptionService:
                 (redeemed count >= quantity).
         """
         if attendee.order_id != order_line_item.order_id:
-            msg = (
-                f"Line item {order_line_item.pk} belongs to order "
-                f"{order_line_item.order_id}, not attendee's order "
-                f"{attendee.order_id}."
-            )
+            msg = "Line item does not belong to the attendee's order."
             raise ValueError(msg)
 
-        redeemed_count = ProductRedemption.objects.filter(
-            attendee=attendee,
-            order_line_item=order_line_item,
-        ).count()
+        with transaction.atomic():
+            locked_item = OrderLineItem.objects.select_for_update().get(pk=order_line_item.pk)
 
-        if redeemed_count >= order_line_item.quantity:
-            msg = (
-                f"Line item {order_line_item.pk} "
-                f"('{order_line_item.description}') is fully redeemed "
-                f"({redeemed_count}/{order_line_item.quantity})."
+            redeemed_count = ProductRedemption.objects.filter(
+                attendee=attendee,
+                order_line_item=locked_item,
+            ).count()
+
+            if redeemed_count >= locked_item.quantity:
+                msg = (
+                    f"Product '{locked_item.description}' is fully redeemed ({redeemed_count}/{locked_item.quantity})."
+                )
+                raise ValueError(msg)
+
+            redemption = ProductRedemption.objects.create(
+                attendee=attendee,
+                order_line_item=locked_item,
+                conference=attendee.conference,
+                redeemed_by=redeemed_by,
             )
-            raise ValueError(msg)
 
-        redemption = ProductRedemption.objects.create(
-            attendee=attendee,
-            order_line_item=order_line_item,
-            conference=attendee.conference,
-            redeemed_by=redeemed_by,
-        )
         logger.info(
             "Redeemed line item %s ('%s') for attendee %s",
             order_line_item.pk,

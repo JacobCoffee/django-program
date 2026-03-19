@@ -7,7 +7,6 @@ from uuid import uuid4
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
 from django.test import Client
 from django.urls import reverse
 
@@ -229,25 +228,30 @@ class TestProductRedemptionModel:
         result = str(redemption)
         assert "Redemption:" in result
 
-    def test_unique_together_prevents_duplicate(self) -> None:
+    def test_allows_multiple_redemptions_up_to_quantity(self) -> None:
+        """Multiple redemptions of the same line item are allowed (no DB constraint)."""
         conf = _make_conference()
         user = _make_user()
         order = _make_order(conference=conf, user=user)
-        attendee = _make_attendee(conference=conf, user=user, order=order)
-        line_item = _make_line_item(order=order, description="Tutorial")
-
+        attendee = Attendee.objects.create(user=user, conference=conf, order=order)
+        line_item = OrderLineItem.objects.create(
+            order=order,
+            description="Workshop",
+            quantity=2,
+            unit_price=Decimal("50.00"),
+            line_total=Decimal("100.00"),
+        )
         ProductRedemption.objects.create(
             attendee=attendee,
             order_line_item=line_item,
             conference=conf,
         )
-
-        with pytest.raises(IntegrityError):
-            ProductRedemption.objects.create(
-                attendee=attendee,
-                order_line_item=line_item,
-                conference=conf,
-            )
+        ProductRedemption.objects.create(
+            attendee=attendee,
+            order_line_item=line_item,
+            conference=conf,
+        )
+        assert ProductRedemption.objects.filter(attendee=attendee, order_line_item=line_item).count() == 2
 
 
 # -- Service Tests: CheckInService --------------------------------------------
@@ -515,7 +519,7 @@ class TestRedemptionServiceRedeem:
         attendee = _make_attendee(conference=conf, user=user1, order=order1)
         other_line_item = _make_line_item(order=order2, description="Other Order Item")
 
-        with pytest.raises(ValueError, match="not attendee's order"):
+        with pytest.raises(ValueError, match="does not belong"):
             RedemptionService.redeem_product(
                 attendee=attendee,
                 order_line_item=other_line_item,
@@ -702,7 +706,7 @@ class TestRedeemView:
         )
 
         assert response.status_code == 409
-        assert "fully redeemed" in response.json()["error"]
+        assert response.json()["error"] == "Product already fully redeemed"
 
 
 @pytest.mark.integration

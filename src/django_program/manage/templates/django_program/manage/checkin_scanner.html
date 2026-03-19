@@ -383,63 +383,64 @@
     productsPanel.classList.add("visible");
   }
 
-  function renderAttendee(data) {
-    attendeeName.textContent = data.name || "Unknown";
-    attendeeEmail.textContent = data.email || "";
-    attendeeCode.textContent = data.access_code || "";
+  // Track the current attendee's access code for redemption requests
+  var currentAccessCode = "";
+
+  function renderAttendee(attendee, badge) {
+    attendeeName.textContent = attendee.name || "Unknown";
+    attendeeEmail.textContent = attendee.email || "";
+    attendeeCode.textContent = attendee.access_code || "";
+    currentAccessCode = attendee.access_code || "";
+
+    var ticketType = (badge && badge.ticket_type) || attendee.ticket_type || "";
 
     var metaHtml = "";
-    if (data.ticket_type) {
+    if (ticketType) {
       metaHtml += '<div class="attendee-meta-item">' +
         '<div class="attendee-meta-label">Ticket Type</div>' +
-        '<div class="attendee-meta-value">' + escapeHtml(data.ticket_type) + '</div></div>';
+        '<div class="attendee-meta-value">' + escapeHtml(ticketType) + '</div></div>';
     }
     metaHtml += '<div class="attendee-meta-item">' +
       '<div class="attendee-meta-label">Check-in Status</div>' +
       '<div class="attendee-meta-value">' +
-      (data.checkin_count > 0
-        ? '<span class="badge badge--warning">Re-entry (#' + (data.checkin_count + 1) + ')</span>'
+      (attendee.checked_in
+        ? '<span class="badge badge--warning">Checked in</span>'
         : '<span class="badge badge--active">First check-in</span>') +
       '</div></div>';
-    metaHtml += '<div class="attendee-meta-item">' +
-      '<div class="attendee-meta-label">Previous Check-ins</div>' +
-      '<div class="attendee-meta-value">' + data.checkin_count + '</div></div>';
-    if (data.order_reference) {
+    if (attendee.checked_in_at) {
       metaHtml += '<div class="attendee-meta-item">' +
-        '<div class="attendee-meta-label">Order</div>' +
-        '<div class="attendee-meta-value mono">' + escapeHtml(data.order_reference) + '</div></div>';
+        '<div class="attendee-meta-label">Checked in at</div>' +
+        '<div class="attendee-meta-value">' + escapeHtml(new Date(attendee.checked_in_at).toLocaleString()) + '</div></div>';
     }
     attendeeMeta.innerHTML = metaHtml;
   }
 
-  function renderProducts(products) {
+  function renderProducts(redeemable) {
     productsList.innerHTML = "";
-    if (!products || products.length === 0) {
+    if (!redeemable || redeemable.length === 0) {
       noProducts.style.display = "block";
       return;
     }
     noProducts.style.display = "none";
 
-    products.forEach(function(p) {
-      var remaining = p.quantity - p.redeemed;
-      var isFullyRedeemed = remaining <= 0;
+    redeemable.forEach(function(p) {
+      var isRedeemed = !!p.redeemed;
       var row = document.createElement("div");
-      row.className = "product-row" + (isFullyRedeemed ? " product-row--redeemed" : "");
+      row.className = "product-row" + (isRedeemed ? " product-row--redeemed" : "");
 
       var info = document.createElement("div");
       info.className = "product-info";
       info.innerHTML = '<div class="product-name">' + escapeHtml(p.description) + '</div>' +
-        '<div class="product-counts">Qty: ' + p.quantity + ' | Redeemed: ' + p.redeemed +
-        ' | Remaining: ' + remaining + '</div>';
+        '<div class="product-counts">Qty: ' + p.quantity +
+        (isRedeemed ? ' | Redeemed' : ' | Available') + '</div>';
       row.appendChild(info);
 
-      if (!isFullyRedeemed) {
+      if (!isRedeemed) {
         var btn = document.createElement("button");
         btn.type = "button";
         btn.className = "btn-redeem";
         btn.textContent = "Redeem";
-        btn.dataset.lineItemId = p.line_item_id;
-        btn.dataset.attendeeId = p.attendee_id;
+        btn.dataset.lineItemId = p.id;
         btn.addEventListener("click", function() { redeemProduct(btn); });
         row.appendChild(btn);
       }
@@ -456,6 +457,7 @@
 
   async function performScan(accessCode) {
     if (!accessCode.trim()) return;
+    var trimmed = accessCode.trim();
 
     try {
       var response = await fetch(SCAN_URL, {
@@ -465,7 +467,7 @@
           "X-CSRFToken": getCsrfToken(),
         },
         body: JSON.stringify({
-          access_code: accessCode.trim(),
+          access_code: trimmed,
           station: stationInput.value.trim(),
         }),
       });
@@ -480,16 +482,23 @@
         return;
       }
 
-      if (data.is_reentry) {
-        showStatus("Re-entry: " + (data.name || accessCode) + " (check-in #" + (data.checkin_count + 1) + ")", "reentry");
+      var attendee = data.attendee || {};
+      var displayName = attendee.name || trimmed;
+
+      // If the attendee was already checked in before this scan, it is a re-entry
+      if (attendee.checked_in && attendee.checked_in_at && data.checked_in_at
+          && attendee.checked_in_at !== data.checked_in_at) {
+        showStatus("Re-entry: " + displayName, "reentry");
       } else {
-        showStatus("Checked in: " + (data.name || accessCode), "success");
+        showStatus("Checked in: " + displayName, "success");
       }
       flashScreen("success");
 
-      renderAttendee(data);
-      renderProducts(data.products || []);
+      renderAttendee(attendee, data.badge || null);
       showResults();
+
+      // Fetch the full lookup data to get redeemable products
+      await refreshProducts(trimmed);
     } catch (err) {
       showStatus("Network error: " + err.message, "error");
       flashScreen("error");
@@ -509,9 +518,8 @@
           "X-CSRFToken": getCsrfToken(),
         },
         body: JSON.stringify({
-          attendee_id: parseInt(btn.dataset.attendeeId, 10),
+          access_code: currentAccessCode,
           line_item_id: parseInt(btn.dataset.lineItemId, 10),
-          station: stationInput.value.trim(),
         }),
       });
 
@@ -528,9 +536,9 @@
       showStatus("Redeemed: " + (data.description || "product"), "success");
       flashScreen("success");
 
-      // Re-fetch attendee to refresh product list
-      if (attendeeCode.textContent) {
-        await refreshAttendee(attendeeCode.textContent);
+      // Re-fetch to refresh the redeemable product list
+      if (currentAccessCode) {
+        await refreshAttendee(currentAccessCode);
       }
     } catch (err) {
       showStatus("Network error: " + err.message, "error");
@@ -541,13 +549,24 @@
     refocusScan();
   }
 
+  async function refreshProducts(accessCode) {
+    try {
+      var response = await fetch(lookupUrl(accessCode));
+      if (!response.ok) return;
+      var data = await response.json();
+      renderProducts(data.redeemable || []);
+    } catch (err) {
+      // Silently fail on refresh; the previous data remains visible
+    }
+  }
+
   async function refreshAttendee(accessCode) {
     try {
       var response = await fetch(lookupUrl(accessCode));
       if (!response.ok) return;
       var data = await response.json();
-      renderAttendee(data);
-      renderProducts(data.products || []);
+      renderAttendee(data.attendee || {}, null);
+      renderProducts(data.redeemable || []);
     } catch (err) {
       // Silently fail on refresh; the previous data remains visible
     }

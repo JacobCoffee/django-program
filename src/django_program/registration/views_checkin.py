@@ -2,9 +2,8 @@
 
 These views power the scanner UI used by registration desk volunteers.
 All endpoints require staff or superuser authentication and are scoped
-to a conference via the ``conference_slug`` URL kwarg. POST endpoints
-are CSRF-exempt since the scanner frontend uses ``fetch()`` with JSON
-payloads.
+to a conference via the ``conference_slug`` URL kwarg. The scanner UI
+is responsible for including the CSRF token in POST requests.
 """
 
 import json
@@ -14,9 +13,7 @@ from django.db.models import Prefetch
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.utils.decorators import method_decorator
 from django.views import View
-from django.views.decorators.csrf import csrf_exempt
 
 from django_program.conference.models import Conference
 from django_program.registration.attendee import Attendee
@@ -110,7 +107,6 @@ def _parse_json_body(request: HttpRequest) -> dict[str, object] | None:
         return None
 
 
-@method_decorator(csrf_exempt, name="dispatch")
 class ScanView(StaffRequiredMixin, View):
     """Scan an attendee's access code and perform check-in.
 
@@ -225,7 +221,6 @@ class LookupView(StaffRequiredMixin, View):
         )
 
 
-@method_decorator(csrf_exempt, name="dispatch")
 class RedeemView(StaffRequiredMixin, View):
     """Redeem a purchased product (order line item) for an attendee.
 
@@ -248,10 +243,14 @@ class RedeemView(StaffRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
         access_code = str(body.get("access_code", "")).strip()
-        line_item_id = body.get("line_item_id")
+        raw_line_item_id = body.get("line_item_id")
 
-        if not access_code or line_item_id is None:
-            return JsonResponse({"error": "access_code and line_item_id are required"}, status=400)
+        try:
+            line_item_id = int(raw_line_item_id)  # type: ignore[arg-type]
+            if not access_code:
+                raise ValueError  # noqa: TRY301
+        except TypeError, ValueError:
+            return JsonResponse({"error": "access_code and a valid integer line_item_id are required"}, status=400)
 
         try:
             attendee = CheckInService.lookup_attendee(conference=self.conference, access_code=access_code)
@@ -282,9 +281,9 @@ class RedeemView(StaffRequiredMixin, View):
                 order_line_item=line_item,
                 redeemed_by=request.user,
             )
-        except ValueError as exc:
+        except ValueError:
             return JsonResponse(
-                {"error": str(exc), "line_item_id": line_item.pk},
+                {"error": "Product already fully redeemed", "line_item_id": line_item.pk},
                 status=409,
             )
 

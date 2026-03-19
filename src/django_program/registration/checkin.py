@@ -108,12 +108,13 @@ class DoorCheck(models.Model):
 
 
 class ProductRedemption(models.Model):
-    """Tracks redemption of a purchased order line item to prevent double-use.
+    """Tracks redemption of a purchased order line item.
 
-    Each attendee can redeem a given order line item exactly once, enforced
-    by a unique constraint on ``(attendee, order_line_item)``. This covers
-    tutorials, meals, events, and any other purchasable product that should
-    only be consumed once.
+    Each attendee can redeem a given order line item up to its purchased
+    ``quantity`` times. The business-layer limit is enforced by
+    ``RedemptionService.redeem_product()`` with row-level locking; no
+    unique constraint exists at the DB level so that quantity > 1 items
+    can produce multiple redemption rows.
     """
 
     attendee = models.ForeignKey(
@@ -144,7 +145,6 @@ class ProductRedemption(models.Model):
 
     class Meta:
         ordering = ["-redeemed_at"]
-        unique_together = [("attendee", "order_line_item")]
 
     def __str__(self) -> str:
         return f"Redemption: {self.attendee} → {self.order_line_item}"
