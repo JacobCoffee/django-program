@@ -28,6 +28,7 @@ class VoucherBulkGenerateView(ManagePermissionMixin, FormView):
     """
 
     template_name = "django_program/manage/voucher_bulk_generate.html"
+    required_permission = "change_commerce"
     form_class = VoucherBulkGenerateForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:

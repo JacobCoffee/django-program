@@ -30,6 +30,7 @@ class BulkPurchaseListView(ManagePermissionMixin, ListView):
     """
 
     template_name = "django_program/manage/bulk_purchase_list.html"
+    required_permission = "view_bulk_purchases"
     context_object_name = "bulk_purchases"
     paginate_by = 50
 
@@ -58,6 +59,7 @@ class BulkPurchaseDetailView(ManagePermissionMixin, DetailView):
     """Display full details of a bulk purchase with its generated voucher codes."""
 
     template_name = "django_program/manage/bulk_purchase_detail.html"
+    required_permission = "view_bulk_purchases"
     context_object_name = "purchase"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -82,6 +84,7 @@ class BulkPurchaseCreateView(ManagePermissionMixin, CreateView):
     """Create a new bulk purchase on behalf of a sponsor."""
 
     template_name = "django_program/manage/bulk_purchase_form.html"
+    required_permission = "change_bulk_purchases"
     form_class = BulkPurchaseCreateForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -125,6 +128,8 @@ class BulkPurchaseApproveView(ManagePermissionMixin, View):
     fulfillment can proceed.
     """
 
+    required_permission = "change_bulk_purchases"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Mark the bulk purchase as approved."""
         purchase = get_object_or_404(
@@ -162,6 +167,8 @@ class BulkPurchaseFulfillView(ManagePermissionMixin, View):
     Generates voucher codes using the stored ``voucher_config`` and links
     them back to the purchase via ``BulkPurchaseVoucher`` records.
     """
+
+    required_permission = "change_bulk_purchases"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Generate vouchers for the bulk purchase."""

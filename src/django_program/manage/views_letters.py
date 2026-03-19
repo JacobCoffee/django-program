@@ -31,6 +31,7 @@ class LetterRequestListView(ManagePermissionMixin, ListView):
     """
 
     template_name = "django_program/manage/letter_request_list.html"
+    required_permission = "view_registration"
     context_object_name = "letter_requests"
     paginate_by = 50
 
@@ -81,6 +82,7 @@ class LetterRequestReviewView(ManagePermissionMixin, DetailView):
     """
 
     template_name = "django_program/manage/letter_request_review.html"
+    required_permission = "change_registration"
     context_object_name = "letter_request"
 
     def get_queryset(self) -> QuerySet[LetterRequest]:
@@ -192,6 +194,8 @@ class LetterRequestGenerateView(ManagePermissionMixin, View):
     to the review page.
     """
 
+    required_permission = "change_registration"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Generate the PDF for an approved letter request.
 
@@ -229,6 +233,8 @@ class LetterRequestBulkGenerateView(ManagePermissionMixin, View):
     that has ``APPROVED`` status, then redirects to the list view with a
     summary message.
     """
+
+    required_permission = "change_registration"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Generate PDFs for all approved letter requests in the conference.
@@ -268,6 +274,8 @@ class LetterRequestSendView(ManagePermissionMixin, View):
     timestamp, and redirects back to the review page.
     """
 
+    required_permission = "change_registration"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Send the invitation letter for a generated request.
 
@@ -304,6 +312,8 @@ class LetterRequestDownloadView(ManagePermissionMixin, View):
     GET-only. Returns the PDF file as an attachment response. Only works
     if a generated PDF exists on the letter request.
     """
+
+    required_permission = "view_registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Return the generated PDF as a downloadable attachment.

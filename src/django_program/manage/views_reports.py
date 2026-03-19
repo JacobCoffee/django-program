@@ -11,16 +11,14 @@ import datetime
 import json
 from decimal import Decimal
 
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import PermissionDenied
 from django.db.models import Count, QuerySet, Sum
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views import View
 from django.views.generic import ListView, TemplateView
 
 from django_program.conference.models import Conference
+from django_program.manage.views import ConferencePermissionMixin
 from django_program.manage.reports import (
     get_addon_inventory,
     get_attendee_manifest,
@@ -102,75 +100,15 @@ def _build_budget_context(conference: Conference) -> dict[str, object]:
     return budget
 
 
-class ReportPermissionMixin(LoginRequiredMixin):
-    """Permission mixin for report-scoped management views.
-
-    Resolves the conference from the ``conference_slug`` URL kwarg and
-    checks that the authenticated user satisfies at least one of:
-
-    * is a superuser,
-    * holds the ``program_conference.change_conference`` permission, or
-    * belongs to the "Program: Reports" group.
-
-    Stores the resolved conference on ``self.conference`` and injects it
-    into the template context alongside ``active_nav``.
-
-    Raises:
-        PermissionDenied: If the user fails all three checks.
-    """
-
-    conference: Conference
-    kwargs: dict[str, str]
-
-    def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
-        """Resolve the conference and enforce permissions before dispatch.
-
-        Args:
-            request: The incoming HTTP request.
-            *args: Positional arguments from the URL resolver.
-            **kwargs: Keyword arguments from the URL pattern.
-
-        Returns:
-            The HTTP response from the downstream view.
-
-        Raises:
-            PermissionDenied: If the user is not authorized.
-        """
-        if not request.user.is_authenticated:
-            return self.handle_no_permission()  # type: ignore[return-value]
-
-        self.conference = get_object_or_404(Conference, slug=kwargs.get("conference_slug", ""))
-
-        user = request.user
-        allowed = (
-            user.is_superuser
-            or user.has_perm("program_conference.change_conference")
-            or user.groups.filter(name=_REPORTS_GROUP_NAME).exists()
-        )
-        if not allowed:
-            raise PermissionDenied
-
-        return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
-
-    def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add the conference and active_nav to the template context.
-
-        Args:
-            **kwargs: Additional context data.
-
-        Returns:
-            Template context with ``conference`` and ``active_nav`` included.
-        """
-        context: dict[str, object] = super().get_context_data(**kwargs)
-        context["conference"] = self.conference
-        context["active_nav"] = "reports"
-        return context
+# Backward compatibility alias
+ReportPermissionMixin = ConferencePermissionMixin
 
 
-class ReportsDashboardView(ReportPermissionMixin, TemplateView):
+class ReportsDashboardView(ConferencePermissionMixin, TemplateView):
     """Landing page for all admin reports with summary statistics."""
 
     template_name = "django_program/manage/reports_dashboard.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with summary stats for all report types.
@@ -302,10 +240,11 @@ class ReportsDashboardView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class AttendeeManifestView(ReportPermissionMixin, ListView):
+class AttendeeManifestView(ConferencePermissionMixin, ListView):
     """Filterable attendee manifest with pagination."""
 
     template_name = "django_program/manage/report_attendee_manifest.html"
+    required_permission = "view_reports"
     context_object_name = "attendees"
     paginate_by = 50
 
@@ -369,8 +308,10 @@ class AttendeeManifestView(ReportPermissionMixin, ListView):
         return context
 
 
-class AttendeeManifestExportView(ReportPermissionMixin, View):
+class AttendeeManifestExportView(ConferencePermissionMixin, View):
     """CSV export of the attendee manifest."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of the attendee manifest.
@@ -427,10 +368,11 @@ class AttendeeManifestExportView(ReportPermissionMixin, View):
         return response
 
 
-class InventoryReportView(ReportPermissionMixin, TemplateView):
+class InventoryReportView(ConferencePermissionMixin, TemplateView):
     """Product inventory and stock status report."""
 
     template_name = "django_program/manage/report_inventory.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with ticket type and add-on inventory data.
@@ -464,8 +406,10 @@ class InventoryReportView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class InventoryReportExportView(ReportPermissionMixin, View):
+class InventoryReportExportView(ConferencePermissionMixin, View):
     """CSV export of product inventory."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of inventory data.
@@ -538,10 +482,11 @@ class InventoryReportExportView(ReportPermissionMixin, View):
         return response
 
 
-class VoucherUsageReportView(ReportPermissionMixin, TemplateView):
+class VoucherUsageReportView(ConferencePermissionMixin, TemplateView):
     """Voucher usage and redemption rates report."""
 
     template_name = "django_program/manage/report_voucher_usage.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with voucher usage data and summary stats.
@@ -572,8 +517,10 @@ class VoucherUsageReportView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class VoucherUsageExportView(ReportPermissionMixin, View):
+class VoucherUsageExportView(ConferencePermissionMixin, View):
     """CSV export of voucher usage data."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of voucher usage data.
@@ -623,10 +570,11 @@ class VoucherUsageExportView(ReportPermissionMixin, View):
         return response
 
 
-class DiscountEffectivenessView(ReportPermissionMixin, TemplateView):
+class DiscountEffectivenessView(ConferencePermissionMixin, TemplateView):
     """Discount conditions overview and effectiveness report."""
 
     template_name = "django_program/manage/report_discount_effectiveness.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with discount conditions and summary stats.
@@ -657,8 +605,10 @@ class DiscountEffectivenessView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class DiscountEffectivenessExportView(ReportPermissionMixin, View):
+class DiscountEffectivenessExportView(ConferencePermissionMixin, View):
     """CSV export of discount effectiveness data."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of discount conditions data.
@@ -724,10 +674,11 @@ def _parse_date_param(value: str | None) -> datetime.date | None:
         return None
 
 
-class SalesByDateView(ReportPermissionMixin, TemplateView):
+class SalesByDateView(ConferencePermissionMixin, TemplateView):
     """Daily sales aggregation report with date filtering."""
 
     template_name = "django_program/manage/report_sales_by_date.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with daily sales data and summary totals.
@@ -764,8 +715,10 @@ class SalesByDateView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class SalesByDateExportView(ReportPermissionMixin, View):
+class SalesByDateExportView(ConferencePermissionMixin, View):
     """CSV export of daily sales data."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of daily sales.
@@ -798,10 +751,11 @@ class SalesByDateExportView(ReportPermissionMixin, View):
         return response
 
 
-class CreditNotesView(ReportPermissionMixin, TemplateView):
+class CreditNotesView(ConferencePermissionMixin, TemplateView):
     """Credit notes listing with summary statistics."""
 
     template_name = "django_program/manage/report_credit_notes.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with credit records and summary stats.
@@ -830,8 +784,10 @@ class CreditNotesView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class CreditNotesExportView(ReportPermissionMixin, View):
+class CreditNotesExportView(ConferencePermissionMixin, View):
     """CSV export of credit notes."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of credit notes.
@@ -878,10 +834,11 @@ class CreditNotesExportView(ReportPermissionMixin, View):
         return response
 
 
-class SpeakerRegistrationView(ReportPermissionMixin, TemplateView):
+class SpeakerRegistrationView(ConferencePermissionMixin, TemplateView):
     """Speaker registration status report."""
 
     template_name = "django_program/manage/report_speaker_registration.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with speaker registration data.
@@ -912,8 +869,10 @@ class SpeakerRegistrationView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class SpeakerRegistrationExportView(ReportPermissionMixin, View):
+class SpeakerRegistrationExportView(ConferencePermissionMixin, View):
     """CSV export of speaker registration data."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of speaker registration status.
@@ -943,10 +902,11 @@ class SpeakerRegistrationExportView(ReportPermissionMixin, View):
         return response
 
 
-class ReconciliationView(ReportPermissionMixin, TemplateView):
+class ReconciliationView(ConferencePermissionMixin, TemplateView):
     """Financial reconciliation report with stat cards and detail tables."""
 
     template_name = "django_program/manage/report_reconciliation.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with reconciliation data.
@@ -985,8 +945,10 @@ class ReconciliationView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class ReconciliationExportView(ReportPermissionMixin, View):
+class ReconciliationExportView(ConferencePermissionMixin, View):
     """CSV export of financial reconciliation data."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of reconciliation data.
@@ -1022,10 +984,11 @@ class ReconciliationExportView(ReportPermissionMixin, View):
         return response
 
 
-class RegistrationFlowView(ReportPermissionMixin, TemplateView):
+class RegistrationFlowView(ConferencePermissionMixin, TemplateView):
     """Daily registrations and cancellations flow report."""
 
     template_name = "django_program/manage/report_registration_flow.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with daily registration flow data.
@@ -1064,8 +1027,10 @@ class RegistrationFlowView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class RegistrationFlowExportView(ReportPermissionMixin, View):
+class RegistrationFlowExportView(ConferencePermissionMixin, View):
     """CSV export of registration flow data."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of daily registration flow.
@@ -1100,10 +1065,11 @@ class RegistrationFlowExportView(ReportPermissionMixin, View):
         return response
 
 
-class VisaLetterReportView(ReportPermissionMixin, TemplateView):
+class VisaLetterReportView(ConferencePermissionMixin, TemplateView):
     """Visa invitation letter requests report with status breakdown."""
 
     template_name = "django_program/manage/report_visa_letters.html"
+    required_permission = "view_reports"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with letter request data and chart data.
@@ -1138,8 +1104,10 @@ class VisaLetterReportView(ReportPermissionMixin, TemplateView):
         return context
 
 
-class VisaLetterExportView(ReportPermissionMixin, View):
+class VisaLetterExportView(ConferencePermissionMixin, View):
     """CSV export of visa invitation letter requests."""
+
+    required_permission = "export_reports"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of all letter requests.
