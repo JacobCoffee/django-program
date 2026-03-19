@@ -85,6 +85,7 @@ from django_program.manage.views import (
     VoucherEditView,
     VoucherListView,
 )
+from django_program.manage.views_checkin import CheckInDashboardView, CheckInScannerView
 
 app_name = "manage"
 
@@ -272,6 +273,9 @@ urlpatterns = [
         BadgeDownloadView.as_view(),
         name="badge-download",
     ),
+    # --- Check-in ---
+    path("<slug:conference_slug>/checkin/", CheckInDashboardView.as_view(), name="checkin-dashboard"),
+    path("<slug:conference_slug>/checkin/scanner/", CheckInScannerView.as_view(), name="checkin-scanner"),
     # --- Bulk Purchases ---
     path("<slug:conference_slug>/bulk-purchases/", include("django_program.manage.urls_bulk_purchases")),
     # --- Voucher Bulk Generation ---

@@ -684,6 +684,7 @@ class EventProcessingException(models.Model):
 # for FK/M2M fields and lazy imports for model lookups in methods.
 # Re-export badge models for convenience.
 from django_program.registration.badge import Badge, BadgeTemplate  # noqa: E402
+from django_program.registration.checkin import CheckIn, DoorCheck, ProductRedemption  # noqa: E402
 from django_program.registration.conditions import (  # noqa: E402
     DiscountForCategory,
     DiscountForProduct,
@@ -701,15 +702,18 @@ __all__ = [
     "BadgeTemplate",
     "Cart",
     "CartItem",
+    "CheckIn",
     "Credit",
     "DiscountForCategory",
     "DiscountForProduct",
+    "DoorCheck",
     "EventProcessingException",
     "GroupMemberCondition",
     "IncludedProductCondition",
     "Order",
     "OrderLineItem",
     "Payment",
+    "ProductRedemption",
     "SpeakerCondition",
     "StripeCustomer",
     "StripeEvent",

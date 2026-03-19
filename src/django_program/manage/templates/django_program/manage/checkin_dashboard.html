@@ -1,0 +1,151 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Check-in Dashboard{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb">
+  <a href="{% url 'manage:conference-list' %}">Conferences</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:dashboard' conference.slug %}">{{ conference.name }}</a>
+  <span class="breadcrumb-separator"></span>
+  Check-in
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Check-in Dashboard</h1>
+<p>Real-time check-in statistics and activity log.</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:checkin-scanner' conference.slug %}" class="btn btn-primary">
+  <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align: -3px;"><path d="M1 5V2a1 1 0 011-1h3M11 1h3a1 1 0 011 1v3M15 11v3a1 1 0 01-1 1h-3M5 15H2a1 1 0 01-1-1v-3"/></svg>
+  Open Scanner
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-card-value">{{ total_attendees }}</div>
+    <div class="stat-card-label">Total Attendees</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ checked_in_count }}</div>
+    <div class="stat-card-label">Checked In</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ check_in_rate }}%</div>
+    <div class="stat-card-label">Check-in Rate</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">{{ checkins_today }}</div>
+    <div class="stat-card-label">Today's Check-ins</div>
+  </div>
+</div>
+
+{% if checkins_by_station %}
+<h2 class="section-heading">Station Activity</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Station</th>
+      <th>Check-ins</th>
+      <th>Last Check-in</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in checkins_by_station %}
+    <tr>
+      <td><strong>{{ row.station }}</strong></td>
+      <td>{{ row.count }}</td>
+      <td>{{ row.last_checkin|timesince }} ago</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2 class="section-heading">Recent Check-ins</h2>
+{% if recent_checkins %}
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Attendee</th>
+      <th>Access Code</th>
+      <th>Station</th>
+      <th>Staff</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for ci in recent_checkins %}
+    <tr>
+      <td>{{ ci.checked_in_at|timesince }} ago</td>
+      <td>
+        {% if ci.attendee.user.get_full_name %}
+          {{ ci.attendee.user.get_full_name }}
+        {% else %}
+          {{ ci.attendee.user.username }}
+        {% endif %}
+      </td>
+      <td><span class="mono">{{ ci.attendee.access_code }}</span></td>
+      <td>{{ ci.station|default:"-" }}</td>
+      <td>
+        {% if ci.checked_in_by %}
+          {{ ci.checked_in_by.get_short_name|default:ci.checked_in_by.username }}
+        {% else %}
+          -
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state" style="margin-bottom: 2rem;">
+  <p>No check-ins recorded yet.</p>
+  <p><a href="{% url 'manage:checkin-scanner' conference.slug %}">Open the scanner</a> to start checking in attendees.</p>
+</div>
+{% endif %}
+
+{% if redemption_stats %}
+<h2 class="section-heading">Product Redemptions</h2>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Product</th>
+      <th>Redemptions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in redemption_stats %}
+    <tr>
+      <td>{{ row.order_line_item__description }}</td>
+      <td>{{ row.count }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if door_check_counts %}
+<h2 class="section-heading">Door Checks</h2>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Product</th>
+      <th>Door Checks</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in door_check_counts %}
+    <tr>
+      <td>{{ row.ticket_type__name|default:row.addon__name|default:"Unknown" }}</td>
+      <td>{{ row.count }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
