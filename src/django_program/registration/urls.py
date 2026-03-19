@@ -17,6 +17,9 @@ from django.urls import path
 from django_program.registration.views import (
     CartView,
     CheckoutView,
+    LetterRequestCreateView,
+    LetterRequestDetailView,
+    LetterRequestDownloadView,
     OrderConfirmationView,
     OrderDetailView,
     TicketSelectView,
@@ -47,6 +50,9 @@ urlpatterns = [
     path("checkout/", CheckoutView.as_view(), name="checkout"),
     path("orders/<str:reference>/", OrderDetailView.as_view(), name="order-detail"),
     path("orders/<str:reference>/confirmation/", OrderConfirmationView.as_view(), name="order-confirmation"),
+    path("visa-letter/", LetterRequestCreateView.as_view(), name="letter-request"),
+    path("visa-letter/status/", LetterRequestDetailView.as_view(), name="letter-request-detail"),
+    path("visa-letter/download/", LetterRequestDownloadView.as_view(), name="letter-request-download"),
     path("webhooks/stripe/", stripe_webhook, name="stripe-webhook"),
     # Check-in API (staff-only, JSON endpoints for scanner UI)
     path("checkin/scan/", ScanView.as_view(), name="checkin-scan"),

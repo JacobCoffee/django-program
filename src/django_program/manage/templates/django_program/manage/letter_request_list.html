@@ -1,0 +1,150 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Visa Letter Requests{% endblock %}
+
+{% block page_title %}
+<h1>Visa Letter Requests</h1>
+<p>Review and manage invitation letter requests</p>
+{% endblock %}
+
+{% block page_actions %}
+{% if status_counts.approved %}
+<form method="post" action="{% url 'manage:letter-bulk-generate' conference.slug %}" style="display: inline;">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Generate PDFs for all {{ status_counts.approved }} approved request(s)?');">Bulk Generate ({{ status_counts.approved }})</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if total_count %}
+
+<div class="stat-grid" style="margin-bottom: 1.5rem;">
+  <div class="stat-card">
+    <a href="?">
+      <div class="stat-card-value">{{ total_count }}</div>
+      <div class="stat-card-label">Total Requests</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=submitted">
+      <div class="stat-card-value" style="color: var(--color-primary);">{{ status_counts.submitted }}</div>
+      <div class="stat-card-label">Submitted</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=under_review">
+      <div class="stat-card-value" style="color: var(--color-warning);">{{ status_counts.under_review }}</div>
+      <div class="stat-card-label">Under Review</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=approved">
+      <div class="stat-card-value" style="color: var(--color-success);">{{ status_counts.approved }}</div>
+      <div class="stat-card-label">Approved</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=generated">
+      <div class="stat-card-value" style="color: var(--color-success);">{{ status_counts.generated }}</div>
+      <div class="stat-card-label">Generated</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=sent">
+      <div class="stat-card-value" style="color: var(--color-success);">{{ status_counts.sent }}</div>
+      <div class="stat-card-label">Sent</div>
+    </a>
+  </div>
+  <div class="stat-card">
+    <a href="?status=rejected">
+      <div class="stat-card-value">{{ status_counts.rejected }}</div>
+      <div class="stat-card-label">Rejected</div>
+    </a>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <form method="get" style="display: flex; align-items: center; gap: 0.5rem;">
+    <select name="status" onchange="this.form.submit()">
+      <option value="">All statuses</option>
+      <option value="submitted"{% if current_status == "submitted" %} selected{% endif %}>Submitted</option>
+      <option value="under_review"{% if current_status == "under_review" %} selected{% endif %}>Under Review</option>
+      <option value="approved"{% if current_status == "approved" %} selected{% endif %}>Approved</option>
+      <option value="generated"{% if current_status == "generated" %} selected{% endif %}>Generated</option>
+      <option value="sent"{% if current_status == "sent" %} selected{% endif %}>Sent</option>
+      <option value="rejected"{% if current_status == "rejected" %} selected{% endif %}>Rejected</option>
+    </select>
+    {% if current_status %}
+    <a href="?" class="btn btn-sm btn-secondary">Clear filter</a>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+{% if letter_requests %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Nationality</th>
+      <th>Travel Dates</th>
+      <th>Status</th>
+      <th>Submitted</th>
+      <th>Reviewer</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for lr in letter_requests %}
+    <tr>
+      <td>
+        {{ lr.passport_name }}
+        {% if lr.user.email %}<br><span style="font-size: 0.78rem; color: var(--color-text-muted);">{{ lr.user.email }}</span>{% endif %}
+      </td>
+      <td>{{ lr.nationality }}</td>
+      <td style="font-size: 0.82rem;">{{ lr.travel_from|date:"M j" }} &ndash; {{ lr.travel_until|date:"M j, Y" }}</td>
+      <td>
+        {% if lr.status == "submitted" %}
+        <span class="badge badge--active">Submitted</span>
+        {% elif lr.status == "under_review" %}
+        <span class="badge badge--warning">Under Review</span>
+        {% elif lr.status == "approved" %}
+        <span class="badge badge--active">Approved</span>
+        {% elif lr.status == "generated" %}
+        <span class="badge badge--active">Generated</span>
+        {% elif lr.status == "sent" %}
+        <span class="badge badge--active">Sent</span>
+        {% elif lr.status == "rejected" %}
+        <span class="badge badge--inactive">Rejected</span>
+        {% endif %}
+      </td>
+      <td>{{ lr.created_at|date:"N j, Y" }}</td>
+      <td>
+        {% if lr.reviewed_by %}
+        <span style="font-size: 0.82rem;">{{ lr.reviewed_by.get_full_name|default:lr.reviewed_by.username }}</span>
+        {% if lr.reviewed_at %}<br><span style="font-size: 0.72rem; color: var(--color-text-muted);">{{ lr.reviewed_at|date:"N j" }}</span>{% endif %}
+        {% else %}
+        <span style="color: var(--color-text-muted);">--</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{% url 'manage:letter-review' conference.slug lr.pk %}" class="btn btn-sm btn-secondary">Review</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+{% else %}
+<div class="empty-state">
+  {% if current_status %}
+  <p>No letter requests with status "{{ current_status }}".</p>
+  <p><a href="?" class="btn btn-secondary">Show all</a></p>
+  {% else %}
+  <p>No visa letter requests yet.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

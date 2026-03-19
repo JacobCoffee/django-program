@@ -75,6 +75,7 @@ from django_program.registration.conditions import (
     SpeakerCondition,
     TimeOrStockLimitCondition,
 )
+from django_program.registration.letter import LetterRequest
 from django_program.registration.models import AddOn, Attendee, Credit, Order, Payment, TicketType, Voucher
 from django_program.registration.services.badge import BadgeGenerationService
 from django_program.registration.services.capacity import get_global_sold_count
@@ -765,6 +766,11 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             "vouchers": Voucher.objects.filter(conference=conference).count(),
             "orders": Order.objects.filter(conference=conference).count(),
             "paid_orders": Order.objects.filter(conference=conference, status=Order.Status.PAID).count(),
+            "visa_letters": LetterRequest.objects.filter(conference=conference).count(),
+            "visa_letters_pending": LetterRequest.objects.filter(
+                conference=conference,
+                status__in=[LetterRequest.Status.SUBMITTED, LetterRequest.Status.UNDER_REVIEW],
+            ).count(),
         }
 
         budget = _build_dashboard_budget_context(conference)

@@ -32,6 +32,7 @@ from django_program.manage.reports import (
     get_discount_conditions,
     get_discount_impact,
     get_discount_summary,
+    get_letter_request_summary,
     get_reconciliation,
     get_refund_metrics,
     get_registration_flow,
@@ -44,6 +45,7 @@ from django_program.manage.reports import (
 from django_program.manage.views import _safe_csv_cell
 from django_program.pretalx.models import Speaker
 from django_program.programs.models import TravelGrant
+from django_program.registration.letter import LetterRequest
 from django_program.registration.models import Attendee, Order, Payment, TicketType
 
 _REPORTS_GROUP_NAME = "Program: Reports"
@@ -283,6 +285,11 @@ class ReportsDashboardView(ReportPermissionMixin, TemplateView):
                 "total": len(speakers),
             }
         )
+
+        # Visa letter request summary
+        letter_summary = get_letter_request_summary(conference)
+        context["letter_summary"] = letter_summary
+        context["letter_pending_count"] = letter_summary["pending_count"]
 
         # Budget vs actuals
         budget = _build_budget_context(conference)
@@ -1087,6 +1094,102 @@ class RegistrationFlowExportView(ReportPermissionMixin, View):
                     row["registrations"],
                     row["cancellations"],
                     net,
+                ]
+            )
+
+        return response
+
+
+class VisaLetterReportView(ReportPermissionMixin, TemplateView):
+    """Visa invitation letter requests report with status breakdown."""
+
+    template_name = "django_program/manage/report_visa_letters.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Build context with letter request data and chart data.
+
+        Args:
+            **kwargs: Additional context data.
+
+        Returns:
+            Template context with letter summary, queryset, and chart JSON.
+        """
+        context: dict[str, object] = super().get_context_data(**kwargs)
+        summary = get_letter_request_summary(self.conference)
+        context["letter_summary"] = summary
+
+        context["letter_requests"] = (
+            LetterRequest.objects.filter(conference=self.conference)
+            .select_related("user", "reviewed_by")
+            .order_by("-created_at")
+        )
+
+        context["chart_data"] = json.dumps(
+            {
+                "by_nationality": [
+                    {"nationality": row["nationality"], "count": row["count"]} for row in summary["by_nationality"]
+                ],
+                "by_status": {
+                    status: summary["by_status"].get(status, 0) for status, _label in LetterRequest.Status.choices
+                },
+            }
+        )
+
+        return context
+
+
+class VisaLetterExportView(ReportPermissionMixin, View):
+    """CSV export of visa invitation letter requests."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Return a CSV download of all letter requests.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments.
+
+        Returns:
+            An HttpResponse with CSV content.
+        """
+        qs = (
+            LetterRequest.objects.filter(conference=self.conference)
+            .select_related("user", "reviewed_by")
+            .order_by("-created_at")
+        )
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{self.conference.slug}-visa-letters.csv"'
+        writer = csv.writer(response)
+        writer.writerow(
+            [
+                "Passport Name",
+                "Nationality",
+                "Status",
+                "Travel From",
+                "Travel Until",
+                "Embassy",
+                "Submitted",
+                "Reviewed By",
+                "Reviewed At",
+            ]
+        )
+
+        for lr in qs:
+            reviewer = ""
+            if lr.reviewed_by:
+                reviewer = lr.reviewed_by.get_full_name() or lr.reviewed_by.username
+
+            writer.writerow(
+                [
+                    _safe_csv_cell(str(lr.passport_name)),
+                    _safe_csv_cell(str(lr.nationality)),
+                    lr.get_status_display(),
+                    lr.travel_from.isoformat(),
+                    lr.travel_until.isoformat(),
+                    _safe_csv_cell(str(lr.embassy_name)),
+                    lr.created_at.isoformat(),
+                    _safe_csv_cell(reviewer),
+                    lr.reviewed_at.isoformat() if lr.reviewed_at else "",
                 ]
             )
 

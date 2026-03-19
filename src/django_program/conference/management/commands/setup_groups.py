@@ -141,6 +141,8 @@ class Command(BaseCommand):
             *args: Positional arguments (unused).
             **options: Parsed command-line options.
         """
+        verbosity = options.get("verbosity", 1)
+
         for group_name, perm_specs in _GROUP_PERMISSIONS.items():
             group, created = Group.objects.get_or_create(name=group_name)
             verb = "Created" if created else "Updated"
@@ -151,6 +153,8 @@ class Command(BaseCommand):
             matched = [p for p in permissions if (p.content_type.app_label, p.codename) in perm_specs]
             group.permissions.set(matched)
 
-            self.stdout.write(self.style.SUCCESS(f"  {verb} group '{group_name}' with {len(matched)} permissions"))
+            if verbosity > 0:
+                self.stdout.write(self.style.SUCCESS(f"  {verb} group '{group_name}' with {len(matched)} permissions"))
 
-        self.stdout.write(self.style.SUCCESS("\nDone."))
+        if verbosity > 0:
+            self.stdout.write(self.style.SUCCESS("\nDone."))

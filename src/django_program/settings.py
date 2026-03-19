@@ -71,6 +71,7 @@ class FeaturesConfig:
     travel_grants_enabled: bool = True
     programs_enabled: bool = True
     pretalx_sync_enabled: bool = True
+    visa_letters_enabled: bool = True
 
     public_ui_enabled: bool = True
     manage_ui_enabled: bool = True

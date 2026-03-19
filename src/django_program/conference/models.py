@@ -131,6 +131,11 @@ class FeatureFlags(models.Model):
         blank=True,
         help_text="Override Pretalx sync toggle.",
     )
+    visa_letters_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Override visa invitation letters toggle.",
+    )
     public_ui_enabled = models.BooleanField(
         null=True,
         blank=True,

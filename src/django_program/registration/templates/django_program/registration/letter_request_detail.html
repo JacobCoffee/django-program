@@ -1,0 +1,86 @@
+{% extends "django_program/base.html" %}
+
+{% block title %}Visa Letter Request Status{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+  <div>
+    <h1>Visa Invitation Letter Request</h1>
+    <p>Submitted for {{ conference.name }}</p>
+  </div>
+  {% if letter_request.status == "submitted" %}
+  <span class="badge badge--warning" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">Submitted</span>
+  {% elif letter_request.status == "under_review" %}
+  <span class="badge badge--warning" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">Under Review</span>
+  {% elif letter_request.status == "approved" %}
+  <span class="badge badge--active" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">Approved</span>
+  {% elif letter_request.status == "generated" %}
+  <span class="badge badge--active" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">Generated</span>
+  {% elif letter_request.status == "sent" %}
+  <span class="badge badge--active" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">Sent</span>
+  {% elif letter_request.status == "rejected" %}
+  <span class="badge badge--inactive" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">Rejected</span>
+  {% endif %}
+</div>
+
+{% if letter_request.status == "rejected" and letter_request.rejection_reason %}
+<div style="padding: 0.75rem 1rem; margin-bottom: 1.5rem; border-radius: var(--radius-sm); background: var(--color-danger-bg); border: 1px solid var(--color-danger-border, #fecaca); color: var(--color-danger); font-size: 0.9rem;">
+  <strong>Rejection reason:</strong> {{ letter_request.rejection_reason }}
+</div>
+{% endif %}
+
+{% if pdf_available %}
+<div style="padding: 0.75rem 1rem; margin-bottom: 1.5rem; border-radius: var(--radius-sm); background: var(--color-success-bg); border: 1px solid var(--color-success-border, #bbf7d0); color: var(--color-success-text, #166534); font-size: 0.9rem;">
+  Your invitation letter is ready.
+  <a href="{% url 'registration:letter-request-download' conference.slug %}" class="btn btn-sm btn-primary" style="margin-left: 0.75rem;">Download PDF</a>
+</div>
+{% endif %}
+
+<h2 class="section-heading mt-0">Passport Information</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Full Name</div>
+    <div class="info-item-value">{{ letter_request.passport_name }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Passport Number</div>
+    <div class="info-item-value mono">{{ letter_request.passport_number }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Nationality</div>
+    <div class="info-item-value">{{ letter_request.nationality }}</div>
+  </div>
+  {% if letter_request.date_of_birth %}
+  <div class="info-item">
+    <div class="info-item-label">Date of Birth</div>
+    <div class="info-item-value">{{ letter_request.date_of_birth|date:"N j, Y" }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<h2 class="section-heading">Travel Details</h2>
+<div class="info-grid" style="margin-bottom: 2rem;">
+  <div class="info-item">
+    <div class="info-item-label">Travel From</div>
+    <div class="info-item-value">{{ letter_request.travel_from|date:"N j, Y" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Travel Until</div>
+    <div class="info-item-value">{{ letter_request.travel_until|date:"N j, Y" }}</div>
+  </div>
+  <div class="info-item">
+    <div class="info-item-label">Destination Address</div>
+    <div class="info-item-value">{{ letter_request.destination_address }}</div>
+  </div>
+  {% if letter_request.embassy_name %}
+  <div class="info-item">
+    <div class="info-item-label">Embassy / Consulate</div>
+    <div class="info-item-value">{{ letter_request.embassy_name }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<div style="font-size: 0.82rem; color: var(--color-text-muted);">
+  Submitted on {{ letter_request.created_at|date:"N j, Y, g:i A" }}
+</div>
+{% endblock %}

@@ -44,18 +44,13 @@ install: ## Install package
 	@$(UV) sync
 	@echo "=> Installation complete"
 
-dev: ## Run the example Django dev server (clean slate + migrate + bootstrap + runserver)
-	@echo "=> Cleaning previous database"
+dev: ## Run the example Django dev server (clean slate + migrate + bootstrap + seed + runserver)
 	@rm -f examples/db.sqlite3
-	@echo "=> Migrating database"
-	@$(UV) run python examples/manage.py migrate --run-syncdb
-	@echo "=> Bootstrapping conference data"
-	@$(UV) run python examples/manage.py bootstrap_conference --config conference.example.toml --update --seed-demo || true
-	@echo "=> Setting up permission groups"
-	@$(UV) run python examples/manage.py setup_groups
-	@echo "=> Seeding demo data (80 users, 20 speakers, ~100 orders)"
+	@$(UV) run python examples/manage.py migrate --run-syncdb -v 0
+	@$(UV) run python examples/manage.py bootstrap_conference --config conference.example.toml --update || true
 	@$(UV) run python examples/seed.py
-	@echo "=> Starting dev server at http://localhost:8000/admin/  (login: admin/admin)"
+	@echo ""
+	@echo "=> Dev server: http://localhost:8000/admin/  (admin / admin)"
 	@$(UV) run python examples/manage.py runserver
 
 upgrade: ## Upgrade all dependencies to the latest stable versions

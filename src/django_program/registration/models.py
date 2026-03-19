@@ -694,6 +694,7 @@ from django_program.registration.conditions import (  # noqa: E402
     SpeakerCondition,
     TimeOrStockLimitCondition,
 )
+from django_program.registration.letter import LetterRequest  # noqa: E402
 from django_program.registration.terminal import TerminalPayment  # noqa: E402
 
 __all__ = [
@@ -712,6 +713,7 @@ __all__ = [
     "EventProcessingException",
     "GroupMemberCondition",
     "IncludedProductCondition",
+    "LetterRequest",
     "Order",
     "OrderLineItem",
     "Payment",

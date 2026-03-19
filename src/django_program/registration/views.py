@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models.functions import Coalesce
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -25,11 +25,12 @@ from django.views.generic import DetailView, ListView
 
 from django_program.features import FeatureRequiredMixin
 from django_program.pretalx.views import ConferenceMixin
-from django_program.registration.forms import CartItemForm, CheckoutForm, VoucherApplyForm
+from django_program.registration.forms import CartItemForm, CheckoutForm, LetterRequestForm, VoucherApplyForm
 from django_program.registration.models import (
     AddOn,
     Cart,
     CartItem,
+    LetterRequest,
     Order,
     OrderLineItem,
     TicketType,
@@ -38,7 +39,7 @@ from django_program.registration.models import (
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
@@ -748,3 +749,157 @@ class OrderDetailView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin,
         context["line_items"] = self.object.line_items.all()
         context["payments"] = self.object.payments.all()
         return context
+
+
+class LetterRequestCreateView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
+    """Attendee-facing view to request a visa invitation letter.
+
+    If the user already has a request for this conference, redirects to
+    the detail view instead of allowing a duplicate submission.
+    """
+
+    required_feature = ("registration", "visa_letters")
+    template_name = "django_program/registration/letter_request_form.html"
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Render the letter request form, pre-filling the name if available.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments (unused).
+
+        Returns:
+            The rendered form page, or a redirect to the detail view if a
+            request already exists.
+        """
+        existing = LetterRequest.objects.filter(
+            user=request.user,
+            conference=self.conference,
+        ).first()
+        if existing:
+            return redirect(reverse("registration:letter-request-detail", args=[self.conference.slug]))
+
+        full_name = f"{request.user.first_name} {request.user.last_name}".strip()
+        form = LetterRequestForm(initial={"passport_name": full_name} if full_name else None)
+        return render(
+            request,
+            self.template_name,
+            {
+                "conference": self.conference,
+                "form": form,
+            },
+        )
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Validate and create a letter request.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments (unused).
+
+        Returns:
+            A redirect to the detail view on success, or the form with
+            errors on validation failure.
+        """
+        existing = LetterRequest.objects.filter(
+            user=request.user,
+            conference=self.conference,
+        ).first()
+        if existing:
+            return redirect(reverse("registration:letter-request-detail", args=[self.conference.slug]))
+
+        form = LetterRequestForm(request.POST)
+        if not form.is_valid():
+            return render(
+                request,
+                self.template_name,
+                {
+                    "conference": self.conference,
+                    "form": form,
+                },
+            )
+
+        letter_request = form.save(commit=False)
+        letter_request.user = request.user
+        letter_request.conference = self.conference
+        letter_request.status = LetterRequest.Status.SUBMITTED
+        try:
+            letter_request.save()
+        except IntegrityError:
+            return redirect(reverse("registration:letter-request-detail", args=[self.conference.slug]))
+
+        messages.success(request, "Your visa invitation letter request has been submitted.")
+        return redirect(reverse("registration:letter-request-detail", args=[self.conference.slug]))
+
+
+class LetterRequestDetailView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, DetailView):
+    """Detail view for an attendee's own visa letter request.
+
+    Shows current status, submitted details, and a download link for the
+    generated PDF when available.
+    """
+
+    required_feature = ("registration", "visa_letters")
+    template_name = "django_program/registration/letter_request_detail.html"
+    context_object_name = "letter_request"
+
+    def get_object(self, queryset: QuerySet[LetterRequest] | None = None) -> LetterRequest:  # noqa: ARG002
+        """Look up the letter request for the current user and conference.
+
+        Returns:
+            The user's LetterRequest for this conference.
+
+        Raises:
+            Http404: If no letter request exists for this user/conference.
+        """
+        return get_object_or_404(
+            LetterRequest,
+            user=self.request.user,
+            conference=self.conference,
+        )
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Add PDF availability flag to the template context."""
+        context = super().get_context_data(**kwargs)
+        lr = self.object
+        context["pdf_available"] = (
+            lr.status in (LetterRequest.Status.GENERATED, LetterRequest.Status.SENT) and lr.generated_pdf
+        )
+        return context
+
+
+class LetterRequestDownloadView(LoginRequiredMixin, ConferenceMixin, FeatureRequiredMixin, View):
+    """Download the generated invitation letter PDF.
+
+    Only the requesting user can download their own letter. Serves the
+    PDF through an authenticated, owner-checked view instead of exposing
+    a direct media URL.
+    """
+
+    required_feature = ("registration", "visa_letters")
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Return the generated PDF as a downloadable attachment.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: URL keyword arguments (unused).
+
+        Returns:
+            An HTTP response with the PDF content.
+
+        Raises:
+            Http404: If no letter request exists or no PDF has been generated.
+        """
+        letter_request = get_object_or_404(
+            LetterRequest,
+            conference=self.conference,
+            user=request.user,
+        )
+        if not letter_request.generated_pdf:
+            raise Http404
+        with letter_request.generated_pdf.open("rb") as f:
+            pdf_data = f.read()
+        response = HttpResponse(pdf_data, content_type="application/pdf")
+        response["Content-Disposition"] = 'attachment; filename="invitation-letter.pdf"'
+        return response

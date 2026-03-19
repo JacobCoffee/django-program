@@ -5,6 +5,7 @@ Run via ``make dev`` or directly::
     DJANGO_SETTINGS_MODULE=settings uv run python examples/seed.py
 """
 
+import contextlib
 import datetime
 import hashlib
 import os
@@ -23,11 +24,13 @@ django.setup()
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.management import call_command
 from django.utils import timezone
 
 from django_program.conference.models import Conference, Expense, ExpenseCategory
 from django_program.pretalx.models import Room, ScheduleSlot, SessionRating, Speaker, Talk, TalkOverride
 from django_program.programs.models import Activity, ActivitySignup, Survey, SurveyResponse, TravelGrant
+from django_program.registration.badge import Badge, BadgeTemplate
 from django_program.registration.conditions import (
     DiscountForCategory,
     DiscountForProduct,
@@ -35,6 +38,7 @@ from django_program.registration.conditions import (
     SpeakerCondition,
     TimeOrStockLimitCondition,
 )
+from django_program.registration.letter import LetterRequest
 from django_program.registration.models import (
     AddOn,
     Attendee,
@@ -147,8 +151,6 @@ class Seeder:
 
     def run(self) -> None:
         """Create a full conference with realistic registration data."""
-        print("Seeding realistic demo data...")
-
         self._create_superuser()
         conference = self._create_conference()
         prev_conferences = self._create_previous_conferences()
@@ -167,8 +169,6 @@ class Seeder:
         self._create_overrides(conference, talks)
         self._create_discount_conditions(conference, ticket_types)
         self._create_credits(conference, users)
-
-        # Phase 25: Analytics seed data
         self._create_previous_conference_data(prev_conferences, users, speakers)
         self._create_sponsor_benefits(sponsors)
         self._create_activities_and_signups(conference, users, rooms)
@@ -178,33 +178,88 @@ class Seeder:
         self._create_travel_grants(conference, users)
         self._create_more_carts(conference, users, ticket_types, addons)
         self._create_bulk_purchases(conference, sponsors, ticket_types, addons, users)
+        self._create_letter_requests(conference, users)
+        self._create_badges(conference)
+
+        # Set up permission groups
+        call_command("setup_groups", verbosity=0)
+        n_groups = Group.objects.filter(name__startswith="Program:").count()
+
+        self._print_summary(conference, prev_conferences, staff, users, vouchers, ticket_types, addons, n_groups)
+
+    def _print_summary(
+        self,
+        conference: Conference,
+        prev_conferences: list[Conference],
+        staff: list[object],
+        users: list[object],
+        vouchers: list[Voucher],
+        ticket_types: list[TicketType],
+        addons: list[AddOn],
+        n_groups: int,
+    ) -> None:
+        """Print a single unified summary of all seeded data."""
+        W = 24  # label width
 
         n_attendees = Attendee.objects.filter(conference=conference).count()
         n_orders = Order.objects.filter(conference=conference).count()
         n_speakers = Speaker.objects.filter(conference=conference).count()
+        n_talks = Talk.objects.filter(conference=conference).count()
+        n_credits = Credit.objects.filter(conference=conference).count()
+        n_expenses = Expense.objects.filter(conference=conference).count()
+        n_ratings = SessionRating.objects.filter(conference=conference).count()
+        n_activities = Activity.objects.filter(conference=conference).count()
+        n_grants = TravelGrant.objects.filter(conference=conference).count()
+        n_surveys = Survey.objects.filter(conference=conference).count()
+        n_bulk = BulkPurchase.objects.filter(conference=conference).count()
+        n_letters = LetterRequest.objects.filter(conference=conference).count()
+        n_sponsors = Sponsor.objects.filter(conference=conference).count()
+        n_badge_templates = BadgeTemplate.objects.filter(conference=conference).count()
+        n_badges = Badge.objects.filter(attendee__conference=conference).count()
 
-        print(f"\nSeeded {conference.name}:")
-        print("  Admin: admin / admin")
-        print(f"  Staff users: {len(staff)}")
-        print(f"  Attendee users: {len(users)}")
-        print(f"  Speakers: {n_speakers}")
-        print(f"  Talks: {Talk.objects.filter(conference=conference).count()}")
-        print(f"  Orders: {n_orders}")
-        print(f"  Attendees (registered): {n_attendees}")
-        print(f"  Ticket types: {len(ticket_types)}")
-        print(f"  Add-ons: {len(addons)}")
-        print(f"  Vouchers: {len(vouchers)}")
-        print(f"  Credits: {Credit.objects.filter(conference=conference).count()}")
-        print(f"  Expenses: {Expense.objects.filter(conference=conference).count()}")
-        print(f"  Session ratings: {SessionRating.objects.filter(conference=conference).count()}")
-        print(f"  Activities: {Activity.objects.filter(conference=conference).count()}")
-        print(f"  Travel grants: {TravelGrant.objects.filter(conference=conference).count()}")
-        print(f"  Surveys: {Survey.objects.filter(conference=conference).count()}")
-        print(f"  Bulk purchases: {BulkPurchase.objects.filter(conference=conference).count()}")
-        for prev_conf in prev_conferences:
-            prev_att = Attendee.objects.filter(conference=prev_conf).count()
-            prev_talks = Talk.objects.filter(conference=prev_conf).count()
-            print(f"  Previous conference: {prev_conf.name} ({prev_att} attendees, {prev_talks} talks)")
+        print(f"\n{'=' * 56}")
+        print(f"  {conference.name}  ({conference.slug})")
+        print(f"{'=' * 56}")
+
+        print(f"\n  {'Login':{W}} admin / admin")
+
+        print(f"\n  {'--- People ---':{W}}")
+        print(f"  {'Staff users':{W}} {len(staff)}")
+        print(f"  {'Attendee users':{W}} {len(users)}")
+        print(f"  {'Registered attendees':{W}} {n_attendees}")
+        print(f"  {'Speakers':{W}} {n_speakers}")
+        print(f"  {'Permission groups':{W}} {n_groups}")
+
+        print(f"\n  {'--- Content ---':{W}}")
+        print(f"  {'Talks':{W}} {n_talks}")
+        print(f"  {'Activities':{W}} {n_activities}")
+        print(f"  {'Session ratings':{W}} {n_ratings}")
+        print(f"  {'Surveys':{W}} {n_surveys}")
+
+        print(f"\n  {'--- Registration ---':{W}}")
+        print(f"  {'Ticket types':{W}} {len(ticket_types)}")
+        print(f"  {'Add-ons':{W}} {len(addons)}")
+        print(f"  {'Orders':{W}} {n_orders}")
+        print(f"  {'Vouchers':{W}} {len(vouchers)}")
+        print(f"  {'Credits':{W}} {n_credits}")
+        print(f"  {'Letter requests':{W}} {n_letters}")
+        print(f"  {'Badge templates':{W}} {n_badge_templates}")
+        print(f"  {'Badges generated':{W}} {n_badges}")
+
+        print(f"\n  {'--- Finance ---':{W}}")
+        print(f"  {'Sponsors':{W}} {n_sponsors}")
+        print(f"  {'Bulk purchases':{W}} {n_bulk}")
+        print(f"  {'Expenses':{W}} {n_expenses}")
+        print(f"  {'Travel grants':{W}} {n_grants}")
+
+        if prev_conferences:
+            print(f"\n  {'--- History ---':{W}}")
+            for prev_conf in prev_conferences:
+                prev_att = Attendee.objects.filter(conference=prev_conf).count()
+                prev_talks = Talk.objects.filter(conference=prev_conf).count()
+                print(f"  {prev_conf.name:{W}} {prev_att} attendees, {prev_talks} talks")
+
+        print(f"\n{'=' * 56}\n")
 
     def _create_superuser(self) -> object:
         """Create the admin superuser."""
@@ -257,18 +312,26 @@ class Seeder:
         return conference
 
     def _create_ticket_types(self, conference: Conference) -> list[TicketType]:
-        """Use existing ticket types from bootstrap, or create defaults."""
-        existing = list(TicketType.objects.filter(conference=conference).order_by("order"))
-        if existing:
-            return existing
+        """Ensure seed ticket types exist and have bulk_enabled / availability windows set."""
         now = timezone.now()
-        result = []
+        # Include bootstrap-created tickets and enable bulk on corporate/regular ones
+        seed_slugs = {slug for _, slug, *_ in TICKET_TYPES}
+        bootstrap_tickets = list(
+            TicketType.objects.filter(conference=conference).exclude(slug__in=seed_slugs).order_by("order")
+        )
+        bulk_eligible = {"corporate", "regular", "individual"}
+        for bt in bootstrap_tickets:
+            if str(bt.slug) in bulk_eligible and not bt.bulk_enabled:
+                bt.bulk_enabled = True
+                bt.save(update_fields=["bulk_enabled"])
+        result = bootstrap_tickets
+        base_order = len(result)
         for idx, (name, slug, price, qty, bulk, from_off, until_off) in enumerate(TICKET_TYPES):
             defaults: dict[str, object] = {
                 "name": name,
                 "price": price,
                 "total_quantity": qty,
-                "order": idx,
+                "order": base_order + idx,
                 "is_active": True,
                 "requires_voucher": slug == "speaker",
                 "bulk_enabled": bulk,
@@ -299,16 +362,28 @@ class Seeder:
         return result
 
     def _create_addons(self, conference: Conference) -> list[AddOn]:
-        """Use existing add-ons from bootstrap, or create defaults."""
-        existing = list(AddOn.objects.filter(conference=conference).order_by("order"))
-        if existing:
-            return existing
-        result = []
+        """Ensure seed add-ons exist and have bulk_enabled set."""
+        seed_slugs = {slug for _, slug, *_ in ADDONS}
+        bootstrap_addons = list(
+            AddOn.objects.filter(conference=conference).exclude(slug__in=seed_slugs).order_by("order")
+        )
+        for ba in bootstrap_addons:
+            if not ba.bulk_enabled:
+                ba.bulk_enabled = True
+                ba.save(update_fields=["bulk_enabled"])
+        result = bootstrap_addons
+        base_order = len(result)
         for idx, (name, slug, price, bulk) in enumerate(ADDONS):
             addon, created = AddOn.objects.get_or_create(
                 conference=conference,
                 slug=slug,
-                defaults={"name": name, "price": price, "order": idx, "is_active": True, "bulk_enabled": bulk},
+                defaults={
+                    "name": name,
+                    "price": price,
+                    "order": base_order + idx,
+                    "is_active": True,
+                    "bulk_enabled": bulk,
+                },
             )
             if not created and addon.bulk_enabled != bulk:
                 addon.bulk_enabled = bulk
@@ -753,8 +828,6 @@ class Seeder:
                         attendee.completed_registration = True
                         attendee.save(update_fields=["checked_in_at", "completed_registration"])
 
-        print(f"  Orders: {order_num}")
-
     def _create_discount_conditions(self, conference: Conference, ticket_types: list[TicketType]) -> None:
         """Create a variety of discount conditions."""
         now = timezone.now()
@@ -897,7 +970,7 @@ class Seeder:
         """
         confs: list[Conference] = []
 
-        conf_2075, created_2075 = Conference.objects.get_or_create(
+        conf_2075, _created_2075 = Conference.objects.get_or_create(
             slug="python-2075",
             defaults={
                 "name": "Python 2075",
@@ -912,10 +985,8 @@ class Seeder:
             },
         )
         confs.append(conf_2075)
-        if created_2075:
-            print("  Created previous conference: Python 2075")
 
-        conf_2076, created_2076 = Conference.objects.get_or_create(
+        conf_2076, _created_2076 = Conference.objects.get_or_create(
             slug="python-2076",
             defaults={
                 "name": "Python 2076",
@@ -930,8 +1001,6 @@ class Seeder:
             },
         )
         confs.append(conf_2076)
-        if created_2076:
-            print("  Created previous conference: Python 2076")
 
         return confs
 
@@ -1057,11 +1126,6 @@ class Seeder:
                 if talk_created and prev_speakers:
                     talk.speakers.add(prev_speakers[t_idx % len(prev_speakers)])
 
-            print(
-                f"  {prev_conference.name}: {attendee_count} attendees, "
-                f"{speaker_count} speakers, {len(sponsor_names)} sponsors, {talk_count} talks"
-            )
-
     def _create_sponsor_benefits(self, sponsors: list[Sponsor]) -> None:
         """Create sponsor benefits with varying fulfillment status."""
         benefit_templates = [
@@ -1074,21 +1138,17 @@ class Seeder:
             ("Swag bag insert", True),
             ("Attendee email list", False),
         ]
-        count = 0
         for sponsor in sponsors:
             # Higher-tier sponsors get more benefits
             n_benefits = min(len(benefit_templates), 3 + self.rng.randint(0, 5))
             for name, default_complete in benefit_templates[:n_benefits]:
                 # ~70% completion rate
                 is_complete = default_complete if self.rng.random() < 0.7 else not default_complete
-                _, created = SponsorBenefit.objects.get_or_create(
+                SponsorBenefit.objects.get_or_create(
                     sponsor=sponsor,
                     name=name,
                     defaults={"is_complete": is_complete},
                 )
-                if created:
-                    count += 1
-        print(f"  Sponsor benefits: {count}")
 
     def _create_activities_and_signups(self, conference: Conference, users: list, rooms: list[Room]) -> None:
         """Create activities with signups including waitlisted users."""
@@ -1102,7 +1162,6 @@ class Seeder:
             ("Open Space: Async Python", "open-async", Activity.ActivityType.OPEN_SPACE, None),
             ("Lightning Talks", "lightning", Activity.ActivityType.LIGHTNING_TALK, None),
         ]
-        signup_count = 0
         for name, slug, atype, max_p in activity_defs:
             room = self.rng.choice(rooms) if rooms else None
             activity, _ = Activity.objects.get_or_create(
@@ -1132,15 +1191,11 @@ class Seeder:
                 status = (
                     ActivitySignup.SignupStatus.CONFIRMED if j < n_confirmed else ActivitySignup.SignupStatus.WAITLISTED
                 )
-                _, created = ActivitySignup.objects.get_or_create(
+                ActivitySignup.objects.get_or_create(
                     activity=activity,
                     user=user,
                     defaults={"status": status},
                 )
-                if created:
-                    signup_count += 1
-
-        print(f"  Activity signups: {signup_count}")
 
     def _create_expenses(self, conference: Conference) -> None:
         """Create expense categories and expenses."""
@@ -1221,7 +1276,6 @@ class Seeder:
 
     def _create_session_ratings(self, conference: Conference, talks: list[Talk], users: list) -> None:
         """Create session ratings from attendees for talks."""
-        count = 0
         for talk in talks[:20]:
             # 5-15 ratings per talk
             n_ratings = self.rng.randint(5, 15)
@@ -1230,15 +1284,12 @@ class Seeder:
             for user in shuffled[:n_ratings]:
                 # Bell curve around 3.5-4.0
                 score = max(1, min(5, int(self.rng.gauss(3.8, 0.9))))
-                _, created = SessionRating.objects.get_or_create(
+                SessionRating.objects.get_or_create(
                     conference=conference,
                     talk=talk,
                     user=user,
                     defaults={"score": score, "comment": "" if self.rng.random() < 0.6 else "Great talk!"},
                 )
-                if created:
-                    count += 1
-        print(f"  Session ratings: {count}")
 
     def _create_surveys(self, conference: Conference, users: list) -> None:
         """Create NPS and satisfaction surveys with responses."""
@@ -1263,26 +1314,18 @@ class Seeder:
             },
         )
 
-        nps_count = 0
-        sat_count = 0
         shuffled = list(users)
         self.rng.shuffle(shuffled)
 
         # ~40 NPS responses (score 0-10)
         for user in shuffled[:40]:
             score = max(0, min(10, int(self.rng.gauss(7.5, 2.0))))
-            _, created = SurveyResponse.objects.get_or_create(survey=nps, user=user, defaults={"score": score})
-            if created:
-                nps_count += 1
+            SurveyResponse.objects.get_or_create(survey=nps, user=user, defaults={"score": score})
 
         # ~35 satisfaction responses (score 1-5)
         for user in shuffled[:35]:
             score = max(1, min(5, int(self.rng.gauss(3.8, 0.8))))
-            _, created = SurveyResponse.objects.get_or_create(survey=sat, user=user, defaults={"score": score})
-            if created:
-                sat_count += 1
-
-        print(f"  Survey responses: {nps_count} NPS, {sat_count} satisfaction")
+            SurveyResponse.objects.get_or_create(survey=sat, user=user, defaults={"score": score})
 
     def _create_travel_grants(self, conference: Conference, users: list) -> None:
         """Create travel grant applications if none exist."""
@@ -1514,7 +1557,290 @@ class Seeder:
                 },
             )
 
-        print(f"  Bulk purchases: {BulkPurchase.objects.filter(conference=conference).count()}")
+    def _create_letter_requests(self, conference: Conference, users: list) -> None:
+        """Create visa invitation letter requests across various workflow statuses."""
+        from django_program.registration.services.letters import generate_invitation_letter
+
+        if LetterRequest.objects.filter(conference=conference).exists():
+            return
+
+        admin = User.objects.filter(is_superuser=True).first()
+        now = timezone.now()
+
+        nationalities = [
+            "Germany",
+            "Japan",
+            "Brazil",
+            "Nigeria",
+            "India",
+            "South Korea",
+            "France",
+            "Mexico",
+            "Kenya",
+            "Poland",
+            "Colombia",
+            "Philippines",
+            "Italy",
+            "Australia",
+            "Egypt",
+        ]
+
+        passport_prefixes = [
+            "C01",
+            "TK9",
+            "BR4",
+            "A00",
+            "J77",
+            "KR2",
+            "FR8",
+            "MX5",
+            "KE3",
+            "PL6",
+            "CO1",
+            "PH4",
+            "IT7",
+            "AU2",
+            "EG9",
+        ]
+
+        embassy_names = [
+            "U.S. Embassy Berlin",
+            "",
+            "U.S. Consulate São Paulo",
+            "U.S. Embassy Abuja",
+            "",
+            "U.S. Embassy Seoul",
+            "U.S. Embassy Paris",
+            "",
+            "U.S. Embassy Nairobi",
+            "U.S. Consulate Kraków",
+            "U.S. Embassy Bogotá",
+            "",
+            "U.S. Embassy Rome",
+            "",
+            "U.S. Embassy Cairo",
+        ]
+
+        destination_addresses = [
+            "Pittsburgh Convention Center, 1000 Fort Duquesne Blvd, Pittsburgh, PA 15222",
+            "Omni William Penn Hotel, 530 William Penn Pl, Pittsburgh, PA 15219",
+            "Pittsburgh Convention Center, 1000 Fort Duquesne Blvd, Pittsburgh, PA 15222",
+        ]
+
+        # (user_index, desired_status, rejection_reason)
+        # GENERATED and SENT rows are created as APPROVED first so that
+        # generate_invitation_letter() can transition them correctly.
+        request_defs: list[tuple[int, str, str]] = [
+            # 3 SUBMITTED
+            (25, LetterRequest.Status.SUBMITTED, ""),
+            (26, LetterRequest.Status.SUBMITTED, ""),
+            (27, LetterRequest.Status.SUBMITTED, ""),
+            # 2 UNDER_REVIEW
+            (28, LetterRequest.Status.UNDER_REVIEW, ""),
+            (29, LetterRequest.Status.UNDER_REVIEW, ""),
+            # 4 APPROVED
+            (30, LetterRequest.Status.APPROVED, ""),
+            (31, LetterRequest.Status.APPROVED, ""),
+            (32, LetterRequest.Status.APPROVED, ""),
+            (33, LetterRequest.Status.APPROVED, ""),
+            # 3 GENERATED (created as APPROVED, then generated)
+            (34, LetterRequest.Status.GENERATED, ""),
+            (35, LetterRequest.Status.GENERATED, ""),
+            (36, LetterRequest.Status.GENERATED, ""),
+            # 2 SENT (created as APPROVED, then generated, then marked sent)
+            (37, LetterRequest.Status.SENT, ""),
+            (38, LetterRequest.Status.SENT, ""),
+            # 1 REJECTED
+            (
+                39,
+                LetterRequest.Status.REJECTED,
+                "Passport number could not be verified. Please resubmit with a clear scan.",
+            ),
+        ]
+
+        reviewed_statuses = {
+            LetterRequest.Status.APPROVED,
+            LetterRequest.Status.GENERATED,
+            LetterRequest.Status.SENT,
+            LetterRequest.Status.REJECTED,
+        }
+
+        conf_start = conference.start_date
+
+        needs_pdf = {LetterRequest.Status.GENERATED, LetterRequest.Status.SENT}
+
+        for i, (user_idx, desired_status, rejection_reason) in enumerate(request_defs):
+            if user_idx >= len(users):
+                continue
+
+            user = users[user_idx]
+            nationality = nationalities[i % len(nationalities)]
+            passport_num = f"{passport_prefixes[i % len(passport_prefixes)]}{self.rng.randint(10000, 99999)}"
+            travel_from = conf_start - datetime.timedelta(days=self.rng.randint(2, 5))
+            travel_until = conf_start + datetime.timedelta(days=self.rng.randint(8, 12))
+            dob = datetime.date(
+                self.rng.randint(1975, 2000),
+                self.rng.randint(1, 12),
+                self.rng.randint(1, 28),
+            )
+
+            reviewed_by = admin if desired_status in reviewed_statuses else None
+            reviewed_at = now - datetime.timedelta(days=self.rng.randint(1, 10)) if reviewed_by else None
+
+            # Create rows that need PDFs as APPROVED so generate_invitation_letter() works
+            create_status = LetterRequest.Status.APPROVED if desired_status in needs_pdf else desired_status
+
+            lr = LetterRequest.objects.create(
+                conference=conference,
+                user=user,
+                passport_name=f"{user.first_name} {user.last_name}",
+                passport_number=passport_num,
+                nationality=nationality,
+                date_of_birth=dob,
+                travel_from=travel_from,
+                travel_until=travel_until,
+                destination_address=destination_addresses[i % len(destination_addresses)],
+                embassy_name=embassy_names[i % len(embassy_names)],
+                status=create_status,
+                rejection_reason=rejection_reason,
+                reviewed_by=reviewed_by,
+                reviewed_at=reviewed_at,
+            )
+
+            if desired_status in needs_pdf:
+                with contextlib.suppress(OSError, ValueError):
+                    generate_invitation_letter(lr)
+                    # For SENT rows, transition from GENERATED to SENT after PDF generation
+                    if desired_status == LetterRequest.Status.SENT:
+                        lr.transition_to(LetterRequest.Status.SENT)
+                        lr.sent_at = now - datetime.timedelta(days=self.rng.randint(0, 3))
+                        lr.save(update_fields=["status", "sent_at", "updated_at"])
+
+    def _create_badges(self, conference: Conference) -> None:
+        """Create badge templates for different attendee roles and generate badges.
+
+        Creates a default template plus role-specific variants (speaker, staff,
+        sponsor, press) with different color schemes and display options, then
+        generates PDF badges for checked-in attendees.
+        """
+        from django_program.registration.services.badge import BadgeGenerationService
+
+        if BadgeTemplate.objects.filter(conference=conference).exists():
+            return
+
+        # Template definitions: (name, slug, is_default, accent, bg, text, show_email,
+        #                        show_company, show_qr, banner_pos)
+        template_defs = [
+            (
+                "Default Badge",
+                "default",
+                True,
+                "#4338CA",
+                "#FFFFFF",
+                "#000000",
+                False,
+                False,
+                True,
+                BadgeTemplate.BannerPosition.BELOW_HEADER,
+            ),
+            (
+                "Speaker Badge",
+                "speaker",
+                False,
+                "#DC2626",
+                "#FEF2F2",
+                "#1F2937",
+                True,
+                True,
+                True,
+                BadgeTemplate.BannerPosition.ABOVE_NAME,
+            ),
+            (
+                "Staff Badge",
+                "staff",
+                False,
+                "#059669",
+                "#F0FDF4",
+                "#1F2937",
+                True,
+                False,
+                True,
+                BadgeTemplate.BannerPosition.BELOW_NAME,
+            ),
+            (
+                "Sponsor Badge",
+                "sponsor",
+                False,
+                "#D97706",
+                "#FFFBEB",
+                "#1F2937",
+                True,
+                True,
+                True,
+                BadgeTemplate.BannerPosition.BOTTOM,
+            ),
+            (
+                "Press Badge",
+                "press",
+                False,
+                "#7C3AED",
+                "#F5F3FF",
+                "#1F2937",
+                False,
+                True,
+                False,
+                BadgeTemplate.BannerPosition.BELOW_HEADER,
+            ),
+        ]
+
+        templates: dict[str, BadgeTemplate] = {}
+        for name, slug, is_default, accent, bg, text, email, company, qr, banner in template_defs:
+            t = BadgeTemplate.objects.create(
+                conference=conference,
+                name=name,
+                slug=slug,
+                is_default=is_default,
+                accent_color=accent,
+                background_color=bg,
+                text_color=text,
+                show_name=True,
+                show_email=email,
+                show_company=company,
+                show_ticket_type=True,
+                show_qr_code=qr,
+                show_conference_name=True,
+                ticket_banner_position=banner,
+            )
+            templates[slug] = t
+
+        # Generate badges for checked-in attendees using the default template
+        service = BadgeGenerationService()
+        default_template = templates["default"]
+        speaker_template = templates["speaker"]
+
+        attendees = list(
+            Attendee.objects.filter(conference=conference)
+            .select_related("user", "conference", "order")
+            .order_by("created_at")
+        )
+
+        # Identify speakers by user
+        speaker_user_ids = set(
+            Speaker.objects.filter(conference=conference, user__isnull=False).values_list("user_id", flat=True)
+        )
+
+        for attendee in attendees:
+            # Skip ~20% to simulate not everyone having a badge yet
+            if self.rng.random() < 0.2:
+                continue
+
+            template = speaker_template if attendee.user_id in speaker_user_ids else default_template
+
+            # Mix of PDF and PNG
+            fmt = Badge.Format.PNG if self.rng.random() < 0.3 else Badge.Format.PDF
+
+            with contextlib.suppress(Exception):
+                service.generate_or_get_badge(attendee, template=template, badge_format=fmt)
 
 
 if __name__ == "__main__":
