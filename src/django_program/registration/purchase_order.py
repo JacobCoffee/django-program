@@ -94,12 +94,26 @@ class PurchaseOrder(models.Model):
 
     @property
     def total_paid(self) -> Decimal:
-        """Return the sum of all recorded payment amounts."""
+        """Return the sum of all recorded payment amounts.
+
+        Uses the ``_annotated_total_paid`` annotation when available (set by
+        list views) to avoid per-row aggregate queries.
+        """
+        annotated = getattr(self, "_annotated_total_paid", None)
+        if annotated is not None:
+            return Decimal(str(annotated))
         return self.payments.aggregate(total=models.Sum("amount"))["total"] or Decimal("0.00")
 
     @property
     def total_credited(self) -> Decimal:
-        """Return the sum of all credit note amounts."""
+        """Return the sum of all credit note amounts.
+
+        Uses the ``_annotated_total_credited`` annotation when available (set by
+        list views) to avoid per-row aggregate queries.
+        """
+        annotated = getattr(self, "_annotated_total_credited", None)
+        if annotated is not None:
+            return Decimal(str(annotated))
         return self.credit_notes.aggregate(total=models.Sum("amount"))["total"] or Decimal("0.00")
 
     @property

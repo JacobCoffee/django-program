@@ -38,7 +38,11 @@ from django_program.registration.models import (
     Payment,
     TicketType,
 )
-from django_program.registration.purchase_order import PurchaseOrder, PurchaseOrderPayment
+from django_program.registration.purchase_order import (
+    PurchaseOrder,
+    PurchaseOrderCreditNote,
+    PurchaseOrderPayment,
+)
 
 _ZERO = Decimal("0.00")
 
@@ -499,27 +503,40 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
         total_pos = sum(d["count"] for d in po_by_status.values())  # type: ignore[arg-type]
 
         po_revenue = (
-            po_qs.filter(
+            po_qs.exclude(status=PurchaseOrder.Status.CANCELLED)
+            .filter(
                 status__in=[
                     PurchaseOrder.Status.PAID,
                     PurchaseOrder.Status.OVERPAID,
                     PurchaseOrder.Status.PARTIALLY_PAID,
                 ]
-            ).aggregate(total=Sum("total"))["total"]
+            )
+            .aggregate(total=Sum("total"))["total"]
             or _ZERO
         )
         po_collected = (
-            PurchaseOrderPayment.objects.filter(purchase_order__conference=conference).aggregate(total=Sum("amount"))[
-                "total"
-            ]
+            PurchaseOrderPayment.objects.filter(
+                purchase_order__conference=conference,
+            )
+            .exclude(purchase_order__status=PurchaseOrder.Status.CANCELLED)
+            .aggregate(total=Sum("amount"))["total"]
             or _ZERO
         )
-        po_balance = po_revenue - po_collected
+        po_credited = (
+            PurchaseOrderCreditNote.objects.filter(
+                purchase_order__conference=conference,
+            )
+            .exclude(purchase_order__status=PurchaseOrder.Status.CANCELLED)
+            .aggregate(total=Sum("amount"))["total"]
+            or _ZERO
+        )
+        po_balance = po_revenue - po_collected - po_credited
 
         context["po_by_status"] = po_by_status
         context["total_pos"] = total_pos
         context["po_revenue"] = po_revenue
         context["po_collected"] = po_collected
+        context["po_credited"] = po_credited
         context["po_balance_outstanding"] = po_balance
 
         po_payment_rows = (

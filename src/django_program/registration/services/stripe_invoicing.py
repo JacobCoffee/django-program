@@ -11,6 +11,8 @@ import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from django_program.registration.purchase_order import (
     PurchaseOrder,
     PurchaseOrderLineItem,
@@ -259,56 +261,57 @@ def handle_invoice_paid_webhook(stripe_event_payload: dict[str, object]) -> None
         logger.warning("No invoice ID in webhook payload")
         return
 
-    try:
-        po = PurchaseOrder.objects.select_for_update().get(
-            stripe_invoice_id=stripe_invoice_id,
-        )
-    except PurchaseOrder.DoesNotExist:
-        logger.debug(
-            "No PO found for Stripe invoice %s (may not be a PO invoice)",
-            stripe_invoice_id,
-        )
-        return
+    with transaction.atomic():
+        try:
+            po = PurchaseOrder.objects.select_for_update().get(
+                stripe_invoice_id=stripe_invoice_id,
+            )
+        except PurchaseOrder.DoesNotExist:
+            logger.debug(
+                "No PO found for Stripe invoice %s (may not be a PO invoice)",
+                stripe_invoice_id,
+            )
+            return
 
-    if po.status in (PurchaseOrder.Status.PAID, PurchaseOrder.Status.CANCELLED):
+        if po.status in (PurchaseOrder.Status.PAID, PurchaseOrder.Status.CANCELLED):
+            logger.info(
+                "PO %s already %s, skipping webhook for invoice %s",
+                po.reference,
+                po.status,
+                stripe_invoice_id,
+            )
+            return
+
+        config = get_config()
+        currency = config.currency
+        amount_paid_cents = invoice_data["amount_paid"] if "amount_paid" in invoice_data else 0  # noqa: SIM401
+        amount_paid = convert_amount_for_db(int(amount_paid_cents), currency)
+
+        already_recorded = po.total_paid
+        new_amount = amount_paid - already_recorded
+
+        if new_amount <= Decimal("0.00"):
+            logger.debug(
+                "Webhook for invoice %s: no new amount to record (paid=%s, recorded=%s)",
+                stripe_invoice_id,
+                amount_paid,
+                already_recorded,
+            )
+            update_po_status(po)
+            return
+
+        today = datetime.date.today()  # noqa: DTZ011
+        record_payment(
+            po,
+            amount=new_amount,
+            method="stripe",
+            reference=stripe_invoice_id,
+            payment_date=today,
+            note=f"Stripe webhook invoice.paid ({stripe_invoice_id})",
+        )
+
         logger.info(
-            "PO %s already %s, skipping webhook for invoice %s",
+            "Processed invoice.paid webhook: recorded %s for PO %s",
+            new_amount,
             po.reference,
-            po.status,
-            stripe_invoice_id,
         )
-        return
-
-    config = get_config()
-    currency = config.currency
-    amount_paid_cents = invoice_data["amount_paid"] if "amount_paid" in invoice_data else 0  # noqa: SIM401
-    amount_paid = convert_amount_for_db(int(amount_paid_cents), currency)
-
-    already_recorded = po.total_paid
-    new_amount = amount_paid - already_recorded
-
-    if new_amount <= Decimal("0.00"):
-        logger.debug(
-            "Webhook for invoice %s: no new amount to record (paid=%s, recorded=%s)",
-            stripe_invoice_id,
-            amount_paid,
-            already_recorded,
-        )
-        update_po_status(po)
-        return
-
-    today = datetime.date.today()  # noqa: DTZ011
-    record_payment(
-        po,
-        amount=new_amount,
-        method="stripe",
-        reference=stripe_invoice_id,
-        payment_date=today,
-        note=f"Stripe webhook invoice.paid ({stripe_invoice_id})",
-    )
-
-    logger.info(
-        "Processed invoice.paid webhook: recorded %s for PO %s",
-        new_amount,
-        po.reference,
-    )

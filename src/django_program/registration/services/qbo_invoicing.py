@@ -544,8 +544,15 @@ def _process_webhook_notification(notification: dict[str, object]) -> None:
             _sync_pos_for_realm(str(realm_id))
 
 
+_WEBHOOK_SYNC_LIMIT = 50
+
+
 def _sync_pos_for_realm(realm_id: str) -> None:
-    """Sync QBO invoice status for all outstanding POs in a given realm.
+    """Sync QBO invoice status for outstanding POs in a given realm.
+
+    Each PO requires a separate HTTP request to QBO, so this function caps
+    the number of POs synced per webhook invocation to avoid timeouts. If
+    more outstanding POs exist than the limit, a warning is logged.
 
     Args:
         realm_id: The QBO realm/company ID.
@@ -559,7 +566,16 @@ def _sync_pos_for_realm(realm_id: str) -> None:
         status__in=[POModel.Status.PAID, POModel.Status.CANCELLED],
     )
 
-    for po in pos_with_qbo:
+    total_count = pos_with_qbo.count()
+    if total_count > _WEBHOOK_SYNC_LIMIT:
+        logger.warning(
+            "QBO realm %s has %d outstanding POs, syncing only the first %d to avoid timeout",
+            realm_id,
+            total_count,
+            _WEBHOOK_SYNC_LIMIT,
+        )
+
+    for po in pos_with_qbo[:_WEBHOOK_SYNC_LIMIT]:
         try:
             sync_qbo_invoice_status(po)
         except Exception:

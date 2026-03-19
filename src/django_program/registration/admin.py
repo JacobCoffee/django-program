@@ -1,6 +1,10 @@
 """Django admin configuration for the registration app."""
 
+from decimal import Decimal
+
 from django.contrib import admin
+from django.db.models import QuerySet, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest  # noqa: TC002
 
 from django_program.registration.badge import Badge, BadgeTemplate
@@ -564,6 +568,17 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
     search_fields = ("reference", "organization_name", "contact_email")
     readonly_fields = ("reference", "subtotal", "total", "balance_due_display", "total_paid_display")
     inlines = (PurchaseOrderLineItemInline, PurchaseOrderPaymentInline, PurchaseOrderCreditNoteInline)
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[PurchaseOrder]:
+        """Annotate payment and credit totals to avoid N+1 aggregate queries."""
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                _annotated_total_paid=Coalesce(Sum("payments__amount"), Value(Decimal("0.00"))),
+                _annotated_total_credited=Coalesce(Sum("credit_notes__amount"), Value(Decimal("0.00"))),
+            )
+        )
 
     @admin.display(description="Balance Due")
     def balance_due_display(self, obj: PurchaseOrder) -> str:

@@ -1067,7 +1067,7 @@
     <nav class="sidebar" aria-label="Conference navigation">
       {# ── Conference ── #}
       <div class="sidebar-section" data-section="conference">
-        <div class="sidebar-section-title">{{ conference.name }} <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">{{ conference.name }} <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:dashboard' conference.slug %}" class="{% if active_nav == 'dashboard' %}active{% endif %}">
@@ -1084,7 +1084,7 @@
 
       {# ── Program ── #}
       <div class="sidebar-section" data-section="program">
-        <div class="sidebar-section-title">Program <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Program <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:section-list' conference.slug %}" class="{% if active_nav == 'sections' %}active{% endif %}">
@@ -1147,7 +1147,7 @@
 
       {# ── Registration ── #}
       <div class="sidebar-section" data-section="registration">
-        <div class="sidebar-section-title">Registration <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Registration <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li class="sidebar-sublabel" data-subsection="reg-people">People <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></li>
         </ul>
@@ -1211,7 +1211,7 @@
 
       {# ── Sponsors ── #}
       <div class="sidebar-section" data-section="sponsors">
-        <div class="sidebar-section-title">Sponsors <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Sponsors <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:sponsor-level-list' conference.slug %}" class="{% if active_nav == 'sponsor-levels' %}active{% endif %}">
@@ -1228,7 +1228,7 @@
 
       {# ── On-site ── #}
       <div class="sidebar-section" data-section="onsite">
-        <div class="sidebar-section-title">On-site <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">On-site <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:checkin-dashboard' conference.slug %}" class="{% if active_nav == 'checkin' %}active{% endif %}">
@@ -1245,7 +1245,7 @@
 
       {# ── Finance & Insights ── #}
       <div class="sidebar-section" data-section="finance">
-        <div class="sidebar-section-title">Finance & Insights <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Finance & Insights <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:financial-dashboard' conference.slug %}" class="{% if active_nav == 'financial' %}active{% endif %}">
@@ -1278,7 +1278,7 @@
       {# ── Sync & Overrides (utility) ── #}
       <hr class="sidebar-utility-separator">
       <div class="sidebar-section" data-section="sync-overrides">
-        <div class="sidebar-section-title">Sync & Overrides <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Sync & Overrides <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <div class="sidebar-nav-expandable">
@@ -1341,12 +1341,23 @@
       var hasActive = section.querySelector('.sidebar-nav li a.active, .sidebar-subnav li a.active');
       if (stored[id] && !hasActive) {
         section.classList.add('collapsed');
+        title.setAttribute('aria-expanded', 'false');
       }
 
-      title.addEventListener('click', function() {
+      function toggleSection() {
         section.classList.toggle('collapsed');
-        stored[id] = section.classList.contains('collapsed');
+        var isCollapsed = section.classList.contains('collapsed');
+        stored[id] = isCollapsed;
+        title.setAttribute('aria-expanded', String(!isCollapsed));
         try { localStorage.setItem(KEY, JSON.stringify(stored)); } catch(e) {}
+      }
+
+      title.addEventListener('click', toggleSection);
+      title.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleSection();
+        }
       });
     });
 

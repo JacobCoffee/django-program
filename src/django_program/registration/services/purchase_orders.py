@@ -162,8 +162,18 @@ def record_payment(  # noqa: PLR0913
         The newly created PurchaseOrderPayment.
 
     Raises:
-        ValueError: If the PO is cancelled.
+        ValueError: If the amount is not positive, the method is invalid,
+            or the PO is cancelled.
     """
+    if amount <= Decimal("0.00"):
+        msg = f"Payment amount must be positive, got {amount}"
+        raise ValueError(msg)
+
+    valid_methods = {choice.value for choice in PurchaseOrderPayment.Method}
+    if method not in valid_methods:
+        msg = f"Invalid payment method '{method}', must be one of {sorted(valid_methods)}"
+        raise ValueError(msg)
+
     # Lock the PO row to prevent concurrent status races.
     po = PurchaseOrder.objects.select_for_update().get(pk=purchase_order.pk)
     if po.status == PurchaseOrder.Status.CANCELLED:
@@ -211,8 +221,12 @@ def issue_credit_note(
         The newly created PurchaseOrderCreditNote.
 
     Raises:
-        ValueError: If the PO is cancelled.
+        ValueError: If the amount is not positive or the PO is cancelled.
     """
+    if amount <= Decimal("0.00"):
+        msg = f"Credit note amount must be positive, got {amount}"
+        raise ValueError(msg)
+
     # Lock the PO row to prevent concurrent status races.
     po = PurchaseOrder.objects.select_for_update().get(pk=purchase_order.pk)
     if po.status == PurchaseOrder.Status.CANCELLED:
@@ -327,6 +341,8 @@ def generate_invoice_pdf(purchase_order: PurchaseOrder) -> bytes:
     from reportlab.lib.units import mm  # noqa: PLC0415
     from reportlab.pdfgen import canvas  # noqa: PLC0415
 
+    from django_program.settings import get_config  # noqa: PLC0415
+
     buf = io.BytesIO()
     width, height = A4
     c = canvas.Canvas(buf, pagesize=A4)
@@ -334,13 +350,14 @@ def generate_invoice_pdf(purchase_order: PurchaseOrder) -> bytes:
     usable_width = width - 2 * margin
 
     conference = purchase_order.conference
+    currency_sym = get_config().currency_symbol or "$"
 
     y = _draw_invoice_letterhead(c, conference, margin, height - margin, width)
     y = _draw_invoice_title(c, purchase_order, margin, y)
     y = _draw_bill_to(c, purchase_order, margin, y)
-    y = _draw_line_items_table(c, purchase_order, margin, y, usable_width)
-    y = _draw_financial_summary(c, purchase_order, margin, y, usable_width)
-    y = _draw_payment_history(c, purchase_order, margin, y, usable_width)
+    y = _draw_line_items_table(c, purchase_order, margin, y, usable_width, currency_sym)
+    y = _draw_financial_summary(c, purchase_order, margin, y, usable_width, currency_sym)
+    y = _draw_payment_history(c, purchase_order, margin, y, usable_width, currency_sym)
     _draw_invoice_footer(c, conference, margin, y, width)
 
     c.showPage()
@@ -455,8 +472,8 @@ def _draw_bill_to(c: object, purchase_order: PurchaseOrder, margin: float, y: fl
     return y
 
 
-def _draw_line_items_table(
-    c: object, purchase_order: PurchaseOrder, margin: float, y: float, usable_width: float
+def _draw_line_items_table(  # noqa: PLR0913
+    c: object, purchase_order: PurchaseOrder, margin: float, y: float, usable_width: float, currency_sym: str = "$"
 ) -> float:
     """Draw the line items table with headers and rows.
 
@@ -466,6 +483,7 @@ def _draw_line_items_table(
         margin: Left margin in points.
         y: Current y position.
         usable_width: Available text width in points.
+        currency_sym: Currency symbol to display before monetary values.
 
     Returns:
         Updated y position after the table.
@@ -497,8 +515,8 @@ def _draw_line_items_table(
             c.drawString(col_desc_x, y, segment)  # type: ignore[attr-defined]
             if i == 0:
                 c.drawRightString(col_qty_x + 30, y, str(item.quantity))  # type: ignore[attr-defined]
-                c.drawRightString(col_price_x + 40, y, f"${item.unit_price}")  # type: ignore[attr-defined]
-                c.drawRightString(col_total_x + 40, y, f"${item.line_total}")  # type: ignore[attr-defined]
+                c.drawRightString(col_price_x + 40, y, f"{currency_sym}{item.unit_price}")  # type: ignore[attr-defined]
+                c.drawRightString(col_total_x + 40, y, f"{currency_sym}{item.line_total}")  # type: ignore[attr-defined]
             y -= 5 * mm
 
     y -= 3 * mm
@@ -509,8 +527,8 @@ def _draw_line_items_table(
     return y
 
 
-def _draw_financial_summary(
-    c: object, purchase_order: PurchaseOrder, margin: float, y: float, usable_width: float
+def _draw_financial_summary(  # noqa: PLR0913
+    c: object, purchase_order: PurchaseOrder, margin: float, y: float, usable_width: float, currency_sym: str = "$"
 ) -> float:
     """Draw the financial summary (subtotal, total, paid, credits, balance).
 
@@ -520,6 +538,7 @@ def _draw_financial_summary(
         margin: Left margin in points.
         y: Current y position.
         usable_width: Available text width in points.
+        currency_sym: Currency symbol to display before monetary values.
 
     Returns:
         Updated y position after the summary.
@@ -529,16 +548,16 @@ def _draw_financial_summary(
     value_x = margin + usable_width * 0.85 + 40
 
     summary_lines: list[tuple[str, str, str, bool]] = [
-        ("Subtotal:", f"${purchase_order.subtotal}", "Helvetica", False),
-        ("Total:", f"${purchase_order.total}", "Helvetica-Bold", False),
-        ("Total Paid:", f"${purchase_order.total_paid}", "Helvetica", False),
+        ("Subtotal:", f"{currency_sym}{purchase_order.subtotal}", "Helvetica", False),
+        ("Total:", f"{currency_sym}{purchase_order.total}", "Helvetica-Bold", False),
+        ("Total Paid:", f"{currency_sym}{purchase_order.total_paid}", "Helvetica", False),
     ]
 
     total_credited = purchase_order.total_credited
     if total_credited:
-        summary_lines.append(("Total Credits:", f"${total_credited}", "Helvetica", False))
+        summary_lines.append(("Total Credits:", f"{currency_sym}{total_credited}", "Helvetica", False))
 
-    summary_lines.append(("Balance Due:", f"${purchase_order.balance_due}", "Helvetica-Bold", True))
+    summary_lines.append(("Balance Due:", f"{currency_sym}{purchase_order.balance_due}", "Helvetica-Bold", True))
 
     for label, value, font, is_large in summary_lines:
         size = 12 if is_large else 10
@@ -551,8 +570,8 @@ def _draw_financial_summary(
     return y
 
 
-def _draw_payment_history(
-    c: object, purchase_order: PurchaseOrder, margin: float, y: float, usable_width: float
+def _draw_payment_history(  # noqa: PLR0913
+    c: object, purchase_order: PurchaseOrder, margin: float, y: float, usable_width: float, currency_sym: str = "$"
 ) -> float:
     """Draw the payment history section.
 
@@ -562,6 +581,7 @@ def _draw_payment_history(
         margin: Left margin in points.
         y: Current y position.
         usable_width: Available text width in points.
+        currency_sym: Currency symbol to display before monetary values.
 
     Returns:
         Updated y position after the payment history.
@@ -585,7 +605,7 @@ def _draw_payment_history(
         date_str = payment.payment_date.strftime("%b %d, %Y")
         method_str = payment.get_method_display()
         ref_str = f" (ref: {payment.reference})" if payment.reference else ""
-        line = f"{date_str}  —  {method_str}  —  ${payment.amount}{ref_str}"
+        line = f"{date_str}  —  {method_str}  —  {currency_sym}{payment.amount}{ref_str}"
         c.drawString(margin, y, line)  # type: ignore[attr-defined]
         y -= 5 * mm
 

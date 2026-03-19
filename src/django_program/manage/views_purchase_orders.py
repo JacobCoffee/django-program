@@ -6,6 +6,8 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
+from django.db.models import Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
@@ -101,8 +103,19 @@ class PurchaseOrderListView(ManagePermissionMixin, ListView):
         return context
 
     def get_queryset(self) -> QuerySet[PurchaseOrder]:
-        """Return purchase orders for the current conference, optionally filtered by status."""
-        qs = PurchaseOrder.objects.filter(conference=self.conference).order_by("-created_at")
+        """Return purchase orders for the current conference, optionally filtered by status.
+
+        Annotates ``_annotated_total_paid`` and ``_annotated_total_credited`` so
+        that ``balance_due`` can be computed without per-row aggregate queries.
+        """
+        qs = (
+            PurchaseOrder.objects.filter(conference=self.conference)
+            .annotate(
+                _annotated_total_paid=Coalesce(Sum("payments__amount"), Value(Decimal("0.00"))),
+                _annotated_total_credited=Coalesce(Sum("credit_notes__amount"), Value(Decimal("0.00"))),
+            )
+            .order_by("-created_at")
+        )
         status = self.request.GET.get("status", "")
         if status and status in dict(PurchaseOrder.Status.choices):
             qs = qs.filter(status=status)
@@ -124,6 +137,7 @@ class PurchaseOrderDetailView(ManagePermissionMixin, DetailView):
         context["payments"] = PurchaseOrderPayment.objects.filter(purchase_order=po).select_related("entered_by")
         context["credit_notes"] = PurchaseOrderCreditNote.objects.filter(purchase_order=po).select_related("issued_by")
         context["payment_methods"] = PurchaseOrderPayment.Method.choices
+        context["today"] = timezone.now().date().isoformat()
         return context
 
     def get_queryset(self) -> QuerySet[PurchaseOrder]:
