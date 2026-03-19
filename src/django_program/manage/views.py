@@ -2029,10 +2029,11 @@ class TravelGrantReviewView(ManagePermissionMixin, UpdateView):
 class TravelGrantSendMessageView(ManagePermissionMixin, View):
     """POST-only view for reviewers to send a message on a grant."""
 
+    required_permission = "program_programs.review_travel_grant"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Create a message attached to the grant."""
         grant = get_object_or_404(TravelGrant, conference=self.conference, pk=kwargs["pk"])
-        required_permission = "program_programs.review_travel_grant"
         form = ReviewerMessageForm(request.POST)
         if form.is_valid():
             msg = form.save(commit=False)
@@ -2085,10 +2086,11 @@ class TravelGrantDisburseView(ManagePermissionMixin, View):
 class ReceiptReviewQueueView(ManagePermissionMixin, View):
     """Pick a random pending receipt for review."""
 
+    required_permission = "program_programs.review_receipt"
+
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Redirect to a random pending receipt, or back to the grant list if none."""
         pending = (
-        required_permission = "program_programs.review_receipt"
             Receipt.objects.filter(
                 grant__conference=self.conference,
                 approved=False,
@@ -2131,10 +2133,11 @@ class ReceiptReviewDetailView(ManagePermissionMixin, DetailView):
 class ReceiptApproveView(ManagePermissionMixin, View):
     """POST-only view to approve a receipt."""
 
+    required_permission = "program_programs.review_receipt"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Mark the receipt as approved by the current user."""
         receipt = get_object_or_404(Receipt, pk=kwargs["pk"], grant__conference=self.conference)
-        required_permission = "program_programs.review_receipt"
         receipt.approved = True
         receipt.approved_by = request.user
         receipt.approved_at = timezone.now()
@@ -2146,10 +2149,11 @@ class ReceiptApproveView(ManagePermissionMixin, View):
 class ReceiptFlagView(ManagePermissionMixin, View):
     """POST-only view to flag a receipt."""
 
+    required_permission = "program_programs.review_receipt"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Flag the receipt with a reason provided by the reviewer."""
         receipt = get_object_or_404(Receipt, pk=kwargs["pk"], grant__conference=self.conference)
-        required_permission = "program_programs.review_receipt"
         form = ReceiptFlagForm(request.POST)
         if form.is_valid():
             receipt.flagged = True
@@ -2276,10 +2280,11 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
     sync step (rooms, speakers, talks, schedule) completes.
     """
 
+    required_permission = "manage_conference_settings"
+
     def post(self, request: HttpRequest, **kwargs: str) -> StreamingHttpResponse:  # noqa: ARG002
         """Start the streaming sync and return an SSE response."""
         response = StreamingHttpResponse(
-        required_permission = "manage_conference_settings"
             self._sync_stream(request),
             content_type="text/event-stream",
         )
