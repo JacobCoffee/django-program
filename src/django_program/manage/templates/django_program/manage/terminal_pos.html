@@ -1311,15 +1311,8 @@
   async function applyVoucher() {
     var code = voucherInput.value.trim();
     if (!code) return;
-
-    // For now, store the voucher code locally. The actual discount would need
-    // to be validated server-side when the backend supports it. We show the
-    // voucher as "pending" so the operator knows it was entered.
-    appliedVoucher = {code: code, discount: 0};
-    voucherAppliedText.textContent = "Voucher " + code + " (pending server validation)";
-    voucherApplied.classList.add("visible");
-    voucherRow.style.display = "none";
-    renderCart();
+    voucherInput.value = "";
+    alert("Vouchers are not yet supported for terminal sales. Use the online checkout flow for voucher redemptions.");
   }
 
   function removeVoucher() {
@@ -1365,14 +1358,34 @@
 
       showPaymentStatus("Creating payment...", "processing");
 
-      // Build payload for CreatePaymentIntentView.
-      // The view accepts either order_id (to pay an existing order) or amount
-      // (as a Decimal string for walk-up sales). reader_id is always required.
+      // If we have cart items but no order yet, checkout first to create a proper order
+      if (!currentOrderId && cart.length > 0) {
+        var checkoutPayload = {action: "checkout", billing_name: "", billing_email: ""};
+        if (currentAttendee && currentAttendee.attendee && currentAttendee.attendee.access_code) {
+          checkoutPayload.attendee_access_code = currentAttendee && currentAttendee.attendee && currentAttendee.attendee.access_code;
+          var nameEl = document.getElementById("attendeeName");
+          var emailEl = document.getElementById("attendeeEmail");
+          if (nameEl) checkoutPayload.billing_name = nameEl.textContent || "";
+          if (emailEl) checkoutPayload.billing_email = emailEl.textContent || "";
+        }
+        var checkoutData = await apiFetch(API.cart, {
+          method: "POST",
+          body: JSON.stringify(checkoutPayload)
+        });
+        if (checkoutData.order_id) {
+          currentOrderId = checkoutData.order_id;
+        }
+      }
+
+      // Build payload for CreatePaymentIntentView
       var intentPayload = {reader_id: connectedReader.id};
       if (currentOrderId) {
         intentPayload.order_id = currentOrderId;
       } else {
         intentPayload.amount = total.toFixed(2);
+        if (currentAttendee && currentAttendee.attendee && currentAttendee.attendee.access_code) {
+          intentPayload.attendee_access_code = currentAttendee && currentAttendee.attendee && currentAttendee.attendee.access_code;
+        }
       }
 
       var intentData = await apiFetch(API.createIntent, {
