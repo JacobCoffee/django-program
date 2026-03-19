@@ -695,6 +695,12 @@ from django_program.registration.conditions import (  # noqa: E402
     TimeOrStockLimitCondition,
 )
 from django_program.registration.letter import LetterRequest  # noqa: E402
+from django_program.registration.purchase_order import (  # noqa: E402
+    PurchaseOrder,
+    PurchaseOrderCreditNote,
+    PurchaseOrderLineItem,
+    PurchaseOrderPayment,
+)
 from django_program.registration.terminal import TerminalPayment  # noqa: E402
 
 __all__ = [
@@ -718,6 +724,10 @@ __all__ = [
     "OrderLineItem",
     "Payment",
     "ProductRedemption",
+    "PurchaseOrder",
+    "PurchaseOrderCreditNote",
+    "PurchaseOrderLineItem",
+    "PurchaseOrderPayment",
     "SpeakerCondition",
     "StripeCustomer",
     "StripeEvent",

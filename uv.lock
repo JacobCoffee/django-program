@@ -271,6 +271,7 @@ source = { editable = "." }
 dependencies = [
     { name = "django" },
     { name = "django-fernet-encrypted-fields" },
+    { name = "httpx" },
     { name = "pillow" },
     { name = "pretalx-client" },
     { name = "qrcode", extra = ["pil"] },
@@ -329,6 +330,7 @@ test = [
 requires-dist = [
     { name = "django", specifier = ">=5.2" },
     { name = "django-fernet-encrypted-fields", specifier = ">=0.3.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pretalx-client", editable = "packages/pretalx-client" },
     { name = "qrcode", extras = ["pil"], specifier = ">=8.2" },

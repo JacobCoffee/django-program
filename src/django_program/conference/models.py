@@ -27,6 +27,45 @@ class Conference(models.Model):
     stripe_publishable_key = EncryptedCharField(max_length=200, blank=True, null=True, default=None)
     stripe_webhook_secret = EncryptedCharField(max_length=200, blank=True, null=True, default=None)
 
+    qbo_realm_id = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="QuickBooks Online Company/Realm ID.",
+    )
+    qbo_access_token = EncryptedCharField(
+        max_length=2000,
+        blank=True,
+        null=True,
+        default=None,
+        help_text="QBO OAuth2 access token.",
+    )
+    qbo_refresh_token = EncryptedCharField(
+        max_length=2000,
+        blank=True,
+        null=True,
+        default=None,
+        help_text="QBO OAuth2 refresh token.",
+    )
+    qbo_token_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the QBO access token expires.",
+    )
+    qbo_client_id = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="QBO OAuth2 client ID for token refresh.",
+    )
+    qbo_client_secret = EncryptedCharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        default=None,
+        help_text="QBO OAuth2 client secret for token refresh.",
+    )
+
     total_capacity = models.PositiveIntegerField(
         default=0,
         help_text="Maximum total tickets across all types. 0 means unlimited.",

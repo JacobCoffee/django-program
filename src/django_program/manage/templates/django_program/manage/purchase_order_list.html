@@ -1,0 +1,90 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Purchase Orders{% endblock %}
+
+{% block page_title %}
+<h1>Purchase Orders</h1>
+<p>Manage corporate invoices and offline payment tracking</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:purchase-order-add' conference.slug %}" class="btn btn-primary">New Purchase Order</a>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+  <form method="get" style="display: flex; align-items: center; gap: 0.75rem;">
+    <label for="status-filter" style="font-size: 0.82rem; font-weight: 600; color: var(--color-text-secondary);">Filter by status:</label>
+    <select id="status-filter" name="status" onchange="this.form.submit();" style="padding: 0.4rem 0.6rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.88rem;">
+      <option value="">All</option>
+      {% for value, label in status_choices %}
+      <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+{% if purchase_orders %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Reference</th>
+      <th>Organization</th>
+      <th>Contact</th>
+      <th>Status</th>
+      <th style="text-align: right;">Total</th>
+      <th style="text-align: right;">Balance Due</th>
+      <th>Created</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for po in purchase_orders %}
+    <tr>
+      <td class="mono">{{ po.reference }}</td>
+      <td>{{ po.organization_name }}</td>
+      <td>
+        {% if po.contact_name %}{{ po.contact_name }}{% else %}{{ po.contact_email }}{% endif %}
+      </td>
+      <td>
+        {% if po.status == "draft" %}
+        <span class="badge badge--other">Draft</span>
+        {% elif po.status == "sent" %}
+        <span class="badge badge--accepted">Sent</span>
+        {% elif po.status == "partially_paid" %}
+        <span class="badge badge--warning">Partially Paid</span>
+        {% elif po.status == "paid" %}
+        <span class="badge badge--active">Paid</span>
+        {% elif po.status == "overpaid" %}
+        <span class="badge badge--synced">Overpaid</span>
+        {% elif po.status == "cancelled" %}
+        <span class="badge badge--inactive">Cancelled</span>
+        {% endif %}
+      </td>
+      <td style="text-align: right;">${{ po.total }}</td>
+      <td style="text-align: right;">
+        {% if po.balance_due > 0 %}
+        <span style="color: var(--color-warning); font-weight: 600;">${{ po.balance_due }}</span>
+        {% elif po.balance_due < 0 %}
+        <span style="color: var(--color-accent); font-weight: 600;">-${{ po.balance_due|floatformat:2|cut:"-" }}</span>
+        {% else %}
+        <span style="color: var(--color-success);">$0.00</span>
+        {% endif %}
+      </td>
+      <td>{{ po.created_at|date:"M j, Y" }}</td>
+      <td>
+        <a href="{% url 'manage:purchase-order-detail' conference.slug po.pk %}" class="btn btn-sm btn-secondary">View</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% include "django_program/manage/_pagination.html" %}
+{% else %}
+<div class="empty-state">
+  <p>No purchase orders{% if current_status %} with status "{{ current_status }}"{% endif %} for this conference yet.</p>
+  <p><a href="{% url 'manage:purchase-order-add' conference.slug %}" class="btn btn-primary">Create First Purchase Order</a></p>
+</div>
+{% endif %}
+{% endblock %}

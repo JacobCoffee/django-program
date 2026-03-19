@@ -316,6 +316,8 @@ urlpatterns = [
     path("<slug:conference_slug>/vouchers/bulk/", include("django_program.manage.urls_vouchers")),
     # --- Financial Dashboard ---
     path("<slug:conference_slug>/financial/", include("django_program.manage.urls_financial")),
+    # --- Purchase Orders ---
+    path("<slug:conference_slug>/purchase-orders/", include("django_program.manage.urls_purchase_orders")),
     # --- Reports ---
     path("<slug:conference_slug>/reports/", include("django_program.manage.urls_reports")),
     # --- Analytics & KPI Dashboard ---
