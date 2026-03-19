@@ -298,14 +298,24 @@ class Seeder:
         # Use whatever conference bootstrap_conference created
         conference = Conference.objects.first()
         if conference:
-            # Ensure budget fields are populated
+            # Ensure budget and integration fields are populated for demo
+            changed = False
             if not conference.revenue_budget:
-                Conference.objects.filter(pk=conference.pk).update(
-                    revenue_budget=Decimal("50000.00"),
-                    target_attendance=150,
-                    grant_budget=Decimal("15000.00"),
-                )
-                conference.refresh_from_db()
+                conference.revenue_budget = Decimal("50000.00")
+                conference.target_attendance = 150
+                conference.grant_budget = Decimal("15000.00")
+                changed = True
+            if not conference.stripe_secret_key:
+                conference.stripe_secret_key = "sk_test_demo_not_real"
+                conference.stripe_publishable_key = "pk_test_demo_not_real"
+                changed = True
+            if not conference.qbo_realm_id:
+                conference.qbo_realm_id = "1234567890"
+                conference.qbo_client_id = "demo-client-id"
+                conference.qbo_client_secret = "demo-client-secret"
+                changed = True
+            if changed:
+                conference.save()
             return conference
         # Fallback: create one if bootstrap wasn't run
         conference, _ = Conference.objects.get_or_create(
