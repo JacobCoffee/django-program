@@ -31,7 +31,6 @@ from django_program.registration.models import (
 )
 from django_program.registration.services.checkin import CheckInService
 from django_program.registration.stripe_client import StripeClient
-from django_program.registration.stripe_utils import convert_amount_for_api
 from django_program.registration.terminal import TerminalPayment
 from django_program.registration.views_checkin import StaffRequiredMixin
 from django_program.settings import get_config
@@ -59,9 +58,9 @@ def _generate_order_reference() -> str:
 
 def _stripe_error_response(exc: stripe.StripeError) -> JsonResponse:
     """Build a consistent JSON error response from a Stripe exception."""
-    logger.exception("Stripe API error: %s", exc)
+    logger.warning("Stripe error: %s", exc)
     return JsonResponse(
-        {"error": f"Stripe error: {exc.user_message or str(exc)}"},
+        {"error": "Payment processing error. Please try again."},
         status=502,
     )
 
@@ -184,7 +183,7 @@ class CreatePaymentIntentView(StaffRequiredMixin, View):
 
         try:
             intent = client.create_terminal_payment_intent(
-                amount=convert_amount_for_api(amount, currency),
+                amount=amount,
                 currency=currency.lower(),
                 metadata=metadata,
                 description=description,
@@ -240,6 +239,7 @@ class CreatePaymentIntentView(StaffRequiredMixin, View):
                 "status": "processing",
                 "order_id": order.pk,
                 "order_reference": str(order.reference),
+                "client_secret": intent.client_secret,
                 "reader_action": reader_action,
             }
         )
@@ -347,9 +347,12 @@ class CancelPaymentView(StaffRequiredMixin, View):
 
         try:
             client = StripeClient(self.conference)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        try:
             if reader_id:
                 client.cancel_reader_action(reader_id)
-            self.client = client
             client.client.v1.payment_intents.cancel(payment_intent_id)
         except stripe.StripeError as exc:
             return _stripe_error_response(exc)
@@ -599,50 +602,14 @@ class CartOperationsView(StaffRequiredMixin, View):
             cart.items.all().delete()
 
             cart_total = Decimal("0.00")
-            cart_items = []
+            cart_items: list[dict[str, object]] = []
             for item_data in items:
-                if not isinstance(item_data, dict):
-                    continue
-                ticket_type_id = item_data.get("ticket_type_id")
-                addon_id = item_data.get("addon_id")
-                quantity = int(item_data.get("quantity", 1))  # type: ignore[arg-type]
-
-                if ticket_type_id:
-                    try:
-                        tt = TicketType.objects.get(pk=int(ticket_type_id), conference=self.conference)  # type: ignore[arg-type]
-                    except TicketType.DoesNotExist, TypeError, ValueError:
-                        continue
-                    ci = CartItem.objects.create(cart=cart, ticket_type=tt, quantity=quantity)
-                    line_total = tt.price * quantity
-                    cart_total += line_total
-                    cart_items.append(
-                        {
-                            "id": ci.pk,
-                            "ticket_type_id": tt.pk,
-                            "name": str(tt.name),
-                            "quantity": quantity,
-                            "unit_price": str(tt.price),
-                            "line_total": str(line_total),
-                        }
-                    )
-                elif addon_id:
-                    try:
-                        addon = AddOn.objects.get(pk=int(addon_id), conference=self.conference)  # type: ignore[arg-type]
-                    except AddOn.DoesNotExist, TypeError, ValueError:
-                        continue
-                    ci = CartItem.objects.create(cart=cart, addon=addon, quantity=quantity)
-                    line_total = addon.price * quantity
-                    cart_total += line_total
-                    cart_items.append(
-                        {
-                            "id": ci.pk,
-                            "addon_id": addon.pk,
-                            "name": str(addon.name),
-                            "quantity": quantity,
-                            "unit_price": str(addon.price),
-                            "line_total": str(line_total),
-                        }
-                    )
+                result = self._add_cart_item(cart, item_data)
+                if isinstance(result, JsonResponse):
+                    return result
+                if result is not None:
+                    cart_total += Decimal(str(result["line_total"]))
+                    cart_items.append(result)
 
         return JsonResponse(
             {
@@ -651,6 +618,55 @@ class CartOperationsView(StaffRequiredMixin, View):
                 "total": str(cart_total),
             }
         )
+
+    def _add_cart_item(
+        self, cart: Cart, item_data: object
+    ) -> dict[str, object] | JsonResponse | None:
+        """Process a single cart item from the request payload."""
+        if not isinstance(item_data, dict):
+            return None
+        ticket_type_id = item_data.get("ticket_type_id")
+        addon_id = item_data.get("addon_id")
+        try:
+            quantity = int(item_data.get("quantity", 1))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "Invalid quantity value"}, status=400)
+
+        if ticket_type_id:
+            return self._add_ticket_item(cart, ticket_type_id, quantity)
+        if addon_id:
+            return self._add_addon_item(cart, addon_id, quantity)
+        return None
+
+    def _add_ticket_item(
+        self, cart: Cart, ticket_type_id: object, quantity: int
+    ) -> dict[str, object] | None:
+        """Create a ticket CartItem and return its data."""
+        try:
+            tt = TicketType.objects.get(pk=int(ticket_type_id), conference=self.conference)  # type: ignore[arg-type]
+        except (TicketType.DoesNotExist, TypeError, ValueError):
+            return None
+        ci = CartItem.objects.create(cart=cart, ticket_type=tt, quantity=quantity)
+        line_total = tt.price * quantity
+        return {
+            "id": ci.pk, "ticket_type_id": tt.pk, "name": str(tt.name),
+            "quantity": quantity, "unit_price": str(tt.price), "line_total": str(line_total),
+        }
+
+    def _add_addon_item(
+        self, cart: Cart, addon_id: object, quantity: int
+    ) -> dict[str, object] | None:
+        """Create an addon CartItem and return its data."""
+        try:
+            addon = AddOn.objects.get(pk=int(addon_id), conference=self.conference)  # type: ignore[arg-type]
+        except (AddOn.DoesNotExist, TypeError, ValueError):
+            return None
+        ci = CartItem.objects.create(cart=cart, addon=addon, quantity=quantity)
+        line_total = addon.price * quantity
+        return {
+            "id": ci.pk, "addon_id": addon.pk, "name": str(addon.name),
+            "quantity": quantity, "unit_price": str(addon.price), "line_total": str(line_total),
+        }
 
     def _handle_checkout(self, request: HttpRequest, body: dict[str, object]) -> JsonResponse:
         """Convert the cart into a pending order."""

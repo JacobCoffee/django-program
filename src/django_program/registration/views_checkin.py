@@ -103,7 +103,7 @@ def _parse_json_body(request: HttpRequest) -> dict[str, object] | None:
     """
     try:
         payload = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
+    except json.JSONDecodeError, ValueError:
         return None
     if not isinstance(payload, dict):
         return None

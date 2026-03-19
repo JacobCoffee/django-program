@@ -718,6 +718,7 @@
 {% endblock %}
 
 {% block content %}
+<div style="display:none;">{% csrf_token %}</div>
 <div class="pos-layout">
   <!-- Left Panel: Reader + Attendee Lookup -->
   <div class="pos-panel pos-panel--left">
@@ -891,7 +892,7 @@
   var terminal = null;
   var connectedReader = null;
   var cart = [];           // [{id, name, price, quantity, type}]
-  var inventory = [];      // raw from API
+  var inventory = [];      // normalized: [{id, name, price, type, remaining}, ...]
   var currentAttendee = null;
   var currentOrderId = null;
   var currentPaymentIntentId = null;
@@ -905,8 +906,11 @@
     return cookie ? cookie.split("=")[1] : "";
   }
 
-  function formatCurrency(cents) {
-    return "$" + (cents / 100).toFixed(2);
+  function formatCurrency(amount) {
+    // API returns Decimal strings like "100.00"; parse as float directly.
+    var n = parseFloat(amount);
+    if (isNaN(n)) return "$0.00";
+    return "$" + n.toFixed(2);
   }
 
   function escapeHtml(str) {
@@ -1052,23 +1056,29 @@
     try {
       var data = await apiFetch(attendeeUrl(code));
       currentAttendee = data;
-      currentOrderId = data.order_id || null;
+      currentOrderId = (data.order && data.order.id) ? data.order.id : null;
 
-      aiName.textContent = data.name || "Unknown";
-      aiEmail.textContent = data.email || "";
+      var att = data.attendee || {};
+      aiName.textContent = att.name || "Unknown";
+      aiEmail.textContent = att.email || "";
 
       var metaHtml = "";
-      if (data.ticket_type) {
-        metaHtml += '<span class="attendee-info-tag">' + escapeHtml(data.ticket_type) + '</span>';
+      if (att.checked_in) {
+        metaHtml += '<span class="attendee-info-tag">Checked in</span>';
       }
-      if (data.order_status) {
-        var statusClass = data.order_status === "paid" ? "badge--active" : "badge--warning";
-        metaHtml += '<span class="badge ' + statusClass + '">' + escapeHtml(data.order_status) + '</span>';
+      if (data.order && data.order.status) {
+        var orderStatus = data.order.status;
+        var statusClass = orderStatus === "paid" ? "badge--active" : "badge--warning";
+        metaHtml += '<span class="badge ' + statusClass + '">' + escapeHtml(orderStatus) + '</span>';
+      }
+      if (data.registered) {
+        metaHtml += '<span class="attendee-info-tag">Registered</span>';
       }
       aiMeta.innerHTML = metaHtml;
 
-      if (data.credits != null && data.credits > 0) {
-        aiCredits.textContent = "Credits available: " + formatCurrency(data.credits);
+      var creditsTotal = parseFloat(data.credits_total || "0");
+      if (creditsTotal > 0) {
+        aiCredits.textContent = "Credits available: " + formatCurrency(data.credits_total);
         aiCredits.style.display = "";
       } else {
         aiCredits.style.display = "none";
@@ -1091,7 +1101,28 @@
 
     try {
       var data = await apiFetch(API.inventory);
-      inventory = data.items || data.tickets || data || [];
+      // API returns {ticket_types: [...], addons: [...]} with price as Decimal strings.
+      // Normalize into a flat array with a "type" field for the catalog renderer.
+      var tickets = (data.ticket_types || []).map(function(tt) {
+        return {
+          id: tt.id,
+          name: tt.name,
+          price: tt.price,
+          type: "ticket",
+          remaining: tt.remaining_quantity,
+          requires_voucher: tt.requires_voucher || false
+        };
+      });
+      var addons = (data.addons || []).map(function(a) {
+        return {
+          id: a.id,
+          name: a.name,
+          price: a.price,
+          type: "addon",
+          remaining: null
+        };
+      });
+      inventory = tickets.concat(addons);
       renderCatalog();
     } catch (err) {
       catalogLoading.textContent = "Failed to load inventory.";
@@ -1156,7 +1187,8 @@
   // ---- Cart Management ----
 
   function addToCart(item) {
-    var existing = cart.find(function(c) { return c.id === item.id; });
+    // Match on both id and type to avoid collisions between ticket types and addons
+    var existing = cart.find(function(c) { return c.id === item.id && c.type === item.type; });
     if (existing) {
       existing.quantity++;
     } else {
@@ -1171,8 +1203,8 @@
     renderCart();
   }
 
-  function updateCartQty(itemId, delta) {
-    var idx = cart.findIndex(function(c) { return c.id === itemId; });
+  function updateCartQty(itemId, itemType, delta) {
+    var idx = cart.findIndex(function(c) { return c.id === itemId && c.type === itemType; });
     if (idx === -1) return;
     cart[idx].quantity += delta;
     if (cart[idx].quantity <= 0) {
@@ -1199,7 +1231,8 @@
     var subtotal = 0;
 
     cart.forEach(function(item) {
-      var lineTotal = item.price * item.quantity;
+      var unitPrice = parseFloat(item.price);
+      var lineTotal = unitPrice * item.quantity;
       subtotal += lineTotal;
 
       var li = document.createElement("li");
@@ -1210,15 +1243,15 @@
           '<div class="cart-item-unit-price">' + formatCurrency(item.price) + ' ea</div>' +
         '</div>' +
         '<div class="cart-item-qty">' +
-          '<button type="button" data-id="' + item.id + '" data-delta="-1">&minus;</button>' +
+          '<button type="button" data-id="' + item.id + '" data-type="' + item.type + '" data-delta="-1">&minus;</button>' +
           '<span class="cart-item-qty-value">' + item.quantity + '</span>' +
-          '<button type="button" data-id="' + item.id + '" data-delta="1">+</button>' +
+          '<button type="button" data-id="' + item.id + '" data-type="' + item.type + '" data-delta="1">+</button>' +
         '</div>' +
         '<div class="cart-item-total">' + formatCurrency(lineTotal) + '</div>';
 
       li.querySelectorAll(".cart-item-qty button").forEach(function(btn) {
         btn.addEventListener("click", function() {
-          updateCartQty(parseInt(btn.dataset.id, 10), parseInt(btn.dataset.delta, 10));
+          updateCartQty(parseInt(btn.dataset.id, 10), btn.dataset.type, parseInt(btn.dataset.delta, 10));
         });
       });
 
@@ -1253,31 +1286,40 @@
     renderCart();
   }
 
+  // ---- Cart Sync ----
+
+  function buildCartPayload() {
+    // Build the items array matching what CartOperationsView._handle_update expects:
+    // each item needs either ticket_type_id or addon_id, plus quantity.
+    return cart.map(function(c) {
+      var item = {quantity: c.quantity};
+      if (c.type === "ticket") {
+        item.ticket_type_id = c.id;
+      } else {
+        item.addon_id = c.id;
+      }
+      return item;
+    });
+  }
+
   // ---- Voucher ----
+  // NOTE: CartOperationsView does not currently support server-side voucher
+  // validation. Voucher application is handled as a client-side placeholder
+  // that stores the code for later submission during checkout. If the backend
+  // gains voucher support, update this function accordingly.
 
   async function applyVoucher() {
     var code = voucherInput.value.trim();
     if (!code) return;
 
-    try {
-      var cartPayload = cart.map(function(c) {
-        return {id: c.id, quantity: c.quantity, type: c.type};
-      });
-      var data = await apiFetch(API.cart, {
-        method: "POST",
-        body: JSON.stringify({action: "update", items: cartPayload, voucher_code: code})
-      });
-
-      if (data.discount && data.discount > 0) {
-        appliedVoucher = {code: code, discount: data.discount};
-        voucherAppliedText.textContent = "Voucher " + code + " applied";
-        voucherApplied.classList.add("visible");
-        voucherRow.style.display = "none";
-        renderCart();
-      }
-    } catch (err) {
-      alert("Voucher error: " + err.message);
-    }
+    // For now, store the voucher code locally. The actual discount would need
+    // to be validated server-side when the backend supports it. We show the
+    // voucher as "pending" so the operator knows it was entered.
+    appliedVoucher = {code: code, discount: 0};
+    voucherAppliedText.textContent = "Voucher " + code + " (pending server validation)";
+    voucherApplied.classList.add("visible");
+    voucherRow.style.display = "none";
+    renderCart();
   }
 
   function removeVoucher() {
@@ -1314,21 +1356,28 @@
     btnCancelPayment.style.display = "";
 
     try {
-      // Calculate total in cents
-      var subtotal = cart.reduce(function(sum, item) { return sum + item.price * item.quantity; }, 0);
+      // Calculate total as a float (prices are Decimal strings from the API)
+      var subtotal = cart.reduce(function(sum, item) {
+        return sum + parseFloat(item.price) * item.quantity;
+      }, 0);
       var discount = appliedVoucher ? (appliedVoucher.discount || 0) : 0;
-      var amount = Math.max(0, subtotal - discount);
+      var total = Math.max(0, subtotal - discount);
 
       showPaymentStatus("Creating payment...", "processing");
 
-      // Create payment intent on the server
+      // Build payload for CreatePaymentIntentView.
+      // The view accepts either order_id (to pay an existing order) or amount
+      // (as a Decimal string for walk-up sales). reader_id is always required.
+      var intentPayload = {reader_id: connectedReader.id};
+      if (currentOrderId) {
+        intentPayload.order_id = currentOrderId;
+      } else {
+        intentPayload.amount = total.toFixed(2);
+      }
+
       var intentData = await apiFetch(API.createIntent, {
         method: "POST",
-        body: JSON.stringify({
-          amount: amount,
-          order_id: currentOrderId,
-          reader_id: connectedReader.id
-        })
+        body: JSON.stringify(intentPayload)
       });
 
       currentPaymentIntentId = intentData.payment_intent_id;
@@ -1433,7 +1482,9 @@
   }
 
   function showReceipt() {
-    var subtotal = cart.reduce(function(sum, item) { return sum + item.price * item.quantity; }, 0);
+    var subtotal = cart.reduce(function(sum, item) {
+      return sum + parseFloat(item.price) * item.quantity;
+    }, 0);
     var discount = appliedVoucher ? (appliedVoucher.discount || 0) : 0;
     var total = Math.max(0, subtotal - discount);
 
