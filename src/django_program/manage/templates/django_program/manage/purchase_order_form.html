@@ -1,0 +1,242 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}New Purchase Order{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="{% url 'manage:dashboard' conference.slug %}">Dashboard</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:purchase-order-list' conference.slug %}">Purchase Orders</a>
+  <span class="breadcrumb-separator"></span>
+  <span>New</span>
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>New Purchase Order</h1>
+<p>Create an invoice-style purchase order for corporate or organizational billing</p>
+{% endblock %}
+
+{% block content %}
+<style>
+  .po-form { max-width: 800px; }
+  .po-form .form-row {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fieldset {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+  .fieldset:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  .fieldset-legend {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+  }
+  .line-items-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .line-items-table th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .line-items-table td {
+    padding: 0.4rem 0.5rem;
+    vertical-align: middle;
+  }
+  .line-items-table input {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    width: 100%;
+  }
+  .line-items-table input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-light);
+  }
+  .line-items-table .col-desc { width: 50%; }
+  .line-items-table .col-qty { width: 12%; }
+  .line-items-table .col-price { width: 18%; }
+  .line-items-table .col-total { width: 14%; text-align: right; }
+  .line-items-table .col-action { width: 6%; text-align: center; }
+  .remove-line-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    line-height: 1;
+    transition: color 0.15s ease;
+  }
+  .remove-line-btn:hover { color: var(--color-danger); }
+  .add-line-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px dashed var(--color-border);
+    background: none;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-top: 0.5rem;
+  }
+  .add-line-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-primary-light);
+  }
+  @media (max-width: 720px) {
+    .po-form .form-row { grid-template-columns: 1fr; }
+    .line-items-table .col-total,
+    .line-items-table .col-action { display: none; }
+  }
+</style>
+
+<div class="po-form">
+  <form method="post" id="po-form">
+    {% csrf_token %}
+
+    <div class="fieldset">
+      <div class="fieldset-legend">Organization Details</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="id_organization_name">Organization Name *</label>
+          <input type="text" id="id_organization_name" name="organization_name" required value="{{ form_data.organization_name|default:'' }}">
+        </div>
+        <div class="form-group">
+          <label for="id_contact_email">Contact Email *</label>
+          <input type="email" id="id_contact_email" name="contact_email" required value="{{ form_data.contact_email|default:'' }}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="id_contact_name">Contact Name</label>
+          <input type="text" id="id_contact_name" name="contact_name" value="{{ form_data.contact_name|default:'' }}">
+        </div>
+        <div class="form-group">
+          <label for="id_billing_address">Billing Address</label>
+          <textarea id="id_billing_address" name="billing_address" rows="3">{{ form_data.billing_address|default:'' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="fieldset">
+      <div class="fieldset-legend">Line Items</div>
+      <table class="line-items-table" id="line-items-table">
+        <thead>
+          <tr>
+            <th class="col-desc">Description</th>
+            <th class="col-qty">Qty</th>
+            <th class="col-price">Unit Price</th>
+            <th class="col-total">Total</th>
+            <th class="col-action"></th>
+          </tr>
+        </thead>
+        <tbody id="line-items-body">
+          <tr class="line-item-row">
+            <td class="col-desc"><input type="text" name="line_description" placeholder="e.g. Corporate tickets x10" required></td>
+            <td class="col-qty"><input type="number" name="line_quantity" value="1" min="1" required></td>
+            <td class="col-price"><input type="number" name="line_unit_price" step="0.01" min="0" value="0.00" required></td>
+            <td class="col-total" style="text-align: right; font-weight: 600; color: var(--color-text-secondary); font-size: 0.88rem;">$0.00</td>
+            <td class="col-action">
+              <button type="button" class="remove-line-btn" title="Remove line item" onclick="removeLine(this)">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <button type="button" class="add-line-btn" onclick="addLine()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 2v10M2 7h10"/></svg>
+        Add Line Item
+      </button>
+    </div>
+
+    <div class="fieldset">
+      <div class="fieldset-legend">Notes <span style="font-weight: 400; text-transform: none; letter-spacing: normal; font-size: 0.75rem;">(optional)</span></div>
+      <div class="form-group">
+        <label for="id_notes">Internal Notes</label>
+        <textarea id="id_notes" name="notes" rows="3" placeholder="Internal notes (not shown on invoice)">{{ form_data.notes|default:'' }}</textarea>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Create Purchase Order</button>
+      <a href="{% url 'manage:purchase-order-list' conference.slug %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  function recalcRow(row) {
+    var qty = parseFloat(row.querySelector('[name="line_quantity"]').value) || 0;
+    var price = parseFloat(row.querySelector('[name="line_unit_price"]').value) || 0;
+    var totalCell = row.querySelector('.col-total');
+    if (totalCell) {
+      totalCell.textContent = '$' + (qty * price).toFixed(2);
+    }
+  }
+
+  function recalcAll() {
+    var rows = document.querySelectorAll('.line-item-row');
+    rows.forEach(recalcRow);
+  }
+
+  document.getElementById('line-items-body').addEventListener('input', function(e) {
+    if (e.target.name === 'line_quantity' || e.target.name === 'line_unit_price') {
+      recalcRow(e.target.closest('.line-item-row'));
+    }
+  });
+
+  window.addLine = function() {
+    var tbody = document.getElementById('line-items-body');
+    var row = document.createElement('tr');
+    row.className = 'line-item-row';
+    row.innerHTML =
+      '<td class="col-desc"><input type="text" name="line_description" placeholder="Description" required></td>' +
+      '<td class="col-qty"><input type="number" name="line_quantity" value="1" min="1" required></td>' +
+      '<td class="col-price"><input type="number" name="line_unit_price" step="0.01" min="0" value="0.00" required></td>' +
+      '<td class="col-total" style="text-align: right; font-weight: 600; color: var(--color-text-secondary); font-size: 0.88rem;">$0.00</td>' +
+      '<td class="col-action"><button type="button" class="remove-line-btn" title="Remove line item" onclick="removeLine(this)"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></td>';
+    tbody.appendChild(row);
+    row.querySelector('[name="line_description"]').focus();
+  };
+
+  window.removeLine = function(btn) {
+    var tbody = document.getElementById('line-items-body');
+    if (tbody.querySelectorAll('.line-item-row').length <= 1) {
+      return;  // Keep at least one row
+    }
+    btn.closest('.line-item-row').remove();
+  };
+
+  recalcAll();
+})();
+</script>
+{% endblock %}

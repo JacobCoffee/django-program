@@ -203,6 +203,39 @@
       color: var(--color-text-muted);
       padding: 0.5rem 0.75rem 0.2rem;
       opacity: 0.7;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      border-radius: var(--radius-sm);
+      transition: opacity 0.15s ease;
+    }
+    .sidebar-sublabel:hover {
+      opacity: 1;
+    }
+    .sidebar-sublabel .sidebar-collapse-icon {
+      width: 10px;
+      height: 10px;
+      flex-shrink: 0;
+      opacity: 0.5;
+      transition: transform 0.2s ease, opacity 0.15s ease;
+    }
+    .sidebar-sublabel:hover .sidebar-collapse-icon {
+      opacity: 0.8;
+    }
+    .sidebar-subgroup {
+      max-height: 500px;
+      opacity: 1;
+      overflow: hidden;
+      transition: max-height 0.25s ease, opacity 0.2s ease;
+    }
+    .sidebar-subgroup.collapsed {
+      max-height: 0;
+      opacity: 0;
+    }
+    .sidebar-sublabel.collapsed-label .sidebar-collapse-icon {
+      transform: rotate(-90deg);
     }
 
     .sidebar-utility-separator {
@@ -1035,7 +1068,7 @@
       {# ── Conference ── #}
       {% if user_perms.conference or user_perms.settings %}
       <div class="sidebar-section" data-section="conference">
-        <div class="sidebar-section-title">{{ conference.name }} <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">{{ conference.name }} <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:dashboard' conference.slug %}" class="{% if active_nav == 'dashboard' %}active{% endif %}">
@@ -1056,7 +1089,7 @@
       {# ── Program ── #}
       {% if user_perms.program or user_perms.activities or user_perms.travel_grants %}
       <div class="sidebar-section" data-section="program">
-        <div class="sidebar-section-title">Program <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Program <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           {% if user_perms.program %}
           <li>
@@ -1127,10 +1160,13 @@
       {# ── Registration ── #}
       {% if user_perms.registration_people or user_perms.registration_commerce or user_perms.badges or user_perms.bulk_purchases %}
       <div class="sidebar-section" data-section="registration">
-        <div class="sidebar-section-title">Registration <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Registration <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        {% if user_perms.registration_people %}
         <ul class="sidebar-nav">
-          {% if user_perms.registration_people %}
-          <li class="sidebar-sublabel">People</li>
+          <li class="sidebar-sublabel" data-subsection="reg-people">People <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></li>
+        </ul>
+        <div class="sidebar-subgroup" data-subsection-target="reg-people">
+        <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:attendee-list' conference.slug %}" class="{% if active_nav == 'attendees' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="4.5" r="2.5"/><path d="M1 13c0-2.8 2.2-5 5-5s5 2.2 5 5"/><circle cx="12" cy="5.5" r="1.5"/><path d="M15 13c0-1.7-1.3-3-3-3-.8 0-1.5.3-2 .8"/></svg></span> Attendees
@@ -1153,9 +1189,15 @@
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="7" cy="7" r="1.5"/><path d="M9.5 10V6.5h1"/><path d="M12 10V8.5"/></svg></span> Badges
             </a>
           </li>
-          {% endif %}
-          {% if user_perms.registration_commerce %}
-          <li class="sidebar-sublabel">Commerce</li>
+        </ul>
+        </div>
+        {% endif %}
+        {% if user_perms.registration_commerce %}
+        <ul class="sidebar-nav">
+          <li class="sidebar-sublabel" data-subsection="reg-commerce">Commerce <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></li>
+        </ul>
+        <div class="sidebar-subgroup" data-subsection-target="reg-commerce">
+        <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:ticket-type-list' conference.slug %}" class="{% if active_nav == 'ticket-types' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4.5h12V7a1.5 1.5 0 010 3v2.5H2V10a1.5 1.5 0 010-3V4.5z"/></svg></span> Ticket Types
@@ -1185,13 +1227,14 @@
           </li>
           {% endif %}
         </ul>
+        </div>
       </div>
       {% endif %}
 
       {# ── Sponsors ── #}
       {% if user_perms.sponsors %}
       <div class="sidebar-section" data-section="sponsors">
-        <div class="sidebar-section-title">Sponsors <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Sponsors <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <a href="{% url 'manage:sponsor-level-list' conference.slug %}" class="{% if active_nav == 'sponsor-levels' %}active{% endif %}">
@@ -1210,7 +1253,7 @@
       {# ── On-site ── #}
       {% if user_perms.onsite %}
       <div class="sidebar-section" data-section="onsite">
-        <div class="sidebar-section-title">On-site <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">On-site <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           {% if user_perms.checkin %}
           <li>
@@ -1233,12 +1276,17 @@
       {# ── Finance & Insights ── #}
       {% if user_perms.finance or user_perms.reports %}
       <div class="sidebar-section" data-section="finance">
-        <div class="sidebar-section-title">Finance & Insights <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Finance & Insights <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           {% if user_perms.finance %}
           <li>
             <a href="{% url 'manage:financial-dashboard' conference.slug %}" class="{% if active_nav == 'financial' %}active{% endif %}">
               <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14h12M4 10h2v4H4zM7 7h2v7H7zM10 4h2v10h-2z"/></svg></span> Financial
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'manage:purchase-order-list' conference.slug %}" class="{% if active_nav == 'purchase-orders' %}active{% endif %}">
+              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 1.5h10v13H3z"/><path d="M5.5 4.5h5M5.5 7h5M5.5 9.5h3"/><path d="M7 12.5h2"/></svg></span> Purchase Orders
             </a>
           </li>
           <li>
@@ -1267,7 +1315,7 @@
       {% if user_perms.overrides %}
       <hr class="sidebar-utility-separator">
       <div class="sidebar-section" data-section="sync-overrides">
-        <div class="sidebar-section-title">Sync & Overrides <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
+        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Sync & Overrides <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
         <ul class="sidebar-nav">
           <li>
             <div class="sidebar-nav-expandable">
@@ -1323,19 +1371,50 @@
     var stored = {};
     try { stored = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) {}
 
+    // Section-level collapse
     document.querySelectorAll('.sidebar-section[data-section]').forEach(function(section) {
       var id = section.dataset.section;
       var title = section.querySelector('.sidebar-section-title');
 
-      // Restore saved state (but never collapse a section that has the active nav item)
       var hasActive = section.querySelector('.sidebar-nav li a.active, .sidebar-subnav li a.active');
       if (stored[id] && !hasActive) {
         section.classList.add('collapsed');
+        title.setAttribute('aria-expanded', 'false');
       }
 
-      title.addEventListener('click', function() {
+      function toggleSection() {
         section.classList.toggle('collapsed');
-        stored[id] = section.classList.contains('collapsed');
+        var isCollapsed = section.classList.contains('collapsed');
+        stored[id] = isCollapsed;
+        title.setAttribute('aria-expanded', String(!isCollapsed));
+        try { localStorage.setItem(KEY, JSON.stringify(stored)); } catch(e) {}
+      }
+
+      title.addEventListener('click', toggleSection);
+      title.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleSection();
+        }
+      });
+    });
+
+    // Sub-section collapse (People, Commerce, etc.)
+    document.querySelectorAll('.sidebar-sublabel[data-subsection]').forEach(function(label) {
+      var id = label.dataset.subsection;
+      var target = document.querySelector('.sidebar-subgroup[data-subsection-target="' + id + '"]');
+      if (!target) return;
+
+      var hasActive = target.querySelector('a.active');
+      if (stored[id] && !hasActive) {
+        target.classList.add('collapsed');
+        label.classList.add('collapsed-label');
+      }
+
+      label.addEventListener('click', function() {
+        target.classList.toggle('collapsed');
+        label.classList.toggle('collapsed-label');
+        stored[id] = target.classList.contains('collapsed');
         try { localStorage.setItem(KEY, JSON.stringify(stored)); } catch(e) {}
       });
     });

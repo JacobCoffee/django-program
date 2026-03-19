@@ -1,6 +1,10 @@
 """Django admin configuration for the registration app."""
 
+from decimal import Decimal
+
 from django.contrib import admin
+from django.db.models import QuerySet, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest  # noqa: TC002
 
 from django_program.registration.badge import Badge, BadgeTemplate
@@ -27,6 +31,12 @@ from django_program.registration.models import (
     StripeEvent,
     TicketType,
     Voucher,
+)
+from django_program.registration.purchase_order import (
+    PurchaseOrder,
+    PurchaseOrderCreditNote,
+    PurchaseOrderLineItem,
+    PurchaseOrderPayment,
 )
 from django_program.registration.terminal import TerminalPayment
 
@@ -482,3 +492,100 @@ class TerminalPaymentAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request: HttpRequest, obj: TerminalPayment | None = None) -> bool:  # noqa: ARG002, D102
         return False
+
+
+# -- Purchase Order admin -----------------------------------------------------
+
+
+class PurchaseOrderLineItemInline(admin.TabularInline):
+    """Inline display of purchase order line items.
+
+    Line items are pricing snapshots and ``line_total`` is read-only to
+    prevent manual edits that would desynchronize the PO totals.
+    """
+
+    model = PurchaseOrderLineItem
+    extra = 0
+    readonly_fields = ("line_total",)
+
+
+class PurchaseOrderPaymentInline(admin.TabularInline):
+    """Read-only inline display of payments recorded against a purchase order.
+
+    Payments should be recorded through the management dashboard to ensure
+    proper status transitions. The inline is read-only to prevent bypassing
+    the service layer invariants.
+    """
+
+    model = PurchaseOrderPayment
+    extra = 0
+    readonly_fields = ("amount", "method", "reference", "payment_date", "entered_by", "note", "created_at")
+
+    def has_add_permission(self, request: HttpRequest, obj: PurchaseOrder | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: PurchaseOrder | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+
+class PurchaseOrderCreditNoteInline(admin.TabularInline):
+    """Read-only inline display of credit notes issued against a purchase order.
+
+    Credit notes should be issued through the management dashboard to ensure
+    proper status recalculation. The inline is read-only for audit integrity.
+    """
+
+    model = PurchaseOrderCreditNote
+    extra = 0
+    readonly_fields = ("amount", "reason", "issued_by", "created_at")
+
+    def has_add_permission(self, request: HttpRequest, obj: PurchaseOrder | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: PurchaseOrder | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+
+@admin.register(PurchaseOrder)
+class PurchaseOrderAdmin(admin.ModelAdmin):
+    """Admin interface for managing corporate purchase orders.
+
+    Displays the PO reference, organization, status, and financial summary.
+    Money fields are read-only to prevent manual edits; changes should flow
+    through the payment recording and credit note workflows.
+    """
+
+    list_display = (
+        "reference",
+        "organization_name",
+        "conference",
+        "status",
+        "total",
+        "balance_due_display",
+        "created_at",
+    )
+    list_filter = ("conference", "status")
+    search_fields = ("reference", "organization_name", "contact_email")
+    readonly_fields = ("reference", "subtotal", "total", "balance_due_display", "total_paid_display")
+    inlines = (PurchaseOrderLineItemInline, PurchaseOrderPaymentInline, PurchaseOrderCreditNoteInline)
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[PurchaseOrder]:
+        """Annotate payment and credit totals to avoid N+1 aggregate queries."""
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                _annotated_total_paid=Coalesce(Sum("payments__amount"), Value(Decimal("0.00"))),
+                _annotated_total_credited=Coalesce(Sum("credit_notes__amount"), Value(Decimal("0.00"))),
+            )
+        )
+
+    @admin.display(description="Balance Due")
+    def balance_due_display(self, obj: PurchaseOrder) -> str:
+        """Render the computed balance due for the list and detail views."""
+        return str(obj.balance_due)
+
+    @admin.display(description="Total Paid")
+    def total_paid_display(self, obj: PurchaseOrder) -> str:
+        """Render the computed total paid for the detail view."""
+        return str(obj.total_paid)

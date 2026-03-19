@@ -33,7 +33,7 @@ from django.utils.timezone import localdate
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
-from django_program.conference.models import Conference, Expense, ExpenseCategory, Section
+from django_program.conference.models import Conference, Expense, ExpenseCategory, KPITargets, Section
 from django_program.manage.forms import (
     ActivityForm,
     AddOnForm,
@@ -47,6 +47,7 @@ from django_program.manage.forms import (
     GroupMemberConditionForm,
     ImportFromPretalxForm,
     IncludedProductConditionForm,
+    KPITargetsForm,
     ManualPaymentForm,
     ReceiptFlagForm,
     ReviewerMessageForm,
@@ -859,14 +860,26 @@ class ConferenceEditView(ManagePermissionMixin, UpdateView):
     form_class = ConferenceForm
     context_object_name = "conference"
 
+    def _get_kpi_instance(self) -> KPITargets | None:
+        """Return the existing KPITargets for this conference, or None."""
+        try:
+            return self.conference.kpi_targets  # type: ignore[return-value]
+        except KPITargets.DoesNotExist:
+            return None
+
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add ``active_nav`` to the template context.
+        """Add ``active_nav`` and KPI targets form to the template context.
 
         Returns:
             Context dict with sidebar active state set.
         """
         context = super().get_context_data(**kwargs)
         context["active_nav"] = "conference-edit"
+        if "kpi_form" not in context:
+            context["kpi_form"] = KPITargetsForm(
+                instance=self._get_kpi_instance(),
+                prefix="kpi",
+            )
         return context
 
     def get_object(self, queryset: QuerySet[Conference] | None = None) -> Conference:  # noqa: ARG002
@@ -884,6 +897,27 @@ class ConferenceEditView(ManagePermissionMixin, UpdateView):
             URL of the conference dashboard.
         """
         return reverse("manage:dashboard", kwargs={"conference_slug": self.conference.slug})
+
+    def post(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponse:  # noqa: ARG002
+        """Handle both the conference form and the KPI targets inline form."""
+        self.object = self.get_object()
+        form = self.get_form()
+        kpi_form = KPITargetsForm(
+            request.POST,
+            instance=self._get_kpi_instance(),
+            prefix="kpi",
+        )
+        if form.is_valid() and kpi_form.is_valid():
+            return self._forms_valid(form, kpi_form)
+        return self.render_to_response(self.get_context_data(form=form, kpi_form=kpi_form))
+
+    def _forms_valid(self, form: ConferenceForm, kpi_form: KPITargetsForm) -> HttpResponse:
+        """Save both the conference and KPI targets forms."""
+        response = super().form_valid(form)
+        kpi = kpi_form.save(commit=False)
+        kpi.conference = self.conference
+        kpi.save()
+        return response
 
     def form_valid(self, form: ConferenceForm) -> HttpResponse:
         """Save the form and add a success message.
