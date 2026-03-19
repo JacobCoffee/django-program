@@ -20,6 +20,7 @@ from django_program.registration.services.purchase_orders import (
     generate_po_reference,
     issue_credit_note,
     record_payment,
+    send_purchase_order,
     update_po_status,
 )
 
@@ -583,3 +584,63 @@ class TestPurchaseOrderAdmin:
         assert "subtotal" in PurchaseOrderAdmin.readonly_fields
         assert "total" in PurchaseOrderAdmin.readonly_fields
         assert "reference" in PurchaseOrderAdmin.readonly_fields
+
+
+# =============================================================================
+# Send PO tests
+# =============================================================================
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+class TestSendPurchaseOrder:
+    def test_send_draft_po(self, purchase_order: PurchaseOrder) -> None:
+        send_purchase_order(purchase_order)
+        purchase_order.refresh_from_db()
+        assert purchase_order.status == PurchaseOrder.Status.SENT
+
+    def test_send_non_draft_raises(self, purchase_order: PurchaseOrder) -> None:
+        purchase_order.status = PurchaseOrder.Status.PAID
+        purchase_order.save(update_fields=["status"])
+        with pytest.raises(ValueError, match="Only draft POs"):
+            send_purchase_order(purchase_order)
+
+
+# =============================================================================
+# Lifecycle guard tests (Codex review findings)
+# =============================================================================
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+class TestLifecycleGuards:
+    def test_record_payment_on_cancelled_raises(self, purchase_order: PurchaseOrder) -> None:
+        cancel_purchase_order(purchase_order)
+        with pytest.raises(ValueError, match="cancelled"):
+            record_payment(
+                purchase_order,
+                amount=Decimal("100.00"),
+                method=PurchaseOrderPayment.Method.WIRE,
+                payment_date=date(2027, 5, 1),
+            )
+
+    def test_issue_credit_on_cancelled_raises(self, purchase_order: PurchaseOrder) -> None:
+        cancel_purchase_order(purchase_order)
+        with pytest.raises(ValueError, match="cancelled"):
+            issue_credit_note(
+                purchase_order,
+                amount=Decimal("100.00"),
+                reason="Test credit",
+            )
+
+    def test_credit_only_settles_po(self, purchase_order: PurchaseOrder) -> None:
+        """A PO settled entirely by credit notes should reach PAID status."""
+        purchase_order.status = PurchaseOrder.Status.SENT
+        purchase_order.save(update_fields=["status"])
+        issue_credit_note(
+            purchase_order,
+            amount=purchase_order.total,
+            reason="Full credit applied",
+        )
+        purchase_order.refresh_from_db()
+        assert purchase_order.status == PurchaseOrder.Status.PAID

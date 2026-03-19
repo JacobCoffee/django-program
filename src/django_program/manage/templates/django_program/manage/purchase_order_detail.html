@@ -243,7 +243,10 @@
 {# ── Actions ── #}
 <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 2rem;">
   {% if purchase_order.status == "draft" %}
-  <span style="font-size: 0.82rem; color: var(--color-text-muted);">This PO is in draft. Mark it as sent when the invoice has been delivered to the organization.</span>
+  <form method="post" action="{% url 'manage:purchase-order-send' conference.slug purchase_order.pk %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Mark this PO as sent?');">Mark as Sent</button>
+  </form>
   {% endif %}
 
   {% if purchase_order.status != "cancelled" and purchase_order.status != "paid" %}

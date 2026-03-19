@@ -25,6 +25,7 @@ from django_program.registration.services.purchase_orders import (
     create_purchase_order,
     issue_credit_note,
     record_payment,
+    send_purchase_order,
 )
 
 if TYPE_CHECKING:
@@ -221,6 +222,10 @@ class PurchaseOrderRecordPaymentView(ManagePermissionMixin, View):
             kwargs={"conference_slug": self.conference.slug, "pk": po.pk},
         )
 
+        if po.status == PurchaseOrder.Status.CANCELLED:
+            messages.error(request, "Cannot record payment on a cancelled purchase order.")
+            return redirect(detail_url)
+
         try:
             amount = Decimal(request.POST.get("amount", "0"))
         except InvalidOperation:
@@ -275,6 +280,10 @@ class PurchaseOrderIssueCreditView(ManagePermissionMixin, View):
             kwargs={"conference_slug": self.conference.slug, "pk": po.pk},
         )
 
+        if po.status == PurchaseOrder.Status.CANCELLED:
+            messages.error(request, "Cannot issue credit on a cancelled purchase order.")
+            return redirect(detail_url)
+
         try:
             amount = Decimal(request.POST.get("amount", "0"))
         except InvalidOperation:
@@ -324,4 +333,29 @@ class PurchaseOrderCancelView(ManagePermissionMixin, View):
             return redirect(detail_url)
 
         messages.success(request, f"Purchase order {po.reference} has been cancelled.")
+        return redirect(detail_url)
+
+
+class PurchaseOrderSendView(ManagePermissionMixin, View):
+    """Mark a draft purchase order as sent (POST-only)."""
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Transition the PO from draft to sent."""
+        po = get_object_or_404(PurchaseOrder, pk=self.kwargs["pk"], conference=self.conference)
+        detail_url = reverse(
+            "manage:purchase-order-detail",
+            kwargs={"conference_slug": self.conference.slug, "pk": po.pk},
+        )
+
+        try:
+            send_purchase_order(po)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(detail_url)
+        except Exception:
+            logger.exception("Failed to send PO %s", po.reference)
+            messages.error(request, "Failed to send purchase order. Please try again.")
+            return redirect(detail_url)
+
+        messages.success(request, f"Purchase order {po.reference} marked as sent.")
         return redirect(detail_url)

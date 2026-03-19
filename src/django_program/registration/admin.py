@@ -506,17 +506,40 @@ class PurchaseOrderLineItemInline(admin.TabularInline):
 
 
 class PurchaseOrderPaymentInline(admin.TabularInline):
-    """Inline display of payments recorded against a purchase order."""
+    """Read-only inline display of payments recorded against a purchase order.
+
+    Payments should be recorded through the management dashboard to ensure
+    proper status transitions. The inline is read-only to prevent bypassing
+    the service layer invariants.
+    """
 
     model = PurchaseOrderPayment
     extra = 0
+    readonly_fields = ("amount", "method", "reference", "payment_date", "entered_by", "note", "created_at")
+
+    def has_add_permission(self, request: HttpRequest, obj: PurchaseOrder | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: PurchaseOrder | None = None) -> bool:  # noqa: ARG002, D102
+        return False
 
 
 class PurchaseOrderCreditNoteInline(admin.TabularInline):
-    """Inline display of credit notes issued against a purchase order."""
+    """Read-only inline display of credit notes issued against a purchase order.
+
+    Credit notes should be issued through the management dashboard to ensure
+    proper status recalculation. The inline is read-only for audit integrity.
+    """
 
     model = PurchaseOrderCreditNote
     extra = 0
+    readonly_fields = ("amount", "reason", "issued_by", "created_at")
+
+    def has_add_permission(self, request: HttpRequest, obj: PurchaseOrder | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: PurchaseOrder | None = None) -> bool:  # noqa: ARG002, D102
+        return False
 
 
 @admin.register(PurchaseOrder)

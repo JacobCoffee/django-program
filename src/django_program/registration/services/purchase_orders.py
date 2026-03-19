@@ -158,9 +158,18 @@ def record_payment(  # noqa: PLR0913
 
     Returns:
         The newly created PurchaseOrderPayment.
+
+    Raises:
+        ValueError: If the PO is cancelled.
     """
+    # Lock the PO row to prevent concurrent status races.
+    po = PurchaseOrder.objects.select_for_update().get(pk=purchase_order.pk)
+    if po.status == PurchaseOrder.Status.CANCELLED:
+        msg = f"Cannot record payment on cancelled PO {po.reference}"
+        raise ValueError(msg)
+
     payment = PurchaseOrderPayment.objects.create(
-        purchase_order=purchase_order,
+        purchase_order=po,
         amount=amount,
         method=method,
         reference=reference,
@@ -169,7 +178,7 @@ def record_payment(  # noqa: PLR0913
         note=note,
     )
 
-    update_po_status(purchase_order)
+    update_po_status(po)
 
     logger.info(
         "Recorded %s payment of %s for PO %s",
@@ -198,15 +207,24 @@ def issue_credit_note(
 
     Returns:
         The newly created PurchaseOrderCreditNote.
+
+    Raises:
+        ValueError: If the PO is cancelled.
     """
+    # Lock the PO row to prevent concurrent status races.
+    po = PurchaseOrder.objects.select_for_update().get(pk=purchase_order.pk)
+    if po.status == PurchaseOrder.Status.CANCELLED:
+        msg = f"Cannot issue credit note on cancelled PO {po.reference}"
+        raise ValueError(msg)
+
     credit_note = PurchaseOrderCreditNote.objects.create(
-        purchase_order=purchase_order,
+        purchase_order=po,
         amount=amount,
         reason=reason,
         issued_by=issued_by,
     )
 
-    update_po_status(purchase_order)
+    update_po_status(po)
 
     logger.info(
         "Issued credit note of %s for PO %s: %s",
@@ -221,23 +239,29 @@ def update_po_status(purchase_order: PurchaseOrder) -> None:
     """Recompute and save the PO status based on payments and credits.
 
     Status transitions:
-    - ``draft`` remains if no payments and status is draft
-    - ``paid`` when balance_due is exactly zero
+    - ``draft`` remains if no payments/credits and status is draft
+    - ``paid`` when balance_due is exactly zero and financial activity exists
     - ``overpaid`` when balance_due is negative
     - ``partially_paid`` when some payments exist but balance remains
     - ``sent`` when no payments exist and status is not draft
 
+    This function expects the caller to hold a row-level lock on the PO
+    (via ``select_for_update``) when called inside a transaction.
+
     Args:
         purchase_order: The PO whose status should be recomputed.
     """
+    purchase_order.refresh_from_db()
+
     if purchase_order.status == PurchaseOrder.Status.CANCELLED:
         return
 
-    purchase_order.refresh_from_db()
     balance = purchase_order.balance_due
     total_paid = purchase_order.total_paid
+    total_credited = purchase_order.total_credited
+    has_financial_activity = total_paid > Decimal("0.00") or total_credited > Decimal("0.00")
 
-    if balance == Decimal("0.00") and total_paid > Decimal("0.00"):
+    if balance == Decimal("0.00") and has_financial_activity:
         new_status = PurchaseOrder.Status.PAID
     elif balance < Decimal("0.00"):
         new_status = PurchaseOrder.Status.OVERPAID
@@ -251,6 +275,23 @@ def update_po_status(purchase_order: PurchaseOrder) -> None:
     if new_status != purchase_order.status:
         purchase_order.status = new_status
         purchase_order.save(update_fields=["status", "updated_at"])
+
+
+def send_purchase_order(purchase_order: PurchaseOrder) -> None:
+    """Transition a draft purchase order to sent status.
+
+    Args:
+        purchase_order: The PO to mark as sent.
+
+    Raises:
+        ValueError: If the PO is not in draft status.
+    """
+    if purchase_order.status != PurchaseOrder.Status.DRAFT:
+        msg = f"Only draft POs can be sent (current status: {purchase_order.status})"
+        raise ValueError(msg)
+    purchase_order.status = PurchaseOrder.Status.SENT
+    purchase_order.save(update_fields=["status", "updated_at"])
+    logger.info("Marked purchase order %s as sent", purchase_order.reference)
 
 
 def cancel_purchase_order(purchase_order: PurchaseOrder) -> None:
