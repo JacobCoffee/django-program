@@ -78,6 +78,7 @@ Repository = "https://github.com/JacobCoffee/django-program"
 
 [tool.codespell]
 skip = "uv.lock"
+ignore-words-list = "checkin"
 
 [tool.coverage.report]
 exclude_lines = [
