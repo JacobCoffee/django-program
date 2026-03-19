@@ -7,7 +7,6 @@ is responsible for including the CSRF token in POST requests.
 """
 
 import json
-import logging
 
 from django.db.models import Count, Prefetch
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -19,8 +18,6 @@ from django_program.conference.models import Conference
 from django_program.registration.attendee import Attendee
 from django_program.registration.models import Order, OrderLineItem
 from django_program.registration.services.checkin import CheckInService, RedemptionService
-
-logger = logging.getLogger(__name__)
 
 
 class StaffRequiredMixin:
@@ -100,11 +97,17 @@ def _get_ticket_type_name(order: Order | None) -> str:
 
 
 def _parse_json_body(request: HttpRequest) -> dict[str, object] | None:
-    """Parse JSON from request body, returning None on failure."""
+    """Parse JSON from request body, returning None on failure.
+
+    Returns None if the body is not valid JSON or is not an object (dict).
+    """
     try:
-        return json.loads(request.body)  # type: ignore[no-any-return]
+        payload = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
 
 
 class ScanView(StaffRequiredMixin, View):

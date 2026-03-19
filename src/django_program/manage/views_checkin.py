@@ -62,7 +62,7 @@ class CheckInDashboardView(ManagePermissionMixin, TemplateView):
         context["active_nav"] = "checkin"
 
         total_attendees = Attendee.objects.filter(conference=conference).count()
-        checked_in_count = Attendee.objects.filter(conference=conference, checkins__isnull=False).distinct().count()
+        checked_in_count = Attendee.objects.filter(conference=conference, checked_in_at__isnull=False).count()
         check_in_rate = round((checked_in_count / total_attendees * 100), 1) if total_attendees > 0 else 0
 
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
