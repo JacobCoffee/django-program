@@ -242,11 +242,39 @@
 
 {# ── Actions ── #}
 <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 2rem;">
+  <a href="{% url 'manage:purchase-order-invoice' conference.slug purchase_order.pk %}" class="btn btn-primary btn-sm">Download Invoice PDF</a>
+
   {% if purchase_order.status == "draft" %}
   <form method="post" action="{% url 'manage:purchase-order-send' conference.slug purchase_order.pk %}" style="display: inline;">
     {% csrf_token %}
     <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Mark this PO as sent?');">Mark as Sent</button>
   </form>
+  {% endif %}
+
+  {% if purchase_order.status == "draft" or purchase_order.status == "sent" %}
+    {% if conference.stripe_secret_key and not purchase_order.stripe_invoice_id %}
+    <form method="post" action="{% url 'manage:purchase-order-stripe-invoice' conference.slug purchase_order.pk %}" style="display: inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Create and send a Stripe invoice for this PO?');">Send Stripe Invoice</button>
+    </form>
+    {% endif %}
+  {% endif %}
+
+  {% if purchase_order.stripe_invoice_url %}
+  <a href="{{ purchase_order.stripe_invoice_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-secondary">View Stripe Invoice</a>
+  {% endif %}
+
+  {% if purchase_order.status == "draft" or purchase_order.status == "sent" %}
+    {% if conference.qbo_realm_id and not purchase_order.qbo_invoice_id %}
+    <form method="post" action="{% url 'manage:purchase-order-qbo-invoice' conference.slug purchase_order.pk %}" style="display: inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Create and send a QuickBooks Online invoice for this PO?');">Send QBO Invoice</button>
+    </form>
+    {% endif %}
+  {% endif %}
+
+  {% if purchase_order.qbo_invoice_url %}
+  <a href="{{ purchase_order.qbo_invoice_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-secondary">View QBO Invoice</a>
   {% endif %}
 
   {% if purchase_order.status != "cancelled" and purchase_order.status != "paid" %}

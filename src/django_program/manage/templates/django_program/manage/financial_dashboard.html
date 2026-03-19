@@ -373,6 +373,129 @@
 </div>
 {% endif %}
 
+{# ── Purchase Orders ── #}
+{% if total_pos %}
+<h2 class="section-heading">Purchase Orders</h2>
+<div class="top-stats" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="stat-card">
+    <div class="stat-card-value">{{ total_pos }}</div>
+    <div class="stat-card-label">Total POs</div>
+    {% if po_by_status.paid.count %}
+    <div style="font-size: 0.78rem; margin-top: 0.25rem; color: var(--color-success); font-weight: 500;">{{ po_by_status.paid.count }} paid</div>
+    {% endif %}
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ po_revenue|floatformat:2 }}</div>
+    <div class="stat-card-label">PO Revenue (Invoiced)</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value">${{ po_collected|floatformat:2 }}</div>
+    <div class="stat-card-label">PO Payments Collected</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-value" style="{% if po_balance_outstanding > 0 %}color: var(--color-warning);{% else %}color: var(--color-success);{% endif %}">${{ po_balance_outstanding|floatformat:2 }}</div>
+    <div class="stat-card-label">PO Balance Outstanding</div>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+  <div>
+    <h3 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--color-text-secondary);">POs by Status</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th style="text-align: right;">Count</th>
+          <th style="text-align: right;">Total Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for status, data in po_by_status.items %}
+        {% if data.count %}
+        <tr>
+          <td>
+            {% if status == "paid" %}<span class="badge badge--active">Paid</span>
+            {% elif status == "draft" %}<span class="badge badge--other">Draft</span>
+            {% elif status == "sent" %}<span class="badge badge--accepted">Sent</span>
+            {% elif status == "partially_paid" %}<span class="badge badge--warning">Partially Paid</span>
+            {% elif status == "overpaid" %}<span class="badge badge--synced">Overpaid</span>
+            {% elif status == "cancelled" %}<span class="badge badge--inactive">Cancelled</span>
+            {% endif %}
+          </td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ data.count }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">${{ data.total|floatformat:2 }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div>
+    <h3 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--color-text-secondary);">PO Payments by Method</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th style="text-align: right;">Count</th>
+          <th style="text-align: right;">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for method, data in po_payments_by_method.items %}
+        {% if data.count %}
+        <tr>
+          <td>{{ data.label }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">{{ data.count }}</td>
+          <td style="text-align: right; font-family: var(--font-mono);">${{ data.total|floatformat:2 }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if recent_pos %}
+<h3 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--color-text-secondary);">Recent Purchase Orders</h3>
+<table class="data-table" style="margin-bottom: 2rem;">
+  <thead>
+    <tr>
+      <th>Reference</th>
+      <th>Organization</th>
+      <th>Status</th>
+      <th style="text-align: right;">Total</th>
+      <th style="text-align: right;">Balance Due</th>
+      <th>Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for po in recent_pos %}
+    <tr>
+      <td><a href="{% url 'manage:purchase-order-detail' conference.slug po.pk %}" class="mono">{{ po.reference }}</a></td>
+      <td>{{ po.organization_name }}</td>
+      <td>
+        {% if po.status == "paid" %}<span class="badge badge--active">Paid</span>
+        {% elif po.status == "draft" %}<span class="badge badge--other">Draft</span>
+        {% elif po.status == "sent" %}<span class="badge badge--accepted">Sent</span>
+        {% elif po.status == "partially_paid" %}<span class="badge badge--warning">Partially Paid</span>
+        {% elif po.status == "overpaid" %}<span class="badge badge--synced">Overpaid</span>
+        {% elif po.status == "cancelled" %}<span class="badge badge--inactive">Cancelled</span>
+        {% endif %}
+      </td>
+      <td style="text-align: right; font-family: var(--font-mono);">${{ po.total|floatformat:2 }}</td>
+      <td style="text-align: right; font-family: var(--font-mono);
+        {% if po.balance_due > 0 %}color: var(--color-warning);{% elif po.balance_due == 0 %}color: var(--color-success);{% endif %}">
+        ${{ po.balance_due|floatformat:2 }}
+      </td>
+      <td>{{ po.created_at|date:"M j, Y" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endif %}
+
 <style>
   @media (max-width: 900px) {
     .top-stats { grid-template-columns: repeat(2, 1fr) !important; }

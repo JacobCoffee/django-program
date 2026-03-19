@@ -11,7 +11,7 @@ import datetime
 from django import forms
 from django.core.validators import RegexValidator
 
-from django_program.conference.models import Conference, Expense, ExpenseCategory, Section
+from django_program.conference.models import Conference, Expense, ExpenseCategory, KPITargets, Section
 from django_program.pretalx.models import Room, ScheduleSlot, Talk
 from django_program.programs.models import Activity, TravelGrant, TravelGrantMessage
 from django_program.registration.badge import BadgeTemplate
@@ -99,6 +99,21 @@ class ConferenceForm(forms.ModelForm):
             "start_date": forms.DateInput(attrs={"type": "date"}),
             "end_date": forms.DateInput(attrs={"type": "date"}),
         }
+
+
+class KPITargetsForm(forms.ModelForm):
+    """Form for editing per-conference KPI target thresholds."""
+
+    class Meta:
+        model = KPITargets
+        fields = [
+            "target_conversion_rate",
+            "target_refund_rate",
+            "target_checkin_rate",
+            "target_fulfillment_rate",
+            "target_revenue_per_attendee",
+            "target_room_utilization",
+        ]
 
 
 class SectionForm(forms.ModelForm):

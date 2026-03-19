@@ -44,6 +44,30 @@ class PurchaseOrder(models.Model):
         choices=Status.choices,
         default=Status.DRAFT,
     )
+    stripe_invoice_id = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Stripe Invoice ID (e.g. in_xxx) when sent via Stripe Invoicing.",
+    )
+    stripe_invoice_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Stripe-hosted invoice URL for the customer to pay online.",
+    )
+    qbo_invoice_id = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="QuickBooks Online Invoice ID, set after invoice creation.",
+    )
+    qbo_invoice_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Public URL to the QBO invoice for the customer.",
+    )
     notes = models.TextField(blank=True, default="")
     reference = models.CharField(
         max_length=100,

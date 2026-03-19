@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -23,14 +24,22 @@ from django_program.registration.purchase_order import (
 from django_program.registration.services.purchase_orders import (
     cancel_purchase_order,
     create_purchase_order,
+    generate_invoice_pdf,
     issue_credit_note,
     record_payment,
     send_purchase_order,
 )
+from django_program.registration.services.qbo_invoicing import (
+    QBOAPIError,
+    QBONotConfiguredError,
+    create_qbo_invoice,
+    send_qbo_invoice_email,
+)
+from django_program.registration.services.stripe_invoicing import create_stripe_invoice
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
@@ -359,3 +368,111 @@ class PurchaseOrderSendView(ManagePermissionMixin, View):
 
         messages.success(request, f"Purchase order {po.reference} marked as sent.")
         return redirect(detail_url)
+
+
+class PurchaseOrderInvoiceView(ManagePermissionMixin, View):
+    """Generate and download a PO invoice as PDF."""
+
+    def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Generate the invoice PDF and return it as a downloadable attachment."""
+        po = get_object_or_404(PurchaseOrder, pk=self.kwargs["pk"], conference=self.conference)
+        pdf_bytes = generate_invoice_pdf(po)
+        conf_slug = self.conference.slug
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{conf_slug}-invoice-{po.reference}.pdf"'
+        return response
+
+
+class PurchaseOrderStripeInvoiceView(ManagePermissionMixin, View):
+    """Create and send a Stripe Invoice for a purchase order (POST-only).
+
+    Uses the conference's Stripe keys to create a hosted invoice that the
+    customer can pay via card or ACH. Sets the PO status to SENT on success.
+    """
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Create a Stripe invoice and redirect back to the PO detail page."""
+        po = get_object_or_404(PurchaseOrder, pk=self.kwargs["pk"], conference=self.conference)
+        detail_url = reverse(
+            "manage:purchase-order-detail",
+            kwargs={"conference_slug": self.conference.slug, "pk": po.pk},
+        )
+
+        if po.status not in (PurchaseOrder.Status.DRAFT, PurchaseOrder.Status.SENT):
+            messages.error(
+                request,
+                f"Cannot send a Stripe invoice for a PO with status '{po.get_status_display()}'.",
+            )
+            return redirect(detail_url)
+
+        try:
+            hosted_url = create_stripe_invoice(po)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(detail_url)
+        except Exception:
+            logger.exception("Failed to create Stripe invoice for PO %s", po.reference)
+            messages.error(request, "Failed to create Stripe invoice. Please try again.")
+            return redirect(detail_url)
+
+        if po.status == PurchaseOrder.Status.DRAFT:
+            po.status = PurchaseOrder.Status.SENT
+            po.save(update_fields=["status", "updated_at"])
+
+        messages.success(
+            request,
+            f"Stripe invoice sent for {po.reference}. Customer invoice URL: {hosted_url}",
+        )
+        return redirect(detail_url)
+
+
+class PurchaseOrderQBOInvoiceView(ManagePermissionMixin, View):
+    """Create and send a QuickBooks Online Invoice for a purchase order (POST-only).
+
+    Uses the conference's QBO credentials to create an invoice via the QBO
+    REST API and optionally emails it to the customer. Sets the PO status
+    to SENT on success if currently in draft.
+    """
+
+    def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
+        """Create a QBO invoice and redirect back to the PO detail page."""
+        po = get_object_or_404(PurchaseOrder, pk=self.kwargs["pk"], conference=self.conference)
+        detail_url = reverse(
+            "manage:purchase-order-detail",
+            kwargs={"conference_slug": self.conference.slug, "pk": po.pk},
+        )
+
+        error_msg = self._validate_po_for_qbo(po)
+        if error_msg:
+            messages.error(request, error_msg) if "already" not in error_msg else messages.warning(request, error_msg)
+            return redirect(detail_url)
+
+        try:
+            create_qbo_invoice(po)
+            send_qbo_invoice_email(po)
+        except QBONotConfiguredError:
+            messages.error(request, "QuickBooks Online is not configured for this conference.")
+            return redirect(detail_url)
+        except (QBOAPIError, ValueError) as exc:
+            messages.error(request, f"QBO invoice failed: {exc}")
+            return redirect(detail_url)
+        except Exception:
+            logger.exception("Failed to create/send QBO invoice for PO %s", po.reference)
+            messages.error(request, "Failed to create QBO invoice. Please try again.")
+            return redirect(detail_url)
+
+        if po.status == PurchaseOrder.Status.DRAFT:
+            po.status = PurchaseOrder.Status.SENT
+            po.save(update_fields=["status", "updated_at"])
+
+        messages.success(request, f"QBO invoice created and sent for {po.reference}.")
+        return redirect(detail_url)
+
+    @staticmethod
+    def _validate_po_for_qbo(po: PurchaseOrder) -> str:
+        """Return an error message if the PO cannot have a QBO invoice created, or empty string."""
+        if po.status not in (PurchaseOrder.Status.DRAFT, PurchaseOrder.Status.SENT):
+            return f"Cannot send a QBO invoice for a PO with status '{po.get_status_display()}'."
+        if po.qbo_invoice_id:
+            return f"PO {po.reference} already has a QBO invoice."
+        return ""

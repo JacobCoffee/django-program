@@ -10,10 +10,13 @@ from django_program.manage.views_purchase_orders import (
     PurchaseOrderCancelView,
     PurchaseOrderCreateView,
     PurchaseOrderDetailView,
+    PurchaseOrderInvoiceView,
     PurchaseOrderIssueCreditView,
     PurchaseOrderListView,
+    PurchaseOrderQBOInvoiceView,
     PurchaseOrderRecordPaymentView,
     PurchaseOrderSendView,
+    PurchaseOrderStripeInvoiceView,
 )
 
 urlpatterns = [
@@ -24,4 +27,7 @@ urlpatterns = [
     path("<int:pk>/credit/", PurchaseOrderIssueCreditView.as_view(), name="purchase-order-credit"),
     path("<int:pk>/cancel/", PurchaseOrderCancelView.as_view(), name="purchase-order-cancel"),
     path("<int:pk>/send/", PurchaseOrderSendView.as_view(), name="purchase-order-send"),
+    path("<int:pk>/invoice/", PurchaseOrderInvoiceView.as_view(), name="purchase-order-invoice"),
+    path("<int:pk>/stripe-invoice/", PurchaseOrderStripeInvoiceView.as_view(), name="purchase-order-stripe-invoice"),
+    path("<int:pk>/qbo-invoice/", PurchaseOrderQBOInvoiceView.as_view(), name="purchase-order-qbo-invoice"),
 ]

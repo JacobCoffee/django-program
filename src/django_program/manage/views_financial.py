@@ -38,6 +38,7 @@ from django_program.registration.models import (
     Payment,
     TicketType,
 )
+from django_program.registration.purchase_order import PurchaseOrder, PurchaseOrderPayment
 
 _ZERO = Decimal("0.00")
 
@@ -485,6 +486,69 @@ class FinancialDashboardView(FinancePermissionMixin, TemplateView):
                 "total_expenses": float(expense_summary["total_expenses"]),
                 "total_budget": float(expense_summary["total_budget"]),
             }
+        )
+
+        # --- Purchase Orders ---
+        po_qs = PurchaseOrder.objects.filter(conference=conference)
+        po_status_rows = po_qs.values("status").annotate(count=Count("id"), total=Coalesce(Sum("total"), Value(_ZERO)))
+        po_by_status: dict[str, dict[str, object]] = {
+            status_value: {"count": 0, "total": _ZERO} for status_value, _label in PurchaseOrder.Status.choices
+        }
+        for row in po_status_rows:
+            po_by_status[row["status"]] = {"count": row["count"], "total": row["total"] or _ZERO}
+        total_pos = sum(d["count"] for d in po_by_status.values())  # type: ignore[arg-type]
+
+        po_revenue = (
+            po_qs.filter(
+                status__in=[
+                    PurchaseOrder.Status.PAID,
+                    PurchaseOrder.Status.OVERPAID,
+                    PurchaseOrder.Status.PARTIALLY_PAID,
+                ]
+            ).aggregate(total=Sum("total"))["total"]
+            or _ZERO
+        )
+        po_collected = (
+            PurchaseOrderPayment.objects.filter(purchase_order__conference=conference).aggregate(total=Sum("amount"))[
+                "total"
+            ]
+            or _ZERO
+        )
+        po_balance = po_revenue - po_collected
+
+        context["po_by_status"] = po_by_status
+        context["total_pos"] = total_pos
+        context["po_revenue"] = po_revenue
+        context["po_collected"] = po_collected
+        context["po_balance_outstanding"] = po_balance
+
+        po_payment_rows = (
+            PurchaseOrderPayment.objects.filter(purchase_order__conference=conference)
+            .values("method")
+            .annotate(count=Count("id"), total=Coalesce(Sum("amount"), Value(_ZERO)))
+        )
+        po_method_labels = {v: str(label) for v, label in PurchaseOrderPayment.Method.choices}
+        po_payments_by_method: dict[str, dict[str, object]] = {
+            method_value: {"label": po_method_labels[method_value], "count": 0, "total": _ZERO}
+            for method_value in po_method_labels
+        }
+        for row in po_payment_rows:
+            po_payments_by_method[row["method"]] = {
+                "label": po_method_labels[row["method"]],
+                "count": row["count"],
+                "total": row["total"] or _ZERO,
+            }
+        context["po_payments_by_method"] = po_payments_by_method
+
+        recent_pos = po_qs.order_by("-created_at")[:10]
+        context["recent_pos"] = recent_pos
+
+        context["chart_po_json"] = json.dumps(
+            [
+                {"status": status, "count": data["count"], "total": float(data["total"])}
+                for status, data in po_by_status.items()
+                if data["count"] > 0
+            ]
         )
 
         context["active_nav"] = "financial"

@@ -27,7 +27,7 @@ from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.utils import timezone
 
-from django_program.conference.models import Conference, Expense, ExpenseCategory
+from django_program.conference.models import Conference, Expense, ExpenseCategory, KPITargets
 from django_program.pretalx.models import Room, ScheduleSlot, SessionRating, Speaker, Talk, TalkOverride
 from django_program.programs.models import Activity, ActivitySignup, Survey, SurveyResponse, TravelGrant
 from django_program.registration.badge import Badge, BadgeTemplate
@@ -164,6 +164,7 @@ class Seeder:
         """Create a full conference with realistic registration data."""
         self._create_superuser()
         conference = self._create_conference()
+        self._create_kpi_targets(conference)
         prev_conferences = self._create_previous_conferences()
         ticket_types = self._create_ticket_types(conference)
         addons = self._create_addons(conference)
@@ -324,6 +325,21 @@ class Seeder:
             },
         )
         return conference
+
+    def _create_kpi_targets(self, conference: Conference) -> KPITargets:
+        """Create KPI target thresholds for the conference."""
+        kpi, _ = KPITargets.objects.update_or_create(
+            conference=conference,
+            defaults={
+                "target_conversion_rate": Decimal("3.50"),
+                "target_refund_rate": Decimal("5.00"),
+                "target_checkin_rate": Decimal("80.00"),
+                "target_fulfillment_rate": Decimal("90.00"),
+                "target_revenue_per_attendee": Decimal("333.00"),
+                "target_room_utilization": Decimal("28.00"),
+            },
+        )
+        return kpi
 
     def _create_ticket_types(self, conference: Conference) -> list[TicketType]:
         """Ensure seed ticket types exist and have bulk_enabled / availability windows set."""
