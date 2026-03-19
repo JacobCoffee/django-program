@@ -27,6 +27,16 @@ from django_program.registration.views_checkin import (
     RedeemView,
     ScanView,
 )
+from django_program.registration.views_terminal import (
+    CancelPaymentView,
+    CapturePaymentView,
+    CartOperationsView,
+    ConnectionTokenView,
+    CreatePaymentIntentView,
+    FetchAttendeeView,
+    FetchInventoryView,
+    ListReadersView,
+)
 from django_program.registration.webhooks import stripe_webhook
 
 app_name = "registration"
@@ -43,4 +53,13 @@ urlpatterns = [
     path("checkin/lookup/<str:access_code>/", LookupView.as_view(), name="checkin-lookup"),
     path("checkin/redeem/", RedeemView.as_view(), name="checkin-redeem"),
     path("checkin/preload/", OfflinePreloadView.as_view(), name="checkin-preload"),
+    # Stripe Terminal API (staff-only, JSON endpoints for POS UI)
+    path("terminal/connection-token/", ConnectionTokenView.as_view(), name="terminal-connection-token"),
+    path("terminal/create-payment-intent/", CreatePaymentIntentView.as_view(), name="terminal-create-intent"),
+    path("terminal/capture/", CapturePaymentView.as_view(), name="terminal-capture"),
+    path("terminal/cancel/", CancelPaymentView.as_view(), name="terminal-cancel"),
+    path("terminal/attendee/<str:access_code>/", FetchAttendeeView.as_view(), name="terminal-attendee"),
+    path("terminal/inventory/", FetchInventoryView.as_view(), name="terminal-inventory"),
+    path("terminal/cart/", CartOperationsView.as_view(), name="terminal-cart"),
+    path("terminal/readers/", ListReadersView.as_view(), name="terminal-readers"),
 ]

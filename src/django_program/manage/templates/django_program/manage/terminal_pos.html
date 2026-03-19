@@ -1,0 +1,1558 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Terminal POS{% endblock %}
+
+{% block extra_head %}
+<script src="https://js.stripe.com/terminal/v1/"></script>
+<style>
+  /* ---- POS Layout: three-panel grid ---- */
+  .pos-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 340px;
+    gap: 1.25rem;
+    align-items: start;
+    min-height: calc(100vh - var(--header-height) - 180px);
+  }
+
+  /* ---- Shared panel styling ---- */
+  .pos-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .pos-panel-header {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg);
+  }
+
+  .pos-panel-header h3 {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .pos-panel-body {
+    padding: 1rem;
+  }
+
+  /* ---- Reader Connection ---- */
+  .reader-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .reader-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .reader-status--disconnected {
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+  }
+  .reader-status--disconnected .reader-status-dot { background: var(--color-text-muted); }
+
+  .reader-status--connecting {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+    border: 1px solid var(--color-warning-border);
+  }
+  .reader-status--connecting .reader-status-dot {
+    background: var(--color-warning);
+    animation: pulse-dot 1.2s ease infinite;
+  }
+
+  .reader-status--connected {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border: 1px solid var(--color-success);
+  }
+  .reader-status--connected .reader-status-dot { background: var(--color-success); }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .reader-select-group {
+    margin-bottom: 0.85rem;
+  }
+
+  .reader-select-group label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin-bottom: 0.3rem;
+  }
+
+  .reader-select-group select {
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background: var(--color-surface);
+  }
+  .reader-select-group select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1);
+  }
+
+  .btn-connect {
+    width: 100%;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid var(--color-primary);
+    background: var(--color-primary);
+    color: #ffffff;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background 0.15s ease;
+  }
+  .btn-connect:hover { background: var(--color-primary-hover); }
+  .btn-connect:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--color-text-muted);
+    border-color: var(--color-text-muted);
+  }
+
+  .btn-disconnect {
+    width: 100%;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background 0.15s ease, border-color 0.15s ease;
+    display: none;
+  }
+  .btn-disconnect:hover {
+    background: var(--color-danger-bg);
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+
+  /* ---- Attendee Lookup ---- */
+  .lookup-section {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border-light);
+  }
+
+  .lookup-section h4 {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .lookup-input-wrap {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .lookup-input {
+    flex: 1;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-family: var(--font-mono);
+    color: var(--color-text);
+    background: var(--color-surface);
+    letter-spacing: 0.03em;
+  }
+  .lookup-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1);
+  }
+  .lookup-input::placeholder {
+    font-family: var(--font-sans);
+    letter-spacing: normal;
+    color: var(--color-text-muted);
+  }
+
+  .btn-lookup {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background 0.15s ease, border-color 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn-lookup:hover {
+    background: var(--color-primary-light);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .attendee-info {
+    margin-top: 0.75rem;
+    display: none;
+  }
+  .attendee-info.visible { display: block; }
+
+  .attendee-info-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .attendee-info-email {
+    font-size: 0.78rem;
+    color: var(--color-text-secondary);
+    margin-top: 0.1rem;
+  }
+
+  .attendee-info-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+
+  .attendee-info-tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border-light);
+  }
+
+  .attendee-info-credits {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.6rem;
+    background: var(--color-success-bg);
+    border: 1px solid var(--color-success);
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-success);
+  }
+
+  /* ---- Product Catalog ---- */
+  .catalog-loading {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+
+  .catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .catalog-item {
+    padding: 0.85rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    position: relative;
+  }
+  .catalog-item:hover {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-md);
+    background: var(--color-primary-light);
+  }
+  .catalog-item:active {
+    transform: scale(0.98);
+  }
+
+  .catalog-item--soldout {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .catalog-item-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 0.3rem;
+    line-height: 1.3;
+  }
+
+  .catalog-item-price {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--color-primary);
+    font-family: var(--font-mono);
+    letter-spacing: -0.02em;
+  }
+
+  .catalog-item-stock {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    margin-top: 0.2rem;
+  }
+
+  .catalog-item-type {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+
+  .catalog-section-heading {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+    margin-top: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+  .catalog-section-heading:first-child { margin-top: 0; }
+
+  /* ---- Cart ---- */
+  .cart-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--color-text-muted);
+    font-size: 0.88rem;
+  }
+
+  .cart-items { list-style: none; }
+
+  .cart-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+  .cart-item:last-child { border-bottom: none; }
+
+  .cart-item-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cart-item-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cart-item-unit-price {
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .cart-item-qty {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .cart-item-qty button {
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-family: var(--font-sans);
+    line-height: 1;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .cart-item-qty button:hover {
+    background: var(--color-primary-light);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .cart-item-qty-value {
+    font-size: 0.85rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    min-width: 20px;
+    text-align: center;
+    color: var(--color-text);
+  }
+
+  .cart-item-total {
+    font-size: 0.85rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--color-text);
+    flex-shrink: 0;
+    min-width: 55px;
+    text-align: right;
+  }
+
+  /* Voucher */
+  .voucher-row {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border-light);
+  }
+
+  .voucher-input {
+    flex: 1;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-family: var(--font-mono);
+    color: var(--color-text);
+    background: var(--color-surface);
+  }
+  .voucher-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1);
+  }
+  .voucher-input::placeholder {
+    font-family: var(--font-sans);
+    letter-spacing: normal;
+    color: var(--color-text-muted);
+  }
+
+  .voucher-applied {
+    display: none;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--color-success);
+    font-weight: 600;
+  }
+  .voucher-applied.visible { display: flex; }
+
+  .voucher-remove {
+    border: none;
+    background: none;
+    color: var(--color-danger);
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-decoration: underline;
+    font-family: var(--font-sans);
+    padding: 0;
+  }
+  .voucher-remove:hover { color: #b91c1c; }
+
+  /* Cart totals */
+  .cart-totals {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 2px solid var(--color-border);
+  }
+
+  .cart-totals-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.2rem 0;
+    font-size: 0.85rem;
+  }
+
+  .cart-totals-row--discount {
+    color: var(--color-success);
+    font-weight: 600;
+  }
+
+  .cart-totals-row--total {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--color-text);
+    padding-top: 0.5rem;
+    margin-top: 0.35rem;
+    border-top: 1px solid var(--color-border-light);
+  }
+
+  .cart-totals-row--total .cart-total-amount {
+    font-family: var(--font-mono);
+    letter-spacing: -0.02em;
+  }
+
+  /* ---- Payment Controls ---- */
+  .payment-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border-light);
+  }
+
+  .btn-charge {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--color-success);
+    color: #ffffff;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background 0.15s ease, transform 0.1s ease;
+    letter-spacing: -0.01em;
+  }
+  .btn-charge:hover { background: #047857; }
+  .btn-charge:active { transform: scale(0.98); }
+  .btn-charge:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--color-text-muted);
+  }
+
+  .btn-cancel-payment {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid var(--color-danger);
+    border-radius: var(--radius-sm);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background 0.15s ease, color 0.15s ease;
+    display: none;
+  }
+  .btn-cancel-payment:hover {
+    background: var(--color-danger);
+    color: #ffffff;
+  }
+
+  .btn-capture {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.65rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--color-primary);
+    color: #ffffff;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background 0.15s ease;
+    display: none;
+  }
+  .btn-capture:hover { background: var(--color-primary-hover); }
+  .btn-capture:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Payment status display */
+  .payment-status {
+    padding: 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 0.75rem;
+    display: none;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+  .payment-status.visible { display: block; }
+  .payment-status--waiting {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+    border: 1px solid var(--color-warning-border);
+    animation: pulse-bg 2s ease infinite;
+  }
+  .payment-status--processing {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+  }
+  .payment-status--approved {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border: 1px solid var(--color-success);
+  }
+  .payment-status--declined {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
+  }
+  .payment-status--captured {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border: 1px solid var(--color-success);
+  }
+
+  @keyframes pulse-bg {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Receipt display */
+  .receipt-display {
+    display: none;
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+  }
+  .receipt-display.visible { display: block; }
+
+  .receipt-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    padding: 0.15rem 0;
+    color: var(--color-text-secondary);
+  }
+
+  .receipt-row-label { font-weight: 600; }
+  .receipt-row-value { font-family: var(--font-mono); color: var(--color-text); }
+
+  .btn-new-sale {
+    width: 100%;
+    margin-top: 0.75rem;
+    padding: 0.55rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-sm);
+    background: var(--color-primary);
+    color: #ffffff;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background 0.15s ease;
+    display: none;
+  }
+  .btn-new-sale:hover { background: var(--color-primary-hover); }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 1100px) {
+    .pos-layout {
+      grid-template-columns: 1fr 1fr;
+    }
+    .pos-panel--left {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .pos-layout {
+      grid-template-columns: 1fr;
+    }
+    .catalog-grid {
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb">
+  <a href="{% url 'manage:conference-list' %}">Conferences</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:dashboard' conference.slug %}">{{ conference.name }}</a>
+  <span class="breadcrumb-separator"></span>
+  Terminal POS
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Terminal POS</h1>
+<p>Process in-person payments with Stripe Terminal readers.</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:checkin-dashboard' conference.slug %}" class="btn btn-secondary">Check-in</a>
+{% endblock %}
+
+{% block content %}
+<div style="display:none;">{% csrf_token %}</div>
+<div class="pos-layout">
+  <!-- Left Panel: Reader + Attendee Lookup -->
+  <div class="pos-panel pos-panel--left">
+    <div class="pos-panel-header">
+      <h3>Reader</h3>
+    </div>
+    <div class="pos-panel-body">
+      <div class="reader-status reader-status--disconnected" id="readerStatus">
+        <span class="reader-status-dot"></span>
+        <span id="readerStatusText">Disconnected</span>
+      </div>
+
+      <div id="readerConnectControls">
+        <div class="reader-select-group">
+          <label for="readerSelect">Terminal Reader</label>
+          <select id="readerSelect" disabled>
+            <option value="">Loading readers...</option>
+          </select>
+        </div>
+        <button type="button" class="btn-connect" id="btnConnect" disabled>Connect Reader</button>
+      </div>
+      <button type="button" class="btn-disconnect" id="btnDisconnect">Disconnect</button>
+
+      <div class="lookup-section">
+        <h4>Attendee Lookup</h4>
+        <div class="lookup-input-wrap">
+          <input type="text" class="lookup-input" id="lookupInput" placeholder="Access code..." autocomplete="off">
+          <button type="button" class="btn-lookup" id="btnLookup">Look up</button>
+        </div>
+        <div class="attendee-info" id="attendeeInfo">
+          <div class="attendee-info-name" id="aiName"></div>
+          <div class="attendee-info-email" id="aiEmail"></div>
+          <div class="attendee-info-meta" id="aiMeta"></div>
+          <div class="attendee-info-credits" id="aiCredits" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center Panel: Product Catalog -->
+  <div class="pos-panel pos-panel--center">
+    <div class="pos-panel-header">
+      <h3>Products</h3>
+    </div>
+    <div class="pos-panel-body">
+      <div class="catalog-loading" id="catalogLoading">Loading inventory...</div>
+      <div id="catalogContainer"></div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Cart + Payment -->
+  <div class="pos-panel pos-panel--right">
+    <div class="pos-panel-header">
+      <h3>Cart</h3>
+    </div>
+    <div class="pos-panel-body">
+      <div class="cart-empty" id="cartEmpty">No items in cart.</div>
+      <ul class="cart-items" id="cartItems"></ul>
+
+      <div class="voucher-row" id="voucherRow" style="display:none;">
+        <input type="text" class="voucher-input" id="voucherInput" placeholder="Voucher code...">
+        <button type="button" class="btn-lookup" id="btnApplyVoucher">Apply</button>
+      </div>
+      <div class="voucher-applied" id="voucherApplied">
+        <span id="voucherAppliedText"></span>
+        <button type="button" class="voucher-remove" id="btnRemoveVoucher">Remove</button>
+      </div>
+
+      <div class="cart-totals" id="cartTotals" style="display:none;">
+        <div class="cart-totals-row">
+          <span>Subtotal</span>
+          <span class="cart-total-amount" id="cartSubtotal">$0.00</span>
+        </div>
+        <div class="cart-totals-row cart-totals-row--discount" id="cartDiscountRow" style="display:none;">
+          <span>Discount</span>
+          <span class="cart-total-amount" id="cartDiscount">-$0.00</span>
+        </div>
+        <div class="cart-totals-row cart-totals-row--total">
+          <span>Total</span>
+          <span class="cart-total-amount" id="cartTotal">$0.00</span>
+        </div>
+      </div>
+
+      <div class="payment-section" id="paymentSection">
+        <div class="payment-status" id="paymentStatus"></div>
+        <button type="button" class="btn-charge" id="btnCharge" disabled>Charge Card</button>
+        <button type="button" class="btn-cancel-payment" id="btnCancelPayment">Cancel Payment</button>
+        <button type="button" class="btn-capture" id="btnCapture">Capture Payment</button>
+        <div class="receipt-display" id="receiptDisplay">
+          <div class="receipt-row">
+            <span class="receipt-row-label">Card</span>
+            <span class="receipt-row-value" id="receiptCard">--</span>
+          </div>
+          <div class="receipt-row">
+            <span class="receipt-row-label">Amount</span>
+            <span class="receipt-row-value" id="receiptAmount">--</span>
+          </div>
+          <div class="receipt-row">
+            <span class="receipt-row-label">Status</span>
+            <span class="receipt-row-value" id="receiptStatus">--</span>
+          </div>
+        </div>
+        <button type="button" class="btn-new-sale" id="btnNewSale">New Sale</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  "use strict";
+
+  // -- API Endpoints (Django template tags resolve at render time) --
+  var API = {
+    connectionToken: "{% url 'registration:terminal-connection-token' conference.slug %}",
+    createIntent: "{% url 'registration:terminal-create-intent' conference.slug %}",
+    capture: "{% url 'registration:terminal-capture' conference.slug %}",
+    cancel: "{% url 'registration:terminal-cancel' conference.slug %}",
+    attendee: "{% url 'registration:terminal-attendee' conference.slug 'PLACEHOLDER' %}",
+    inventory: "{% url 'registration:terminal-inventory' conference.slug %}",
+    cart: "{% url 'registration:terminal-cart' conference.slug %}",
+    readers: "{% url 'registration:terminal-readers' conference.slug %}"
+  };
+
+  function attendeeUrl(accessCode) {
+    return API.attendee.replace("PLACEHOLDER", encodeURIComponent(accessCode));
+  }
+
+  // -- DOM Refs --
+  var readerStatus = document.getElementById("readerStatus");
+  var readerStatusText = document.getElementById("readerStatusText");
+  var readerSelect = document.getElementById("readerSelect");
+  var btnConnect = document.getElementById("btnConnect");
+  var btnDisconnect = document.getElementById("btnDisconnect");
+  var readerConnectControls = document.getElementById("readerConnectControls");
+  var lookupInput = document.getElementById("lookupInput");
+  var btnLookup = document.getElementById("btnLookup");
+  var attendeeInfo = document.getElementById("attendeeInfo");
+  var aiName = document.getElementById("aiName");
+  var aiEmail = document.getElementById("aiEmail");
+  var aiMeta = document.getElementById("aiMeta");
+  var aiCredits = document.getElementById("aiCredits");
+  var catalogLoading = document.getElementById("catalogLoading");
+  var catalogContainer = document.getElementById("catalogContainer");
+  var cartEmpty = document.getElementById("cartEmpty");
+  var cartItems = document.getElementById("cartItems");
+  var voucherRow = document.getElementById("voucherRow");
+  var voucherInput = document.getElementById("voucherInput");
+  var btnApplyVoucher = document.getElementById("btnApplyVoucher");
+  var voucherApplied = document.getElementById("voucherApplied");
+  var voucherAppliedText = document.getElementById("voucherAppliedText");
+  var btnRemoveVoucher = document.getElementById("btnRemoveVoucher");
+  var cartTotals = document.getElementById("cartTotals");
+  var cartSubtotal = document.getElementById("cartSubtotal");
+  var cartDiscountRow = document.getElementById("cartDiscountRow");
+  var cartDiscount = document.getElementById("cartDiscount");
+  var cartTotal = document.getElementById("cartTotal");
+  var paymentStatus = document.getElementById("paymentStatus");
+  var btnCharge = document.getElementById("btnCharge");
+  var btnCancelPayment = document.getElementById("btnCancelPayment");
+  var btnCapture = document.getElementById("btnCapture");
+  var receiptDisplay = document.getElementById("receiptDisplay");
+  var receiptCard = document.getElementById("receiptCard");
+  var receiptAmount = document.getElementById("receiptAmount");
+  var receiptStatus = document.getElementById("receiptStatus");
+  var btnNewSale = document.getElementById("btnNewSale");
+
+  // -- State --
+  var terminal = null;
+  var connectedReader = null;
+  var cart = [];           // [{id, name, price, quantity, type}]
+  var inventory = [];      // normalized: [{id, name, price, type, remaining}, ...]
+  var currentAttendee = null;
+  var currentOrderId = null;
+  var currentPaymentIntentId = null;
+  var appliedVoucher = null;
+
+  // -- Utilities --
+  function getCsrfToken() {
+    var cookie = document.cookie.split(";").find(function(c) {
+      return c.trim().startsWith("csrftoken=");
+    });
+    return cookie ? cookie.split("=")[1] : "";
+  }
+
+  function formatCurrency(amount) {
+    // API returns Decimal strings like "100.00"; parse as float directly.
+    var n = parseFloat(amount);
+    if (isNaN(n)) return "$0.00";
+    return "$" + n.toFixed(2);
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  async function apiFetch(url, options) {
+    var opts = options || {};
+    opts.headers = opts.headers || {};
+    opts.headers["Content-Type"] = "application/json";
+    if (opts.method && opts.method !== "GET") {
+      opts.headers["X-CSRFToken"] = getCsrfToken();
+    }
+    var resp = await fetch(url, opts);
+    var data = await resp.json();
+    if (!resp.ok) {
+      throw new Error(data.error || data.detail || "Request failed (" + resp.status + ")");
+    }
+    return data;
+  }
+
+  // ---- Reader Management ----
+
+  function updateReaderStatus(state, label) {
+    readerStatus.className = "reader-status reader-status--" + state;
+    readerStatusText.textContent = label || state.charAt(0).toUpperCase() + state.slice(1);
+  }
+
+  function initTerminal() {
+    terminal = StripeTerminal.create({
+      onFetchConnectionToken: async function() {
+        var data = await apiFetch(API.connectionToken, {method: "POST"});
+        return data.secret;
+      },
+      onUnexpectedReaderDisconnect: function() {
+        connectedReader = null;
+        updateReaderStatus("disconnected", "Reader disconnected");
+        btnDisconnect.style.display = "none";
+        readerConnectControls.style.display = "";
+      }
+    });
+  }
+
+  async function loadReaders() {
+    try {
+      var data = await apiFetch(API.readers);
+      var readers = data.readers || data || [];
+      readerSelect.innerHTML = "";
+
+      if (readers.length === 0) {
+        readerSelect.innerHTML = '<option value="">No readers found</option>';
+        readerSelect.disabled = true;
+        btnConnect.disabled = true;
+        return;
+      }
+
+      readers.forEach(function(r) {
+        var opt = document.createElement("option");
+        opt.value = r.id;
+        opt.textContent = r.label || r.id;
+        if (r.status) {
+          opt.textContent += " (" + r.status + ")";
+        }
+        readerSelect.appendChild(opt);
+      });
+
+      readerSelect.disabled = false;
+      btnConnect.disabled = false;
+    } catch (err) {
+      readerSelect.innerHTML = '<option value="">Failed to load readers</option>';
+      readerSelect.disabled = true;
+      btnConnect.disabled = true;
+    }
+  }
+
+  async function connectReader() {
+    var readerId = readerSelect.value;
+    if (!readerId || !terminal) return;
+
+    btnConnect.disabled = true;
+    btnConnect.textContent = "Connecting...";
+    updateReaderStatus("connecting", "Connecting...");
+
+    try {
+      var discoverResult = await terminal.discoverReaders({simulated: false});
+      if (discoverResult.error) {
+        throw new Error(discoverResult.error.message);
+      }
+
+      var reader = discoverResult.discoveredReaders.find(function(r) {
+        return r.id === readerId;
+      });
+
+      if (!reader) {
+        // Fall back to internet-connected reader
+        var connectResult = await terminal.connectInternetReader(
+          {id: readerId}
+        );
+        if (connectResult.error) {
+          throw new Error(connectResult.error.message);
+        }
+        connectedReader = connectResult.reader;
+      } else {
+        var connectResult = await terminal.connectReader(reader);
+        if (connectResult.error) {
+          throw new Error(connectResult.error.message);
+        }
+        connectedReader = connectResult.reader;
+      }
+
+      updateReaderStatus("connected", connectedReader.label || "Connected");
+      readerConnectControls.style.display = "none";
+      btnDisconnect.style.display = "";
+      updateChargeButton();
+    } catch (err) {
+      updateReaderStatus("disconnected", "Connection failed");
+      btnConnect.disabled = false;
+      btnConnect.textContent = "Connect Reader";
+    }
+  }
+
+  async function disconnectReader() {
+    if (terminal) {
+      try { await terminal.disconnectReader(); } catch (e) { /* ignore */ }
+    }
+    connectedReader = null;
+    updateReaderStatus("disconnected", "Disconnected");
+    btnDisconnect.style.display = "none";
+    readerConnectControls.style.display = "";
+    btnConnect.disabled = false;
+    btnConnect.textContent = "Connect Reader";
+    updateChargeButton();
+  }
+
+  // ---- Attendee Lookup ----
+
+  async function lookupAttendee() {
+    var code = lookupInput.value.trim();
+    if (!code) return;
+
+    try {
+      var data = await apiFetch(attendeeUrl(code));
+      currentAttendee = data;
+      currentOrderId = (data.order && data.order.id) ? data.order.id : null;
+
+      var att = data.attendee || {};
+      aiName.textContent = att.name || "Unknown";
+      aiEmail.textContent = att.email || "";
+
+      var metaHtml = "";
+      if (att.checked_in) {
+        metaHtml += '<span class="attendee-info-tag">Checked in</span>';
+      }
+      if (data.order && data.order.status) {
+        var orderStatus = data.order.status;
+        var statusClass = orderStatus === "paid" ? "badge--active" : "badge--warning";
+        metaHtml += '<span class="badge ' + statusClass + '">' + escapeHtml(orderStatus) + '</span>';
+      }
+      if (data.registered) {
+        metaHtml += '<span class="attendee-info-tag">Registered</span>';
+      }
+      aiMeta.innerHTML = metaHtml;
+
+      var creditsTotal = parseFloat(data.credits_total || "0");
+      if (creditsTotal > 0) {
+        aiCredits.textContent = "Credits available: " + formatCurrency(data.credits_total);
+        aiCredits.style.display = "";
+      } else {
+        aiCredits.style.display = "none";
+      }
+
+      attendeeInfo.classList.add("visible");
+    } catch (err) {
+      currentAttendee = null;
+      currentOrderId = null;
+      attendeeInfo.classList.remove("visible");
+      alert("Lookup failed: " + err.message);
+    }
+  }
+
+  // ---- Inventory / Catalog ----
+
+  async function loadInventory() {
+    catalogLoading.style.display = "";
+    catalogContainer.innerHTML = "";
+
+    try {
+      var data = await apiFetch(API.inventory);
+      // API returns {ticket_types: [...], addons: [...]} with price as Decimal strings.
+      // Normalize into a flat array with a "type" field for the catalog renderer.
+      var tickets = (data.ticket_types || []).map(function(tt) {
+        return {
+          id: tt.id,
+          name: tt.name,
+          price: tt.price,
+          type: "ticket",
+          remaining: tt.remaining_quantity,
+          requires_voucher: tt.requires_voucher || false
+        };
+      });
+      var addons = (data.addons || []).map(function(a) {
+        return {
+          id: a.id,
+          name: a.name,
+          price: a.price,
+          type: "addon",
+          remaining: null
+        };
+      });
+      inventory = tickets.concat(addons);
+      renderCatalog();
+    } catch (err) {
+      catalogLoading.textContent = "Failed to load inventory.";
+    }
+  }
+
+  function renderCatalog() {
+    catalogLoading.style.display = "none";
+    catalogContainer.innerHTML = "";
+
+    var tickets = inventory.filter(function(i) { return i.type === "ticket"; });
+    var addons = inventory.filter(function(i) { return i.type === "addon"; });
+
+    if (tickets.length > 0) {
+      var h = document.createElement("div");
+      h.className = "catalog-section-heading";
+      h.textContent = "Tickets";
+      catalogContainer.appendChild(h);
+
+      var grid = document.createElement("div");
+      grid.className = "catalog-grid";
+      tickets.forEach(function(item) { grid.appendChild(createCatalogCard(item)); });
+      catalogContainer.appendChild(grid);
+    }
+
+    if (addons.length > 0) {
+      var h2 = document.createElement("div");
+      h2.className = "catalog-section-heading";
+      h2.textContent = "Add-ons";
+      catalogContainer.appendChild(h2);
+
+      var grid2 = document.createElement("div");
+      grid2.className = "catalog-grid";
+      addons.forEach(function(item) { grid2.appendChild(createCatalogCard(item)); });
+      catalogContainer.appendChild(grid2);
+    }
+
+    if (tickets.length === 0 && addons.length === 0) {
+      catalogContainer.innerHTML = '<div class="catalog-loading">No products available.</div>';
+    }
+  }
+
+  function createCatalogCard(item) {
+    var soldOut = item.remaining != null && item.remaining <= 0;
+    var card = document.createElement("div");
+    card.className = "catalog-item" + (soldOut ? " catalog-item--soldout" : "");
+    card.innerHTML =
+      '<span class="catalog-item-type"><span class="badge badge--' +
+      (item.type === "ticket" ? "talk" : "other") + '">' + escapeHtml(item.type) + '</span></span>' +
+      '<div class="catalog-item-name">' + escapeHtml(item.name) + '</div>' +
+      '<div class="catalog-item-price">' + formatCurrency(item.price) + '</div>' +
+      (item.remaining != null
+        ? '<div class="catalog-item-stock">' + item.remaining + ' remaining</div>'
+        : "");
+
+    if (!soldOut) {
+      card.addEventListener("click", function() { addToCart(item); });
+    }
+    return card;
+  }
+
+  // ---- Cart Management ----
+
+  function addToCart(item) {
+    // Match on both id and type to avoid collisions between ticket types and addons
+    var existing = cart.find(function(c) { return c.id === item.id && c.type === item.type; });
+    if (existing) {
+      existing.quantity++;
+    } else {
+      cart.push({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: 1,
+        type: item.type
+      });
+    }
+    renderCart();
+  }
+
+  function updateCartQty(itemId, itemType, delta) {
+    var idx = cart.findIndex(function(c) { return c.id === itemId && c.type === itemType; });
+    if (idx === -1) return;
+    cart[idx].quantity += delta;
+    if (cart[idx].quantity <= 0) {
+      cart.splice(idx, 1);
+    }
+    renderCart();
+  }
+
+  function renderCart() {
+    cartItems.innerHTML = "";
+
+    if (cart.length === 0) {
+      cartEmpty.style.display = "";
+      voucherRow.style.display = "none";
+      cartTotals.style.display = "none";
+      updateChargeButton();
+      return;
+    }
+
+    cartEmpty.style.display = "none";
+    voucherRow.style.display = "flex";
+    cartTotals.style.display = "";
+
+    var subtotal = 0;
+
+    cart.forEach(function(item) {
+      var unitPrice = parseFloat(item.price);
+      var lineTotal = unitPrice * item.quantity;
+      subtotal += lineTotal;
+
+      var li = document.createElement("li");
+      li.className = "cart-item";
+      li.innerHTML =
+        '<div class="cart-item-info">' +
+          '<div class="cart-item-name">' + escapeHtml(item.name) + '</div>' +
+          '<div class="cart-item-unit-price">' + formatCurrency(item.price) + ' ea</div>' +
+        '</div>' +
+        '<div class="cart-item-qty">' +
+          '<button type="button" data-id="' + item.id + '" data-type="' + item.type + '" data-delta="-1">&minus;</button>' +
+          '<span class="cart-item-qty-value">' + item.quantity + '</span>' +
+          '<button type="button" data-id="' + item.id + '" data-type="' + item.type + '" data-delta="1">+</button>' +
+        '</div>' +
+        '<div class="cart-item-total">' + formatCurrency(lineTotal) + '</div>';
+
+      li.querySelectorAll(".cart-item-qty button").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          updateCartQty(parseInt(btn.dataset.id, 10), btn.dataset.type, parseInt(btn.dataset.delta, 10));
+        });
+      });
+
+      cartItems.appendChild(li);
+    });
+
+    var discount = 0;
+    if (appliedVoucher && appliedVoucher.discount) {
+      discount = appliedVoucher.discount;
+    }
+
+    var total = Math.max(0, subtotal - discount);
+
+    cartSubtotal.textContent = formatCurrency(subtotal);
+
+    if (discount > 0) {
+      cartDiscountRow.style.display = "";
+      cartDiscount.textContent = "-" + formatCurrency(discount);
+    } else {
+      cartDiscountRow.style.display = "none";
+    }
+
+    cartTotal.textContent = formatCurrency(total);
+    updateChargeButton();
+  }
+
+  function clearCart() {
+    cart = [];
+    appliedVoucher = null;
+    voucherApplied.classList.remove("visible");
+    voucherInput.value = "";
+    renderCart();
+  }
+
+  // ---- Cart Sync ----
+
+  function buildCartPayload() {
+    // Build the items array matching what CartOperationsView._handle_update expects:
+    // each item needs either ticket_type_id or addon_id, plus quantity.
+    return cart.map(function(c) {
+      var item = {quantity: c.quantity};
+      if (c.type === "ticket") {
+        item.ticket_type_id = c.id;
+      } else {
+        item.addon_id = c.id;
+      }
+      return item;
+    });
+  }
+
+  // ---- Voucher ----
+  // NOTE: CartOperationsView does not currently support server-side voucher
+  // validation. Voucher application is handled as a client-side placeholder
+  // that stores the code for later submission during checkout. If the backend
+  // gains voucher support, update this function accordingly.
+
+  async function applyVoucher() {
+    var code = voucherInput.value.trim();
+    if (!code) return;
+
+    // For now, store the voucher code locally. The actual discount would need
+    // to be validated server-side when the backend supports it. We show the
+    // voucher as "pending" so the operator knows it was entered.
+    appliedVoucher = {code: code, discount: 0};
+    voucherAppliedText.textContent = "Voucher " + code + " (pending server validation)";
+    voucherApplied.classList.add("visible");
+    voucherRow.style.display = "none";
+    renderCart();
+  }
+
+  function removeVoucher() {
+    appliedVoucher = null;
+    voucherInput.value = "";
+    voucherApplied.classList.remove("visible");
+    voucherRow.style.display = "flex";
+    renderCart();
+  }
+
+  // ---- Payment Flow ----
+
+  function updateChargeButton() {
+    var hasItems = cart.length > 0;
+    var hasReader = connectedReader !== null;
+    btnCharge.disabled = !(hasItems && hasReader);
+  }
+
+  function showPaymentStatus(message, statusClass) {
+    paymentStatus.className = "payment-status visible payment-status--" + statusClass;
+    paymentStatus.textContent = message;
+  }
+
+  function hidePaymentStatus() {
+    paymentStatus.className = "payment-status";
+    paymentStatus.textContent = "";
+  }
+
+  async function chargeCard() {
+    if (!connectedReader || cart.length === 0) return;
+
+    btnCharge.disabled = true;
+    btnCharge.textContent = "Processing...";
+    btnCancelPayment.style.display = "";
+
+    try {
+      // Calculate total as a float (prices are Decimal strings from the API)
+      var subtotal = cart.reduce(function(sum, item) {
+        return sum + parseFloat(item.price) * item.quantity;
+      }, 0);
+      var discount = appliedVoucher ? (appliedVoucher.discount || 0) : 0;
+      var total = Math.max(0, subtotal - discount);
+
+      showPaymentStatus("Creating payment...", "processing");
+
+      // Build payload for CreatePaymentIntentView.
+      // The view accepts either order_id (to pay an existing order) or amount
+      // (as a Decimal string for walk-up sales). reader_id is always required.
+      var intentPayload = {reader_id: connectedReader.id};
+      if (currentOrderId) {
+        intentPayload.order_id = currentOrderId;
+      } else {
+        intentPayload.amount = total.toFixed(2);
+      }
+
+      var intentData = await apiFetch(API.createIntent, {
+        method: "POST",
+        body: JSON.stringify(intentPayload)
+      });
+
+      currentPaymentIntentId = intentData.payment_intent_id;
+
+      showPaymentStatus("Present card on reader...", "waiting");
+
+      // Collect payment method via the terminal reader
+      var collectResult = await terminal.collectPaymentMethod(intentData.client_secret || currentPaymentIntentId);
+
+      if (collectResult.error) {
+        throw new Error(collectResult.error.message);
+      }
+
+      showPaymentStatus("Processing payment...", "processing");
+
+      // Process the payment
+      var processResult = await terminal.processPayment(collectResult.paymentIntent);
+
+      if (processResult.error) {
+        throw new Error(processResult.error.message);
+      }
+
+      var pi = processResult.paymentIntent;
+
+      if (pi.status === "requires_capture") {
+        showPaymentStatus("Payment approved - ready to capture", "approved");
+        btnCapture.style.display = "";
+        btnCancelPayment.style.display = "";
+        btnCharge.style.display = "none";
+
+        // Show card details if available
+        if (pi.charges && pi.charges.data && pi.charges.data.length > 0) {
+          var charge = pi.charges.data[0];
+          var pm = charge.payment_method_details;
+          if (pm && pm.card_present) {
+            receiptCard.textContent = (pm.card_present.brand || "Card").toUpperCase() + " ****" + (pm.card_present.last4 || "????");
+          }
+        }
+      } else if (pi.status === "succeeded") {
+        // Auto-captured
+        showPaymentComplete(pi);
+      }
+    } catch (err) {
+      showPaymentStatus("Payment failed: " + err.message, "declined");
+      resetPaymentControls();
+    }
+  }
+
+  async function capturePayment() {
+    if (!currentPaymentIntentId) return;
+
+    btnCapture.disabled = true;
+    btnCapture.textContent = "Capturing...";
+    showPaymentStatus("Capturing payment...", "processing");
+
+    try {
+      var data = await apiFetch(API.capture, {
+        method: "POST",
+        body: JSON.stringify({payment_intent_id: currentPaymentIntentId})
+      });
+
+      showPaymentStatus("Payment captured", "captured");
+      showReceipt();
+    } catch (err) {
+      showPaymentStatus("Capture failed: " + err.message, "declined");
+      btnCapture.disabled = false;
+      btnCapture.textContent = "Capture Payment";
+    }
+  }
+
+  async function cancelPayment() {
+    if (!currentPaymentIntentId) {
+      resetPaymentControls();
+      hidePaymentStatus();
+      return;
+    }
+
+    try {
+      if (terminal && connectedReader) {
+        await terminal.cancelCollectPaymentMethod();
+      }
+    } catch (e) { /* may not be collecting */ }
+
+    try {
+      await apiFetch(API.cancel, {
+        method: "POST",
+        body: JSON.stringify({
+          payment_intent_id: currentPaymentIntentId,
+          reader_id: connectedReader ? connectedReader.id : null
+        })
+      });
+    } catch (e) { /* best-effort */ }
+
+    currentPaymentIntentId = null;
+    hidePaymentStatus();
+    resetPaymentControls();
+  }
+
+  function showPaymentComplete(pi) {
+    showPaymentStatus("Payment complete", "captured");
+    showReceipt();
+  }
+
+  function showReceipt() {
+    var subtotal = cart.reduce(function(sum, item) {
+      return sum + parseFloat(item.price) * item.quantity;
+    }, 0);
+    var discount = appliedVoucher ? (appliedVoucher.discount || 0) : 0;
+    var total = Math.max(0, subtotal - discount);
+
+    receiptAmount.textContent = formatCurrency(total);
+    receiptStatus.textContent = "Captured";
+    receiptDisplay.classList.add("visible");
+
+    btnCapture.style.display = "none";
+    btnCancelPayment.style.display = "none";
+    btnCharge.style.display = "none";
+    btnNewSale.style.display = "";
+  }
+
+  function resetPaymentControls() {
+    currentPaymentIntentId = null;
+    btnCharge.style.display = "";
+    btnCharge.disabled = false;
+    btnCharge.textContent = "Charge Card";
+    btnCancelPayment.style.display = "none";
+    btnCapture.style.display = "none";
+    btnCapture.disabled = false;
+    btnCapture.textContent = "Capture Payment";
+    updateChargeButton();
+  }
+
+  function startNewSale() {
+    currentPaymentIntentId = null;
+    currentAttendee = null;
+    currentOrderId = null;
+
+    hidePaymentStatus();
+    receiptDisplay.classList.remove("visible");
+    receiptCard.textContent = "--";
+    receiptAmount.textContent = "--";
+    receiptStatus.textContent = "--";
+    btnNewSale.style.display = "none";
+
+    attendeeInfo.classList.remove("visible");
+    lookupInput.value = "";
+
+    clearCart();
+    resetPaymentControls();
+    loadInventory();
+  }
+
+  // ---- Event Listeners ----
+
+  btnConnect.addEventListener("click", connectReader);
+  btnDisconnect.addEventListener("click", disconnectReader);
+  btnLookup.addEventListener("click", lookupAttendee);
+  lookupInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") { e.preventDefault(); lookupAttendee(); }
+  });
+  btnApplyVoucher.addEventListener("click", applyVoucher);
+  voucherInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") { e.preventDefault(); applyVoucher(); }
+  });
+  btnRemoveVoucher.addEventListener("click", removeVoucher);
+  btnCharge.addEventListener("click", chargeCard);
+  btnCancelPayment.addEventListener("click", cancelPayment);
+  btnCapture.addEventListener("click", capturePayment);
+  btnNewSale.addEventListener("click", startNewSale);
+
+  // ---- Initialization ----
+
+  initTerminal();
+  loadReaders();
+  loadInventory();
+})();
+</script>
+{% endblock %}

@@ -28,6 +28,7 @@ from django_program.registration.models import (
     TicketType,
     Voucher,
 )
+from django_program.registration.terminal import TerminalPayment
 
 
 @admin.register(Attendee)
@@ -436,4 +437,48 @@ class BadgeAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request: HttpRequest, obj: Badge | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+
+# -- Terminal payment admin ---------------------------------------------------
+
+
+@admin.register(TerminalPayment)
+class TerminalPaymentAdmin(admin.ModelAdmin):
+    """Read-only admin for Stripe Terminal payment records."""
+
+    list_display = (
+        "payment_intent_id",
+        "conference",
+        "capture_status",
+        "card_brand",
+        "card_last4",
+        "reader_id",
+        "created_at",
+    )
+    list_filter = ("conference", "capture_status", "card_brand")
+    search_fields = ("payment_intent_id", "reader_id", "terminal_id", "card_last4")
+    readonly_fields = (
+        "payment",
+        "conference",
+        "terminal_id",
+        "reader_id",
+        "payment_intent_id",
+        "capture_status",
+        "captured_at",
+        "cancelled_at",
+        "card_brand",
+        "card_last4",
+        "receipt_url",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: TerminalPayment | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: TerminalPayment | None = None) -> bool:  # noqa: ARG002, D102
         return False
