@@ -357,6 +357,9 @@ class CheckInAdmin(admin.ModelAdmin):
     def has_change_permission(self, request: HttpRequest, obj: CheckIn | None = None) -> bool:  # noqa: ARG002, D102
         return False
 
+    def has_delete_permission(self, request: HttpRequest, obj: CheckIn | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
 
 @admin.register(DoorCheck)
 class DoorCheckAdmin(admin.ModelAdmin):
@@ -379,6 +382,9 @@ class DoorCheckAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request: HttpRequest, obj: DoorCheck | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: DoorCheck | None = None) -> bool:  # noqa: ARG002, D102
         return False
 
 

@@ -184,8 +184,8 @@
     margin-top: 0.1rem;
   }
 
-  .product-row--redeemed .product-name,
-  .product-row--redeemed .product-counts {
+  .product-row--fully-redeemed .product-name,
+  .product-row--fully-redeemed .product-counts {
     opacity: 0.45;
     text-decoration: line-through;
   }
@@ -212,6 +212,17 @@
     background: var(--color-bg);
     border-color: var(--color-border);
     color: var(--color-text-muted);
+  }
+
+  .order-status-warning {
+    padding: 0.6rem 1rem;
+    margin-bottom: 1rem;
+    border-radius: var(--radius-sm);
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+    border: 1px solid var(--color-warning-border);
+    font-size: 0.88rem;
+    font-weight: 600;
   }
 
   .idle-message {
@@ -287,6 +298,7 @@
 
   <div class="attendee-panel card card--static" id="attendeePanel">
     <div class="card-body">
+      <div class="order-status-warning" id="orderStatusWarning" style="display:none;"></div>
       <div class="attendee-header">
         <div>
           <div class="attendee-name" id="attendeeName"></div>
@@ -386,7 +398,21 @@
   // Track the current attendee's access code for redemption requests
   var currentAccessCode = "";
 
-  function renderAttendee(attendee, badge) {
+  // Track scanned codes this session for re-entry detection
+  var scannedCodes = new Set();
+
+  var orderStatusWarning = document.getElementById("orderStatusWarning");
+
+  function renderOrderStatus(orderStatus) {
+    if (orderStatus && orderStatus !== "paid") {
+      orderStatusWarning.textContent = "Order status: " + orderStatus.charAt(0).toUpperCase() + orderStatus.slice(1);
+      orderStatusWarning.style.display = "block";
+    } else {
+      orderStatusWarning.style.display = "none";
+    }
+  }
+
+  function renderAttendee(attendee, badge, orderStatus) {
     attendeeName.textContent = attendee.name || "Unknown";
     attendeeEmail.textContent = attendee.email || "";
     attendeeCode.textContent = attendee.access_code || "";
@@ -413,6 +439,7 @@
         '<div class="attendee-meta-value">' + escapeHtml(new Date(attendee.checked_in_at).toLocaleString()) + '</div></div>';
     }
     attendeeMeta.innerHTML = metaHtml;
+    renderOrderStatus(orderStatus);
   }
 
   function renderProducts(redeemable) {
@@ -424,18 +451,21 @@
     noProducts.style.display = "none";
 
     redeemable.forEach(function(p) {
-      var isRedeemed = !!p.redeemed;
+      var redeemedCount = p.redeemed_count || 0;
+      var remaining = (p.remaining != null) ? p.remaining : (p.quantity - redeemedCount);
+      var fullyRedeemed = remaining <= 0;
+
       var row = document.createElement("div");
-      row.className = "product-row" + (isRedeemed ? " product-row--redeemed" : "");
+      row.className = "product-row" + (fullyRedeemed ? " product-row--fully-redeemed" : "");
 
       var info = document.createElement("div");
       info.className = "product-info";
       info.innerHTML = '<div class="product-name">' + escapeHtml(p.description) + '</div>' +
-        '<div class="product-counts">Qty: ' + p.quantity +
-        (isRedeemed ? ' | Redeemed' : ' | Available') + '</div>';
+        '<div class="product-counts">Redeemed ' + redeemedCount + '/' + p.quantity +
+        (remaining > 0 ? ' | ' + remaining + ' remaining' : ' | Fully redeemed') + '</div>';
       row.appendChild(info);
 
-      if (!isRedeemed) {
+      if (remaining > 0) {
         var btn = document.createElement("button");
         btn.type = "button";
         btn.className = "btn-redeem";
@@ -477,7 +507,6 @@
       if (!response.ok) {
         showStatus(data.error || "Scan failed", "error");
         flashScreen("error");
-        hideResults();
         refocusScan();
         return;
       }
@@ -485,16 +514,18 @@
       var attendee = data.attendee || {};
       var displayName = attendee.name || trimmed;
 
-      // If the attendee was already checked in before this scan, it is a re-entry
-      if (attendee.checked_in && attendee.checked_in_at && data.checked_in_at
-          && attendee.checked_in_at !== data.checked_in_at) {
+      // Detect re-entry: same code scanned again in this session
+      var isReentry = scannedCodes.has(trimmed);
+      scannedCodes.add(trimmed);
+
+      if (isReentry) {
         showStatus("Re-entry: " + displayName, "reentry");
       } else {
         showStatus("Checked in: " + displayName, "success");
       }
       flashScreen("success");
 
-      renderAttendee(attendee, data.badge || null);
+      renderAttendee(attendee, data.badge || null, data.order_status);
       showResults();
 
       // Fetch the full lookup data to get redeemable products
@@ -533,7 +564,8 @@
         return;
       }
 
-      showStatus("Redeemed: " + (data.description || "product"), "success");
+      var redeemDesc = (data.line_item && data.line_item.description) || data.description || "product";
+      showStatus("Redeemed: " + redeemDesc, "success");
       flashScreen("success");
 
       // Re-fetch to refresh the redeemable product list
@@ -565,7 +597,7 @@
       var response = await fetch(lookupUrl(accessCode));
       if (!response.ok) return;
       var data = await response.json();
-      renderAttendee(data.attendee || {}, null);
+      renderAttendee(data.attendee || {}, null, data.order_status);
       renderProducts(data.redeemable || []);
     } catch (err) {
       // Silently fail on refresh; the previous data remains visible

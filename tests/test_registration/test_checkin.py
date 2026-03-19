@@ -45,6 +45,9 @@ def _make_user(**kwargs: object) -> object:
 
 
 def _make_staff_user(**kwargs: object) -> object:
+    """Create a staff user with the change_conference permission required by check-in API."""
+    from django.contrib.auth.models import Permission
+
     defaults: dict[str, object] = {
         "username": f"staff-{uuid4().hex[:8]}",
         "email": f"{uuid4().hex[:8]}@test.com",
@@ -52,7 +55,10 @@ def _make_staff_user(**kwargs: object) -> object:
         "password": "testpass123",
     }
     defaults.update(kwargs)
-    return User.objects.create_user(**defaults)
+    user = User.objects.create_user(**defaults)
+    perm = Permission.objects.get(content_type__app_label="program_conference", codename="change_conference")
+    user.user_permissions.add(perm)
+    return user
 
 
 def _make_order(*, conference: Conference, user: object, status: str = Order.Status.PAID) -> Order:

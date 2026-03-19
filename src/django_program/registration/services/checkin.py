@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from django_program.registration.attendee import Attendee
 from django_program.registration.checkin import CheckIn, DoorCheck, ProductRedemption
-from django_program.registration.models import AddOn, OrderLineItem, TicketType
+from django_program.registration.models import AddOn, Order, OrderLineItem, TicketType
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractUser
@@ -26,6 +26,20 @@ logger = logging.getLogger(__name__)
 
 class CheckInService:
     """Service for attendee check-in operations at the conference venue."""
+
+    ACTIVE_ORDER_STATUSES = {Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED}
+
+    @staticmethod
+    def validate_order_status(attendee: Attendee) -> str | None:
+        """Check if the attendee has a valid order for check-in.
+
+        Returns None if valid, or an error message string if not.
+        """
+        if attendee.order is None:
+            return "Attendee has no associated order."
+        if attendee.order.status not in CheckInService.ACTIVE_ORDER_STATUSES:
+            return f"Order status is '{attendee.order.get_status_display()}' — check-in not allowed."
+        return None
 
     @staticmethod
     def lookup_attendee(*, conference: Conference, access_code: str) -> Attendee:
@@ -164,6 +178,13 @@ class CheckInService:
             msg = "Exactly one of ticket_type or addon must be provided."
             raise ValueError(msg)
 
+        if ticket_type is not None and ticket_type.conference_id != attendee.conference_id:
+            msg = "Ticket type does not belong to the attendee's conference."
+            raise ValueError(msg)
+        if addon is not None and addon.conference_id != attendee.conference_id:
+            msg = "Add-on does not belong to the attendee's conference."
+            raise ValueError(msg)
+
         door_check = DoorCheck.objects.create(
             attendee=attendee,
             conference=attendee.conference,
@@ -209,7 +230,7 @@ class RedemptionService:
             return []
 
         line_items = (
-            OrderLineItem.objects.filter(order=attendee.order)
+            OrderLineItem.objects.filter(order=attendee.order, addon__isnull=False)
             .annotate(
                 redeemed_count=Count(
                     "redemptions",

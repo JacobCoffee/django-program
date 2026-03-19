@@ -9,7 +9,7 @@ is responsible for including the CSRF token in POST requests.
 import json
 import logging
 
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -46,7 +46,7 @@ class StaffRequiredMixin:
         """
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required"}, status=401)
-        if not (request.user.is_staff or request.user.is_superuser):
+        if not (request.user.is_superuser or request.user.has_perm("program_conference.change_conference")):
             return JsonResponse({"error": "Staff access required"}, status=403)
         self.conference = get_object_or_404(Conference, slug=kwargs.get("conference_slug"))
         return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
@@ -143,6 +143,17 @@ class ScanView(StaffRequiredMixin, View):
                 status=404,
             )
 
+        status_error = CheckInService.validate_order_status(attendee)
+        if status_error is not None:
+            return JsonResponse(
+                {
+                    "error": status_error,
+                    "access_code": access_code,
+                    "order_status": str(attendee.order.status) if attendee.order else None,
+                },
+                status=409,
+            )
+
         checkin = CheckInService.check_in(
             attendee=attendee,
             checked_in_by=request.user,
@@ -204,9 +215,18 @@ class LookupView(StaffRequiredMixin, View):
             line_items = list(order.line_items.select_related("ticket_type", "addon").all())
             products = [_serialize_line_item(item) for item in line_items]
 
-            redeemed_item_ids = set(attendee.redemptions.values_list("order_line_item_id", flat=True))
+            redeemed_counts: dict[int, int] = {}
+            for r in attendee.redemptions.values("order_line_item_id").annotate(count=Count("id")):
+                redeemed_counts[r["order_line_item_id"]] = r["count"]
+
             redeemable = [
-                {**_serialize_line_item(item), "redeemed": item.pk in redeemed_item_ids} for item in line_items
+                {
+                    **_serialize_line_item(item),
+                    "redeemed_count": redeemed_counts.get(item.pk, 0),
+                    "remaining": item.quantity - redeemed_counts.get(item.pk, 0),
+                }
+                for item in line_items
+                if item.addon_id is not None
             ]
 
         return JsonResponse(
@@ -217,6 +237,7 @@ class LookupView(StaffRequiredMixin, View):
                 },
                 "products": products,
                 "redeemable": redeemable,
+                "order_status": str(attendee.order.status) if attendee.order else None,
             }
         )
 
@@ -260,8 +281,16 @@ class RedeemView(StaffRequiredMixin, View):
                 status=404,
             )
 
-        if attendee.order is None:
-            return JsonResponse({"error": "Attendee has no associated order"}, status=400)
+        status_error = CheckInService.validate_order_status(attendee)
+        if status_error is not None:
+            return JsonResponse(
+                {
+                    "error": status_error,
+                    "access_code": access_code,
+                    "order_status": str(attendee.order.status) if attendee.order else None,
+                },
+                status=409,
+            )
 
         try:
             line_item = attendee.order.line_items.get(pk=line_item_id)
@@ -320,7 +349,7 @@ class OfflinePreloadView(StaffRequiredMixin, View):
             Attendee.objects.filter(
                 conference=self.conference,
                 order__isnull=False,
-                order__status=Order.Status.PAID,
+                order__status__in=[Order.Status.PAID, Order.Status.PARTIALLY_REFUNDED],
             )
             .select_related("user", "order")
             .prefetch_related(
@@ -357,10 +386,13 @@ class OfflinePreloadView(StaffRequiredMixin, View):
         ticket_type_name = ""
 
         if order is not None:
-            redeemed_item_ids = set(attendee.redemptions.values_list("order_line_item_id", flat=True))
+            redeemed_counts: dict[int, int] = {}
+            for r in attendee.redemptions.values("order_line_item_id").annotate(count=Count("id")):
+                redeemed_counts[r["order_line_item_id"]] = r["count"]
             for item in order.line_items.all():
                 product_data = _serialize_line_item(item)
-                product_data["redeemed"] = item.pk in redeemed_item_ids
+                product_data["redeemed_count"] = redeemed_counts.get(item.pk, 0)
+                product_data["remaining"] = item.quantity - redeemed_counts.get(item.pk, 0)
                 products.append(product_data)
 
                 if item.ticket_type and not ticket_type_name:
