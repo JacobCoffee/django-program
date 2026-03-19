@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.http import HttpRequest  # noqa: TC002
 
 from django_program.registration.badge import Badge, BadgeTemplate
+from django_program.registration.checkin import CheckIn, DoorCheck, ProductRedemption
 from django_program.registration.conditions import (
     DiscountForCategory,
     DiscountForProduct,
@@ -336,6 +337,68 @@ class DiscountForCategoryAdmin(admin.ModelAdmin):
     )
     list_filter = ("conference", "is_active", "apply_to_tickets", "apply_to_addons")
     search_fields = ("name",)
+
+
+# -- Check-in admin -----------------------------------------------------------
+
+
+@admin.register(CheckIn)
+class CheckInAdmin(admin.ModelAdmin):
+    """Admin interface for viewing conference check-in records."""
+
+    list_display = ("attendee", "conference", "station", "checked_in_by", "checked_in_at")
+    list_filter = ("conference", "station")
+    search_fields = ("attendee__user__username", "attendee__user__email", "attendee__access_code")
+    readonly_fields = ("attendee", "conference", "checked_in_at", "checked_in_by", "station", "note")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: CheckIn | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+
+@admin.register(DoorCheck)
+class DoorCheckAdmin(admin.ModelAdmin):
+    """Admin interface for viewing per-product door check records."""
+
+    list_display = ("attendee", "conference", "ticket_type", "addon", "station", "checked_by", "checked_at")
+    list_filter = ("conference", "station")
+    search_fields = ("attendee__user__username", "attendee__user__email", "attendee__access_code")
+    readonly_fields = (
+        "attendee",
+        "ticket_type",
+        "addon",
+        "conference",
+        "checked_at",
+        "checked_by",
+        "station",
+    )
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: DoorCheck | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+
+@admin.register(ProductRedemption)
+class ProductRedemptionAdmin(admin.ModelAdmin):
+    """Read-only admin for viewing product redemption audit records."""
+
+    list_display = ("attendee", "order_line_item", "conference", "redeemed_by", "redeemed_at")
+    list_filter = ("conference",)
+    search_fields = ("attendee__user__username", "attendee__user__email", "attendee__access_code")
+    readonly_fields = ("attendee", "order_line_item", "conference", "redeemed_at", "redeemed_by", "note")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj: ProductRedemption | None = None) -> bool:  # noqa: ARG002, D102
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj: ProductRedemption | None = None) -> bool:  # noqa: ARG002, D102
+        return False
 
 
 # -- Badge admin --------------------------------------------------------------

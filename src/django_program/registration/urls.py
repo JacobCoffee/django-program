@@ -21,6 +21,12 @@ from django_program.registration.views import (
     OrderDetailView,
     TicketSelectView,
 )
+from django_program.registration.views_checkin import (
+    LookupView,
+    OfflinePreloadView,
+    RedeemView,
+    ScanView,
+)
 from django_program.registration.webhooks import stripe_webhook
 
 app_name = "registration"
@@ -32,4 +38,9 @@ urlpatterns = [
     path("orders/<str:reference>/", OrderDetailView.as_view(), name="order-detail"),
     path("orders/<str:reference>/confirmation/", OrderConfirmationView.as_view(), name="order-confirmation"),
     path("webhooks/stripe/", stripe_webhook, name="stripe-webhook"),
+    # Check-in API (staff-only, JSON endpoints for scanner UI)
+    path("checkin/scan/", ScanView.as_view(), name="checkin-scan"),
+    path("checkin/lookup/<str:access_code>/", LookupView.as_view(), name="checkin-lookup"),
+    path("checkin/redeem/", RedeemView.as_view(), name="checkin-redeem"),
+    path("checkin/preload/", OfflinePreloadView.as_view(), name="checkin-preload"),
 ]

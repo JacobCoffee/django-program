@@ -1,0 +1,575 @@
+{% extends "django_program/manage/base.html" %}
+
+{% block title %}Check-in Scanner{% endblock %}
+
+{% block extra_head %}
+<style>
+  .scanner-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  .scanner-input-panel {
+    grid-column: 1 / -1;
+  }
+
+  .scan-field {
+    width: 100%;
+    padding: 1rem 1.25rem;
+    font-size: 1.4rem;
+    font-family: var(--font-mono);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    letter-spacing: 0.05em;
+  }
+  .scan-field:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 4px rgba(67, 56, 202, 0.15);
+  }
+  .scan-field::placeholder {
+    color: var(--color-text-muted);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    letter-spacing: normal;
+  }
+
+  .station-config {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+  .station-config label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+  .station-config input {
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background: var(--color-surface);
+    max-width: 220px;
+  }
+  .station-config input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1);
+  }
+
+  /* Status indicator */
+  .status-bar {
+    grid-column: 1 / -1;
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+    transition: background 0.3s ease, color 0.3s ease, opacity 0.3s ease;
+    display: none;
+  }
+  .status-bar.visible { display: block; }
+  .status-bar--success { background: var(--color-success-bg); color: var(--color-success); border: 1px solid var(--color-success); }
+  .status-bar--reentry { background: var(--color-warning-bg); color: var(--color-warning); border: 1px solid var(--color-warning-border); }
+  .status-bar--error { background: var(--color-danger-bg); color: var(--color-danger); border: 1px solid var(--color-danger); }
+
+  /* Flash overlay */
+  .scan-flash {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .scan-flash.flash-success { background: rgba(5, 150, 105, 0.12); opacity: 1; }
+  .scan-flash.flash-error { background: rgba(220, 38, 38, 0.12); opacity: 1; }
+
+  /* Attendee display */
+  .attendee-panel {
+    display: none;
+  }
+  .attendee-panel.visible { display: block; }
+
+  .attendee-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+  .attendee-name {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+  .attendee-email {
+    font-size: 0.88rem;
+    color: var(--color-text-secondary);
+  }
+  .attendee-code {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-sm);
+    margin-left: auto;
+  }
+
+  .attendee-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+  .attendee-meta-item {
+    padding: 0.6rem 0.75rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+  }
+  .attendee-meta-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+  }
+  .attendee-meta-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-top: 0.1rem;
+  }
+
+  /* Products / redemption list */
+  .products-panel {
+    display: none;
+  }
+  .products-panel.visible { display: block; }
+
+  .product-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+  .product-row:last-child { border-bottom: none; }
+
+  .product-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .product-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+  .product-counts {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    margin-top: 0.1rem;
+  }
+
+  .product-row--redeemed .product-name,
+  .product-row--redeemed .product-counts {
+    opacity: 0.45;
+    text-decoration: line-through;
+  }
+
+  .btn-redeem {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid var(--color-success);
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn-redeem:hover {
+    background: var(--color-success);
+    color: #ffffff;
+  }
+  .btn-redeem:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: var(--color-bg);
+    border-color: var(--color-border);
+    color: var(--color-text-muted);
+  }
+
+  .idle-message {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+  }
+  .idle-message.hidden { display: none; }
+
+  @media (max-width: 768px) {
+    .scanner-layout {
+      grid-template-columns: 1fr;
+    }
+    .scan-field {
+      font-size: 1.1rem;
+      padding: 0.75rem 1rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb">
+  <a href="{% url 'manage:conference-list' %}">Conferences</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:dashboard' conference.slug %}">{{ conference.name }}</a>
+  <span class="breadcrumb-separator"></span>
+  <a href="{% url 'manage:checkin-dashboard' conference.slug %}">Check-in</a>
+  <span class="breadcrumb-separator"></span>
+  Scanner
+</nav>
+{% endblock %}
+
+{% block page_title %}
+<h1>Check-in Scanner</h1>
+<p>Scan badges or enter access codes to check in attendees.</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'manage:checkin-dashboard' conference.slug %}" class="btn btn-secondary">Dashboard</a>
+{% endblock %}
+
+{% block content %}
+<div class="scan-flash" id="scanFlash"></div>
+
+<div class="scanner-layout">
+  <div class="scanner-input-panel">
+    <div class="card card--static">
+      <div class="card-body">
+        <input
+          type="text"
+          id="scanInput"
+          class="scan-field"
+          placeholder="Scan badge or type access code..."
+          autocomplete="off"
+          autofocus
+        >
+        <div class="station-config">
+          <label for="stationName">Station:</label>
+          <input type="text" id="stationName" placeholder="e.g. Door A">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar" id="statusBar"></div>
+
+  <div class="idle-message" id="idleMessage">
+    <p>Waiting for scan...</p>
+    <p style="font-size: 0.85rem; margin-top: 0.5rem;">Scan a badge barcode or QR code, or type an access code and press Enter.</p>
+  </div>
+
+  <div class="attendee-panel card card--static" id="attendeePanel">
+    <div class="card-body">
+      <div class="attendee-header">
+        <div>
+          <div class="attendee-name" id="attendeeName"></div>
+          <div class="attendee-email" id="attendeeEmail"></div>
+        </div>
+        <div class="attendee-code" id="attendeeCode"></div>
+      </div>
+      <div class="attendee-meta" id="attendeeMeta"></div>
+    </div>
+  </div>
+
+  <div class="products-panel card card--static" id="productsPanel">
+    <div class="card-body">
+      <h3 class="section-heading" style="margin-top: 0;">Redeemable Products</h3>
+      <div id="productsList"></div>
+      <div id="noProducts" class="empty-state" style="display:none; padding: 1.5rem;">
+        <p>No redeemable products for this attendee.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  "use strict";
+
+  const SCAN_URL = "{% url 'registration:checkin-scan' conference.slug %}";
+  const LOOKUP_BASE = "{% url 'registration:checkin-lookup' conference.slug 'PLACEHOLDER' %}";
+  const REDEEM_URL = "{% url 'registration:checkin-redeem' conference.slug %}";
+
+  function lookupUrl(accessCode) {
+    return LOOKUP_BASE.replace("PLACEHOLDER", encodeURIComponent(accessCode));
+  }
+
+  const scanInput = document.getElementById("scanInput");
+  const stationInput = document.getElementById("stationName");
+  const statusBar = document.getElementById("statusBar");
+  const scanFlash = document.getElementById("scanFlash");
+  const idleMessage = document.getElementById("idleMessage");
+  const attendeePanel = document.getElementById("attendeePanel");
+  const productsPanel = document.getElementById("productsPanel");
+  const attendeeName = document.getElementById("attendeeName");
+  const attendeeEmail = document.getElementById("attendeeEmail");
+  const attendeeCode = document.getElementById("attendeeCode");
+  const attendeeMeta = document.getElementById("attendeeMeta");
+  const productsList = document.getElementById("productsList");
+  const noProducts = document.getElementById("noProducts");
+
+  // Restore station name from localStorage
+  const savedStation = localStorage.getItem("checkin_station_name");
+  if (savedStation) {
+    stationInput.value = savedStation;
+  }
+  stationInput.addEventListener("change", function() {
+    localStorage.setItem("checkin_station_name", this.value);
+  });
+
+  function getCsrfToken() {
+    const cookie = document.cookie.split(";").find(function(c) {
+      return c.trim().startsWith("csrftoken=");
+    });
+    return cookie ? cookie.split("=")[1] : "";
+  }
+
+  function showStatus(message, type) {
+    statusBar.className = "status-bar visible status-bar--" + type;
+    statusBar.textContent = message;
+  }
+
+  function flashScreen(type) {
+    scanFlash.className = "scan-flash flash-" + type;
+    setTimeout(function() {
+      scanFlash.className = "scan-flash";
+    }, 300);
+  }
+
+  function refocusScan() {
+    scanInput.value = "";
+    scanInput.focus();
+  }
+
+  function hideResults() {
+    attendeePanel.classList.remove("visible");
+    productsPanel.classList.remove("visible");
+    idleMessage.classList.remove("hidden");
+    statusBar.classList.remove("visible");
+  }
+
+  function showResults() {
+    idleMessage.classList.add("hidden");
+    attendeePanel.classList.add("visible");
+    productsPanel.classList.add("visible");
+  }
+
+  function renderAttendee(data) {
+    attendeeName.textContent = data.name || "Unknown";
+    attendeeEmail.textContent = data.email || "";
+    attendeeCode.textContent = data.access_code || "";
+
+    var metaHtml = "";
+    if (data.ticket_type) {
+      metaHtml += '<div class="attendee-meta-item">' +
+        '<div class="attendee-meta-label">Ticket Type</div>' +
+        '<div class="attendee-meta-value">' + escapeHtml(data.ticket_type) + '</div></div>';
+    }
+    metaHtml += '<div class="attendee-meta-item">' +
+      '<div class="attendee-meta-label">Check-in Status</div>' +
+      '<div class="attendee-meta-value">' +
+      (data.checkin_count > 0
+        ? '<span class="badge badge--warning">Re-entry (#' + (data.checkin_count + 1) + ')</span>'
+        : '<span class="badge badge--active">First check-in</span>') +
+      '</div></div>';
+    metaHtml += '<div class="attendee-meta-item">' +
+      '<div class="attendee-meta-label">Previous Check-ins</div>' +
+      '<div class="attendee-meta-value">' + data.checkin_count + '</div></div>';
+    if (data.order_reference) {
+      metaHtml += '<div class="attendee-meta-item">' +
+        '<div class="attendee-meta-label">Order</div>' +
+        '<div class="attendee-meta-value mono">' + escapeHtml(data.order_reference) + '</div></div>';
+    }
+    attendeeMeta.innerHTML = metaHtml;
+  }
+
+  function renderProducts(products) {
+    productsList.innerHTML = "";
+    if (!products || products.length === 0) {
+      noProducts.style.display = "block";
+      return;
+    }
+    noProducts.style.display = "none";
+
+    products.forEach(function(p) {
+      var remaining = p.quantity - p.redeemed;
+      var isFullyRedeemed = remaining <= 0;
+      var row = document.createElement("div");
+      row.className = "product-row" + (isFullyRedeemed ? " product-row--redeemed" : "");
+
+      var info = document.createElement("div");
+      info.className = "product-info";
+      info.innerHTML = '<div class="product-name">' + escapeHtml(p.description) + '</div>' +
+        '<div class="product-counts">Qty: ' + p.quantity + ' | Redeemed: ' + p.redeemed +
+        ' | Remaining: ' + remaining + '</div>';
+      row.appendChild(info);
+
+      if (!isFullyRedeemed) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn-redeem";
+        btn.textContent = "Redeem";
+        btn.dataset.lineItemId = p.line_item_id;
+        btn.dataset.attendeeId = p.attendee_id;
+        btn.addEventListener("click", function() { redeemProduct(btn); });
+        row.appendChild(btn);
+      }
+
+      productsList.appendChild(row);
+    });
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  async function performScan(accessCode) {
+    if (!accessCode.trim()) return;
+
+    try {
+      var response = await fetch(SCAN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify({
+          access_code: accessCode.trim(),
+          station: stationInput.value.trim(),
+        }),
+      });
+
+      var data = await response.json();
+
+      if (!response.ok) {
+        showStatus(data.error || "Scan failed", "error");
+        flashScreen("error");
+        hideResults();
+        refocusScan();
+        return;
+      }
+
+      if (data.is_reentry) {
+        showStatus("Re-entry: " + (data.name || accessCode) + " (check-in #" + (data.checkin_count + 1) + ")", "reentry");
+      } else {
+        showStatus("Checked in: " + (data.name || accessCode), "success");
+      }
+      flashScreen("success");
+
+      renderAttendee(data);
+      renderProducts(data.products || []);
+      showResults();
+    } catch (err) {
+      showStatus("Network error: " + err.message, "error");
+      flashScreen("error");
+    }
+    refocusScan();
+  }
+
+  async function redeemProduct(btn) {
+    btn.disabled = true;
+    btn.textContent = "Redeeming...";
+
+    try {
+      var response = await fetch(REDEEM_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify({
+          attendee_id: parseInt(btn.dataset.attendeeId, 10),
+          line_item_id: parseInt(btn.dataset.lineItemId, 10),
+          station: stationInput.value.trim(),
+        }),
+      });
+
+      var data = await response.json();
+
+      if (!response.ok) {
+        showStatus(data.error || "Redemption failed", "error");
+        flashScreen("error");
+        btn.disabled = false;
+        btn.textContent = "Redeem";
+        return;
+      }
+
+      showStatus("Redeemed: " + (data.description || "product"), "success");
+      flashScreen("success");
+
+      // Re-fetch attendee to refresh product list
+      if (attendeeCode.textContent) {
+        await refreshAttendee(attendeeCode.textContent);
+      }
+    } catch (err) {
+      showStatus("Network error: " + err.message, "error");
+      flashScreen("error");
+      btn.disabled = false;
+      btn.textContent = "Redeem";
+    }
+    refocusScan();
+  }
+
+  async function refreshAttendee(accessCode) {
+    try {
+      var response = await fetch(lookupUrl(accessCode));
+      if (!response.ok) return;
+      var data = await response.json();
+      renderAttendee(data);
+      renderProducts(data.products || []);
+    } catch (err) {
+      // Silently fail on refresh; the previous data remains visible
+    }
+  }
+
+  // Handle Enter key on scan input
+  scanInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      performScan(this.value);
+    }
+  });
+
+  // Keep scan input focused when clicking anywhere in the scanner area
+  document.addEventListener("click", function(e) {
+    if (!e.target.closest(".station-config") && !e.target.closest(".btn-redeem")) {
+      scanInput.focus();
+    }
+  });
+
+  // Initial focus
+  scanInput.focus();
+})();
+</script>
+{% endblock %}
