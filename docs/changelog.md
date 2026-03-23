@@ -16,6 +16,20 @@ All notable changes to this project will be documented in this file.
 
 - correct create-pull-request SHA typo in CD workflow (#34) - ([ed76290](https://github.com/JacobCoffee/django-program/commit/ed76290daca23bdad74c6911a1b1d12313d8e7a8)) - Jacob Coffee
 
+- check-in review round 3 — unused logger, JSON validation, query optimization (#55) - ([1167f27](https://github.com/JacobCoffee/django-program/commit/1167f27e53ad17a097c87ebf749d76790fc9e61c)) - Jacob Coffee
+
+- prevent duplicate payments, overcharges, and double reader dispatch in Terminal backend (#56) - ([2a50c51](https://github.com/JacobCoffee/django-program/commit/2a50c515df30dbec73373af4342f26e426bbfa64)) - Jacob Coffee
+
+- terminal Codex review — duplicate payments, overcharges, double dispatch, cart flow (#57) - ([dcb0c0e](https://github.com/JacobCoffee/django-program/commit/dcb0c0e078b1ab92da39f3f999e77a0e4561c416)) - Jacob Coffee
+
+
+### Documentation
+
+
+- update changelog (#35) - ([378e0c1](https://github.com/JacobCoffee/django-program/commit/378e0c12d5c3a9cf81e85104613eed8bb8b8c23d)) - github-actions[bot]
+
+- add user documentation for 6 merged features (#37) - ([ca47832](https://github.com/JacobCoffee/django-program/commit/ca478320806e6df9b3ee4830fbc209750f9d1a76)) - Jacob Coffee
+
 
 ### Features
 
@@ -31,6 +45,34 @@ All notable changes to this project will be documented in this file.
 - add global ticket capacity for conferences (#32) - ([4b5b81a](https://github.com/JacobCoffee/django-program/commit/4b5b81ad876c8dc36c9d2031634a13453850d102)) - Jacob Coffee
 
 - add pretalx override system for JIT talk management (#30) - ([e630381](https://github.com/JacobCoffee/django-program/commit/e6303813981b01aba3f6301f22245e196938091c)) - Jacob Coffee
+
+- add attendee profile system (#44) - ([0e6551d](https://github.com/JacobCoffee/django-program/commit/0e6551d4f568b915be11f8d6f891864483098d1a)) - Jacob Coffee
+
+- add discount and condition engine for registration (#43) - ([38a5fc9](https://github.com/JacobCoffee/django-program/commit/38a5fc9d3c2c73b90a578fc23539048e1f447f3e)) - Jacob Coffee
+
+- add badge generation with QR codes and PDF/PNG output (#45) - ([a8865ee](https://github.com/JacobCoffee/django-program/commit/a8865ee49ee70539358367f481dc4ab14eaa6683)) - Jacob Coffee
+
+- add extended admin reports dashboard (#46) - ([3f14edd](https://github.com/JacobCoffee/django-program/commit/3f14eddf2222bca1b39ce3e567706d02a5ffb313)) - Jacob Coffee
+
+- more analytics, KPI dashboard (#50) - ([ec189f0](https://github.com/JacobCoffee/django-program/commit/ec189f0134c023a3483e8a251db5b7d661a4d37c)) - Jacob Coffee
+
+- add BulkPurchase and BulkPurchaseVoucher models to sponsors app (#51) - ([82b7ad8](https://github.com/JacobCoffee/django-program/commit/82b7ad88e5c6eedaa5b3ca62c976e6003512fd11)) - Jacob Coffee
+
+- add on-site check-in, door checks, and product redemption (#53) - ([ad9f95b](https://github.com/JacobCoffee/django-program/commit/ad9f95b98b3bdf3762450b48b7e8ad56fd884766)) - Jacob Coffee
+
+- add Stripe Terminal SDK integration and on-site POS (#54) - ([e70573e](https://github.com/JacobCoffee/django-program/commit/e70573e4af34ead7c5ff0e998616a13577f9fb50)) - Jacob Coffee
+
+- add Visa & Invitation Letters system for international attendees (#58) - ([d6f812c](https://github.com/JacobCoffee/django-program/commit/d6f812cfdebae64d09cf63056396beea393135cf)) - Jacob Coffee
+
+- add Purchase Orders & Corporate Invoicing (Phase 20) (#59) - ([fe996d1](https://github.com/JacobCoffee/django-program/commit/fe996d1d5f65692d7a402033b1c796d5580f5878)) - Jacob Coffee
+
+- add granular permission and group system for conference management (#60) - ([e4de09d](https://github.com/JacobCoffee/django-program/commit/e4de09d6a6c5db93355c548200e4f9ccf83281f2)) - Jacob Coffee
+
+
+### Miscellaneous Chores
+
+
+- update pretalx API client from schema (#38) - ([a8172af](https://github.com/JacobCoffee/django-program/commit/a8172af68bdaecc9f0613de5ca832980b74af842)) - github-actions[bot]
 ## [0.1.0] - 2026-02-14
 
 
