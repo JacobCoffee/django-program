@@ -166,22 +166,11 @@ class GeneratedPretalxClient:
 
         logger.debug("Collected %d results from paginated endpoint", len(results))
         return results
-
     # ===================================================================
     # access-codes
     # ===================================================================
 
-    def access_codes_list(
-        self,
-        event: str,
-        *,
-        expand: list[str] | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def access_codes_list(self, event: str, *, expand: list[str] | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -224,26 +213,13 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/access-codes/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
     # ===================================================================
     # answers
     # ===================================================================
 
-    def answers_list(
-        self,
-        event: str,
-        *,
-        expand: list[str] | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        person: str | None = None,
-        q: str | None = None,
-        question: str | None = None,
-        review: str | None = None,
-        submission: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def answers_list(self, event: str, *, expand: list[str] | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, person: str | None = None, q: str | None = None, question: str | None = None, review: str | None = None, submission: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -294,22 +270,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/answers/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def answers_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        person: str | None = None,
-        q: str | None = None,
-        question: str | None = None,
-        review: str | None = None,
-        submission: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def answers_log_list(self, event: str, id: int, *, o: str | None = None, page: int | None = None, page_size: int | None = None, person: str | None = None, q: str | None = None, question: str | None = None, review: str | None = None, submission: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -336,9 +299,7 @@ class GeneratedPretalxClient:
     # events
     # ===================================================================
 
-    def api_events_list(
-        self, *, is_public: bool | None = None, o: str | None = None, q: str | None = None
-    ) -> dict[str, Any]:
+    def api_events_list(self, *, is_public: bool | None = None, o: str | None = None, q: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if is_public is not None:
             params["is_public"] = is_public
@@ -346,7 +307,7 @@ class GeneratedPretalxClient:
             params["o"] = o
         if q is not None:
             params["q"] = q
-        path = "/api/events/"
+        path = f"/api/events/"
         return self._request("GET", path, params=params or None)
 
     def root_retrieve(self, event: str) -> dict[str, Any]:
@@ -358,18 +319,7 @@ class GeneratedPretalxClient:
     # feedback
     # ===================================================================
 
-    def feedback_list(
-        self,
-        event: str,
-        *,
-        expand: list[str] | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        submission: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def feedback_list(self, event: str, *, expand: list[str] | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, submission: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -404,6 +354,7 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/feedback/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
     # ===================================================================
     # file-uploads
@@ -411,23 +362,14 @@ class GeneratedPretalxClient:
 
     def file_upload(self) -> dict[str, Any]:
         params = None
-        path = "/api/upload/"
+        path = f"/api/upload/"
         return self._request("POST", path, params=params or None)
 
     # ===================================================================
     # mail-templates
     # ===================================================================
 
-    def mail_templates_list(
-        self,
-        event: str,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def mail_templates_list(self, event: str, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -457,9 +399,7 @@ class GeneratedPretalxClient:
         path = f"/api/events/{event}/mail-templates/{id}/"
         return self._request("PUT", path, params=params or None, json_body=body)
 
-    def mail_templates_partial_update(
-        self, event: str, id: int, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def mail_templates_partial_update(self, event: str, id: int, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/mail-templates/{id}/"
         return self._request("PATCH", path, params=params or None, json_body=body)
@@ -468,18 +408,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/mail-templates/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def mail_templates_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def mail_templates_log_list(self, event: str, id: int, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -498,18 +429,7 @@ class GeneratedPretalxClient:
     # question-options
     # ===================================================================
 
-    def question_options_list(
-        self,
-        event: str,
-        *,
-        expand: list[str] | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        question: int | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def question_options_list(self, event: str, *, expand: list[str] | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, question: int | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -545,9 +465,7 @@ class GeneratedPretalxClient:
         path = f"/api/events/{event}/question-options/{id}/"
         return self._request("PUT", path, params=params or None, json_body=body)
 
-    def question_options_partial_update(
-        self, event: str, id: int, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def question_options_partial_update(self, event: str, id: int, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/question-options/{id}/"
         return self._request("PATCH", path, params=params or None, json_body=body)
@@ -556,19 +474,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/question-options/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def question_options_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        question: int | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def question_options_log_list(self, event: str, id: int, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, question: int | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -589,21 +497,7 @@ class GeneratedPretalxClient:
     # questions
     # ===================================================================
 
-    def questions_list(
-        self,
-        event: str,
-        *,
-        expand: list[str] | None = None,
-        is_public: bool | None = None,
-        is_visible_to_reviewers: bool | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        target: str | None = None,
-        variant: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def questions_list(self, event: str, *, expand: list[str] | None = None, is_public: bool | None = None, is_visible_to_reviewers: bool | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, target: str | None = None, variant: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -654,27 +548,14 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/questions/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
     def questions_icon_retrieve(self, event: str, id: int) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/questions/{id}/icon/"
         return self._request("GET", path, params=params or None)
 
-    def questions_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        is_public: bool | None = None,
-        is_visible_to_reviewers: bool | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        target: str | None = None,
-        variant: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def questions_log_list(self, event: str, id: int, *, is_public: bool | None = None, is_visible_to_reviewers: bool | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, target: str | None = None, variant: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if is_public is not None:
             params["is_public"] = is_public
@@ -701,25 +582,7 @@ class GeneratedPretalxClient:
     # reviews
     # ===================================================================
 
-    def reviews_list(
-        self,
-        event: str,
-        *,
-        expand: list[str] | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        speaker: str | None = None,
-        submission: str | None = None,
-        submission__content_locale: str | None = None,
-        submission__pending_state: list[str] | None = None,
-        submission__state: list[str] | None = None,
-        submission__submission_type: int | None = None,
-        submission__track: int | None = None,
-        user: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def reviews_list(self, event: str, *, expand: list[str] | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, speaker: str | None = None, submission: str | None = None, submission__content_locale: str | None = None, submission__pending_state: list[str] | None = None, submission__state: list[str] | None = None, submission__submission_type: int | None = None, submission__track: int | None = None, user: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -778,26 +641,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/reviews/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def reviews_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        speaker: str | None = None,
-        submission: str | None = None,
-        submission__content_locale: str | None = None,
-        submission__pending_state: list[str] | None = None,
-        submission__state: list[str] | None = None,
-        submission__submission_type: int | None = None,
-        submission__track: int | None = None,
-        user: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def reviews_log_list(self, event: str, id: int, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, speaker: str | None = None, submission: str | None = None, submission__content_locale: str | None = None, submission__pending_state: list[str] | None = None, submission__state: list[str] | None = None, submission__submission_type: int | None = None, submission__track: int | None = None, user: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -832,16 +678,7 @@ class GeneratedPretalxClient:
     # rooms
     # ===================================================================
 
-    def rooms_list(
-        self,
-        event: str,
-        *,
-        limit: int | None = None,
-        o: str | None = None,
-        offset: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def rooms_list(self, event: str, *, limit: int | None = None, o: str | None = None, offset: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if limit is not None:
             params["limit"] = limit
@@ -880,18 +717,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/rooms/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def rooms_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        limit: int | None = None,
-        o: str | None = None,
-        offset: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def rooms_log_list(self, event: str, id: int, *, limit: int | None = None, o: str | None = None, offset: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if limit is not None:
             params["limit"] = limit
@@ -912,23 +740,14 @@ class GeneratedPretalxClient:
 
     def api_retrieve(self) -> dict[str, Any]:
         params = None
-        path = "/api/"
+        path = f"/api/"
         return self._request("GET", path, params=params or None)
 
     # ===================================================================
     # schedules
     # ===================================================================
 
-    def schedules_list(
-        self,
-        event: str,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def schedules_list(self, event: str, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -943,9 +762,7 @@ class GeneratedPretalxClient:
             return self._paginate(path, params=params or None)
         return self._request("GET", path, params=params or None)
 
-    def schedules_by_version_retrieve(
-        self, event: str, *, latest: bool | None = None, version: str | None = None
-    ) -> dict[str, Any]:
+    def schedules_by_version_retrieve(self, event: str, *, latest: bool | None = None, version: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if latest is not None:
             params["latest"] = latest
@@ -966,9 +783,7 @@ class GeneratedPretalxClient:
         path = f"/api/events/{event}/schedules/{id}/"
         return self._request("GET", path, params=params or None)
 
-    def schedules_exporters_retrieve(
-        self, event: str, id: str, name: str, *, lang: str | None = None
-    ) -> dict[str, Any]:
+    def schedules_exporters_retrieve(self, event: str, id: str, name: str, *, lang: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if lang is not None:
             params["lang"] = lang
@@ -979,23 +794,7 @@ class GeneratedPretalxClient:
     # slots
     # ===================================================================
 
-    def slots_list(
-        self,
-        event: str,
-        *,
-        expand: list[str] | None = None,
-        is_visible: bool | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        room: int | None = None,
-        schedule: int | None = None,
-        schedule_version: str | None = None,
-        speaker: str | None = None,
-        submission: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def slots_list(self, event: str, *, expand: list[str] | None = None, is_visible: bool | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, room: int | None = None, schedule: int | None = None, schedule_version: str | None = None, speaker: str | None = None, submission: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -1050,17 +849,7 @@ class GeneratedPretalxClient:
     # speaker-information
     # ===================================================================
 
-    def speaker_information_list(
-        self,
-        event: str,
-        *,
-        expand: list[str] | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def speaker_information_list(self, event: str, *, expand: list[str] | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -1094,9 +883,7 @@ class GeneratedPretalxClient:
         path = f"/api/events/{event}/speaker-information/{id}/"
         return self._request("PUT", path, params=params or None, json_body=body)
 
-    def speaker_information_partial_update(
-        self, event: str, id: int, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def speaker_information_partial_update(self, event: str, id: int, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/speaker-information/{id}/"
         return self._request("PATCH", path, params=params or None, json_body=body)
@@ -1105,18 +892,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/speaker-information/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def speaker_information_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def speaker_information_log_list(self, event: str, id: int, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -1135,16 +913,7 @@ class GeneratedPretalxClient:
     # speakers
     # ===================================================================
 
-    def speakers_list(
-        self,
-        event: str,
-        *,
-        expand: list[str] | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def speakers_list(self, event: str, *, expand: list[str] | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -1159,25 +928,19 @@ class GeneratedPretalxClient:
             return self._paginate(path, params=params or None)
         return self._request("GET", path, params=params or None)
 
-    def speakers_retrieve(
-        self, event: str, user__code__iexact: str, *, expand: list[str] | None = None
-    ) -> dict[str, Any]:
+    def speakers_retrieve(self, event: str, user__code__iexact: str, *, expand: list[str] | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
         path = f"/api/events/{event}/speakers/{user__code__iexact}/"
         return self._request("GET", path, params=params or None)
 
-    def speakers_update(
-        self, event: str, user__code__iexact: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def speakers_update(self, event: str, user__code__iexact: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/speakers/{user__code__iexact}/"
         return self._request("PUT", path, params=params or None, json_body=body)
 
-    def speakers_partial_update(
-        self, event: str, user__code__iexact: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def speakers_partial_update(self, event: str, user__code__iexact: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/speakers/{user__code__iexact}/"
         return self._request("PATCH", path, params=params or None, json_body=body)
@@ -1186,16 +949,7 @@ class GeneratedPretalxClient:
     # submission-types
     # ===================================================================
 
-    def submission_types_list(
-        self,
-        event: str,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def submission_types_list(self, event: str, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -1225,9 +979,7 @@ class GeneratedPretalxClient:
         path = f"/api/events/{event}/submission-types/{id}/"
         return self._request("PUT", path, params=params or None, json_body=body)
 
-    def submission_types_partial_update(
-        self, event: str, id: int, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submission_types_partial_update(self, event: str, id: int, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submission-types/{id}/"
         return self._request("PATCH", path, params=params or None, json_body=body)
@@ -1236,18 +988,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/submission-types/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def submission_types_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def submission_types_log_list(self, event: str, id: int, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -1266,23 +1009,7 @@ class GeneratedPretalxClient:
     # submissions
     # ===================================================================
 
-    def submissions_list(
-        self,
-        event: str,
-        *,
-        content_locale: str | None = None,
-        expand: list[str] | None = None,
-        is_featured: bool | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        pending_state: list[str] | None = None,
-        q: str | None = None,
-        state: list[str] | None = None,
-        submission_type: int | None = None,
-        track: int | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def submissions_list(self, event: str, *, content_locale: str | None = None, expand: list[str] | None = None, is_featured: bool | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, pending_state: list[str] | None = None, q: str | None = None, state: list[str] | None = None, submission_type: int | None = None, track: int | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if content_locale is not None:
             params["content_locale"] = content_locale
@@ -1328,16 +1055,12 @@ class GeneratedPretalxClient:
         path = f"/api/events/{event}/submissions/{code__iexact}/"
         return self._request("GET", path, params=params or None)
 
-    def submissions_update(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_update(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/"
         return self._request("PUT", path, params=params or None, json_body=body)
 
-    def submissions_partial_update(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_partial_update(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/"
         return self._request("PATCH", path, params=params or None, json_body=body)
@@ -1346,38 +1069,29 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def submissions_accept_create(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_accept_create(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/accept/"
         return self._request("POST", path, params=params or None, json_body=body)
 
-    def submissions_add_speaker_create(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_add_speaker_create(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/add-speaker/"
         return self._request("POST", path, params=params or None, json_body=body)
 
-    def submissions_cancel_create(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_cancel_create(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/cancel/"
         return self._request("POST", path, params=params or None, json_body=body)
 
-    def submissions_confirm_create(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_confirm_create(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/confirm/"
         return self._request("POST", path, params=params or None, json_body=body)
 
-    def submissions_invitations_create(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_invitations_create(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/invitations/"
         return self._request("POST", path, params=params or None, json_body=body)
@@ -1386,24 +1100,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/invitations/{invitation_id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def submissions_log_list(
-        self,
-        code__iexact: str,
-        event: str,
-        *,
-        content_locale: str | None = None,
-        is_featured: bool | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        pending_state: list[str] | None = None,
-        q: str | None = None,
-        state: list[str] | None = None,
-        submission_type: int | None = None,
-        track: int | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def submissions_log_list(self, code__iexact: str, event: str, *, content_locale: str | None = None, is_featured: bool | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, pending_state: list[str] | None = None, q: str | None = None, state: list[str] | None = None, submission_type: int | None = None, track: int | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if content_locale is not None:
             params["content_locale"] = content_locale
@@ -1430,30 +1129,22 @@ class GeneratedPretalxClient:
             return self._paginate(path, params=params or None)
         return self._request("GET", path, params=params or None)
 
-    def submissions_make_submitted_create(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_make_submitted_create(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/make-submitted/"
         return self._request("POST", path, params=params or None, json_body=body)
 
-    def submissions_reject_create(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_reject_create(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/reject/"
         return self._request("POST", path, params=params or None, json_body=body)
 
-    def submissions_remove_speaker_create(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_remove_speaker_create(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/remove-speaker/"
         return self._request("POST", path, params=params or None, json_body=body)
 
-    def submissions_resources_create(
-        self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def submissions_resources_create(self, code__iexact: str, event: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/resources/"
         return self._request("POST", path, params=params or None, json_body=body)
@@ -1462,6 +1153,7 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/submissions/{code__iexact}/resources/{resource_id}/"
         self._request("DELETE", path, params=params)
+        return None
 
     def submissions_favourite_create(self, code: str, event: str) -> dict[str, Any]:
         params = None
@@ -1472,21 +1164,13 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/submissions/{code}/favourite/"
         self._request("DELETE", path, params=params)
+        return None
 
     # ===================================================================
     # tags
     # ===================================================================
 
-    def tags_list(
-        self,
-        event: str,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def tags_list(self, event: str, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -1525,18 +1209,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/tags/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def tags_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def tags_log_list(self, event: str, id: int, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -1555,17 +1230,7 @@ class GeneratedPretalxClient:
     # teams
     # ===================================================================
 
-    def api_organisers_teams_list(
-        self,
-        organiser: str,
-        *,
-        expand: list[str] | None = None,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def api_organisers_teams_list(self, organiser: str, *, expand: list[str] | None = None, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
@@ -1587,25 +1252,19 @@ class GeneratedPretalxClient:
         path = f"/api/organisers/{organiser}/teams/"
         return self._request("POST", path, params=params or None, json_body=body)
 
-    def api_organisers_teams_retrieve(
-        self, id: int, organiser: str, *, expand: list[str] | None = None
-    ) -> dict[str, Any]:
+    def api_organisers_teams_retrieve(self, id: int, organiser: str, *, expand: list[str] | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if expand is not None:
             params["expand"] = expand
         path = f"/api/organisers/{organiser}/teams/{id}/"
         return self._request("GET", path, params=params or None)
 
-    def api_organisers_teams_update(
-        self, id: int, organiser: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def api_organisers_teams_update(self, id: int, organiser: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/organisers/{organiser}/teams/{id}/"
         return self._request("PUT", path, params=params or None, json_body=body)
 
-    def api_organisers_teams_partial_update(
-        self, id: int, organiser: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def api_organisers_teams_partial_update(self, id: int, organiser: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/organisers/{organiser}/teams/{id}/"
         return self._request("PATCH", path, params=params or None, json_body=body)
@@ -1614,10 +1273,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/organisers/{organiser}/teams/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def api_organisers_teams_invite_create(
-        self, id: int, organiser: str, *, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def api_organisers_teams_invite_create(self, id: int, organiser: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
         params = None
         path = f"/api/organisers/{organiser}/teams/{id}/invite/"
         return self._request("POST", path, params=params or None, json_body=body)
@@ -1626,28 +1284,19 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/organisers/{organiser}/teams/{id}/invites/{invite_id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def api_organisers_teams_remove_member_create(
-        self, id: int, organiser: str, *, body: dict[str, Any] | None = None
-    ) -> None:
+    def api_organisers_teams_remove_member_create(self, id: int, organiser: str, *, body: dict[str, Any] | None = None) -> None:
         params = None
         path = f"/api/organisers/{organiser}/teams/{id}/remove_member/"
         self._request("POST", path, params=params)
+        return None
 
     # ===================================================================
     # tracks
     # ===================================================================
 
-    def tracks_list(
-        self,
-        event: str,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def tracks_list(self, event: str, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -1686,18 +1335,9 @@ class GeneratedPretalxClient:
         params = None
         path = f"/api/events/{event}/tracks/{id}/"
         self._request("DELETE", path, params=params)
+        return None
 
-    def tracks_log_list(
-        self,
-        event: str,
-        id: int,
-        *,
-        o: str | None = None,
-        page: int | None = None,
-        page_size: int | None = None,
-        q: str | None = None,
-        auto_paginate: bool = True,
-    ) -> list[dict[str, Any]]:
+    def tracks_log_list(self, event: str, id: int, *, o: str | None = None, page: int | None = None, page_size: int | None = None, q: str | None = None, auto_paginate: bool = True) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if o is not None:
             params["o"] = o
@@ -1711,3 +1351,4 @@ class GeneratedPretalxClient:
         if auto_paginate:
             return self._paginate(path, params=params or None)
         return self._request("GET", path, params=params or None)
+
