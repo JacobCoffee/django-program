@@ -8,6 +8,13 @@ All notable changes to this project will be documented in this file.
 ### Bug Fixes
 
 
+- remove unsupported Python 3.15 classifier from django-program (#73) - ([5bc053a](https://github.com/JacobCoffee/django-program/commit/5bc053af8833f7550d9da5b7704472725e5b7f7d)) - Jacob Coffee
+## [0.1.1](https://github.com/JacobCoffee/django-program/compare/v0.1.0..v0.1.1) - 2026-10-11
+
+
+### Bug Fixes
+
+
 - correct actions/deploy-pages SHA - ([97fb7bb](https://github.com/JacobCoffee/django-program/commit/97fb7bbaa06f87b92023f3bc4eb958ddc3a02cba)) - Jacob Coffee
 
 - deploy docs on workflow_dispatch and update READMEs with links - ([8dee515](https://github.com/JacobCoffee/django-program/commit/8dee51539d7c61668749eb5b2732bbf6da38d886)) - Jacob Coffee
@@ -29,6 +36,8 @@ All notable changes to this project will be documented in this file.
 - update changelog (#35) - ([378e0c1](https://github.com/JacobCoffee/django-program/commit/378e0c12d5c3a9cf81e85104613eed8bb8b8c23d)) - github-actions[bot]
 
 - add user documentation for 6 merged features (#37) - ([ca47832](https://github.com/JacobCoffee/django-program/commit/ca478320806e6df9b3ee4830fbc209750f9d1a76)) - Jacob Coffee
+
+- update changelog (#36) - ([858cfad](https://github.com/JacobCoffee/django-program/commit/858cfad004a82e20e3b06458ba49f20507b64f2d)) - github-actions[bot]
 
 
 ### Features
@@ -68,6 +77,8 @@ All notable changes to this project will be documented in this file.
 
 - add granular permission and group system for conference management (#60) - ([e4de09d](https://github.com/JacobCoffee/django-program/commit/e4de09d6a6c5db93355c548200e4f9ccf83281f2)) - Jacob Coffee
 
+- support Python 3.15 (#71) - ([045f9aa](https://github.com/JacobCoffee/django-program/commit/045f9aa5609f6133ad10193b8f9277cbc4983444)) - Jacob Coffee
+
 
 ### Miscellaneous Chores
 
@@ -80,6 +91,7 @@ All notable changes to this project will be documented in this file.
 
 - **(deps)** bump requests from 2.32.5 to 2.33.0 in the uv group across 1 directory (#63) - ([73f6063](https://github.com/JacobCoffee/django-program/commit/73f6063ce7a3cba8f987bcfa3cbfc4cecdf83204)) - dependabot[bot]
 - **(deps)** bump the actions group across 1 directory with 13 updates (#68) - ([3a51e30](https://github.com/JacobCoffee/django-program/commit/3a51e30ede7cde76346dbf38880347b80250c480)) - dependabot[bot]
+- **(deps)** bump the uv group across 1 directory with 11 updates (#69) - ([f27431d](https://github.com/JacobCoffee/django-program/commit/f27431d978eb61752475533a8ee4bb25e17cd126)) - dependabot[bot]
 - **(deps-dev)** update uv-build requirement from <0.11.0,>=0.9.11 to >=0.9.11,<0.13.0 in the python-dependencies group across 1 directory (#61) - ([e693016](https://github.com/JacobCoffee/django-program/commit/e69301626f29dc6e6e740a1dffe4db5a709bab6e)) - dependabot[bot]
 
 ### Ci
