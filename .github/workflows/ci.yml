@@ -78,7 +78,7 @@ jobs:
         run: uv run ruff format --check
 
       - name: Run ty type checker
-        run: uvx ty check src packages/pretalx-client/src
+        run: uv run ty check src packages/pretalx-client/src
 
   test-smoke:
     name: Test Smoke (3.14/Django ${{ matrix.django }}/${{ matrix.os }})
