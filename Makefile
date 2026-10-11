@@ -118,6 +118,8 @@ pretalx-codegen: ## Full codegen pipeline (validate + models + HTTP client)
 	@$(UV) run python scripts/pretalx/validate_schema.py
 	@$(UV) run python scripts/pretalx/generate_client.py
 	@$(UV) run python scripts/pretalx/generate_http_client.py
+	@$(UV) run ruff format packages/pretalx-client/src/pretalx_client/generated/
+	@$(UV) run ruff check --fix packages/pretalx-client/src/pretalx_client/generated/
 
 pretalx-sync-schema: pretalx-codegen ## Alias for pretalx-codegen (used by CI workflow)
 

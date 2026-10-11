@@ -3662,7 +3662,9 @@ class BadgeDownloadView(ManagePermissionMixin, View):
         content_type = "application/pdf" if badge.format == Badge.Format.PDF else "image/png"
         username = badge.attendee.user.username
         filename = f"badge-{username}.{badge.format}"
-        response = HttpResponse(badge.file.read(), content_type=content_type)
+        content = badge.file.read()
+        badge.file.close()
+        response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
 
@@ -3708,6 +3710,7 @@ class BadgeBulkDownloadView(ManagePermissionMixin, View):
                     code = badge.attendee.access_code
                     ext = badge.format
                     zf.writestr(f"badge-{code}.{ext}", badge.file.read())
+                    badge.file.close()
 
         buffer.seek(0)
         response = HttpResponse(buffer.read(), content_type="application/zip")
