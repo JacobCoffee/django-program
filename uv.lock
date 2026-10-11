@@ -263,7 +263,7 @@ wheels = [
 
 [[package]]
 name = "django-program"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "django" },
@@ -674,7 +674,7 @@ wheels = [
 
 [[package]]
 name = "pretalx-client"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/pretalx-client" }
 dependencies = [
     { name = "httpx" },
