@@ -31,6 +31,9 @@ dev = [
 
 [project]
 authors = [{ name = "Jacob Coffee", email = "jacob@python.org" }]
+# No "Programming Language :: Python :: 3.15" classifier yet: Django 5.2/6.0 don't
+# support 3.15 (https://code.djangoproject.com/ticket/36664); add it back once a
+# supported Django release (6.1+) does.
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Web Environment",
@@ -41,7 +44,6 @@ classifiers = [
   "Operating System :: OS Independent",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.14",
-  "Programming Language :: Python :: 3.15",
   "Programming Language :: Python :: 3 :: Only",
   "Topic :: Internet :: WWW/HTTP",
   "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
