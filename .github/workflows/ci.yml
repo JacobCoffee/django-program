@@ -81,7 +81,7 @@ jobs:
         run: uv run ty check src packages/pretalx-client/src
 
   test-smoke:
-    name: Test Smoke (3.14/Django ${{ matrix.django }}/${{ matrix.os }})
+    name: Test Smoke (${{ matrix.python }}/Django ${{ matrix.django }}/${{ matrix.os }})
     needs: [validate]
     runs-on: ${{ matrix.os }}
     permissions:
@@ -91,6 +91,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         django: ["5.2", "6.0"]
+        python: ["3.14", "3.15"]
+        exclude:
+          # Django 5.2/6.0 don't support Python 3.15 yet (upstream tracking:
+          # https://code.djangoproject.com/ticket/36664); keep a single 3.15
+          # row per OS and skip its Django-dependent tests below.
+          - python: "3.15"
+            django: "6.0"
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,7 +113,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: ${{ matrix.python }}
 
       - name: Install dependencies
         run: uv sync --all-extras --dev
@@ -117,11 +124,11 @@ jobs:
 
       - name: Run tests
         run: |
-          uv run pytest tests/
+          ${{ matrix.python != '3.15' && 'uv run pytest tests/' || '' }}
           uv run pytest packages/pretalx-client/tests/
 
   test-full:
-    name: Test (3.14/${{ matrix.os }})
+    name: Test (${{ matrix.python }}/${{ matrix.os }})
     needs: [test-smoke]
     runs-on: ${{ matrix.os }}
     permissions:
@@ -130,6 +137,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest]
+        python: ["3.14", "3.15"]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -145,17 +153,21 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: ${{ matrix.python }}
 
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
       - name: Run tests
+        # Django 5.2/6.0 don't support Python 3.15 yet (upstream tracking:
+        # https://code.djangoproject.com/ticket/36664); the Django-dependent
+        # pytest invocation is a no-op for that row.
         run: |
-          uv run pytest tests/ --cov=src/django_program --cov-report= --cov-fail-under=0
+          ${{ matrix.python != '3.15' && 'uv run pytest tests/ --cov=src/django_program --cov-report= --cov-fail-under=0' || '' }}
           uv run pytest packages/pretalx-client/tests/
 
       - name: Upload coverage data artifact
+        if: matrix.python != '3.15'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-data
