@@ -33,6 +33,7 @@ class TalkOverrideListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/override_list.html"
     required_permission = "view_overrides"
+    required_feature = "pretalx_sync"
     context_object_name = "overrides"
     paginate_by = 50
 
@@ -57,6 +58,7 @@ class TalkOverrideCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/override_form.html"
     required_permission = "change_overrides"
+    required_feature = "pretalx_sync"
     form_class = TalkOverrideForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -99,6 +101,7 @@ class TalkOverrideEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/override_form.html"
     required_permission = "change_overrides"
+    required_feature = "pretalx_sync"
     form_class = TalkOverrideForm
 
     def get_queryset(self) -> QuerySet[TalkOverride]:
@@ -146,6 +149,7 @@ class SpeakerOverrideListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/speaker_override_list.html"
     required_permission = "view_overrides"
+    required_feature = "pretalx_sync"
     context_object_name = "overrides"
     paginate_by = 50
 
@@ -170,6 +174,7 @@ class SpeakerOverrideCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/speaker_override_form.html"
     required_permission = "change_overrides"
+    required_feature = "pretalx_sync"
     form_class = SpeakerOverrideForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -212,6 +217,7 @@ class SpeakerOverrideEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/speaker_override_form.html"
     required_permission = "change_overrides"
+    required_feature = "pretalx_sync"
     form_class = SpeakerOverrideForm
 
     def get_queryset(self) -> QuerySet[SpeakerOverride]:
@@ -259,6 +265,7 @@ class RoomOverrideListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/room_override_list.html"
     required_permission = "view_overrides"
+    required_feature = "pretalx_sync"
     context_object_name = "overrides"
     paginate_by = 50
 
@@ -283,6 +290,7 @@ class RoomOverrideCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/room_override_form.html"
     required_permission = "change_overrides"
+    required_feature = "pretalx_sync"
     form_class = RoomOverrideForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -325,6 +333,7 @@ class RoomOverrideEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/room_override_form.html"
     required_permission = "change_overrides"
+    required_feature = "pretalx_sync"
     form_class = RoomOverrideForm
 
     def get_queryset(self) -> QuerySet[RoomOverride]:
@@ -372,6 +381,7 @@ class SponsorOverrideListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/sponsor_override_list.html"
     required_permission = "view_overrides"
+    required_feature = "sponsors"
     context_object_name = "overrides"
     paginate_by = 50
 
@@ -396,6 +406,7 @@ class SponsorOverrideCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/sponsor_override_form.html"
     required_permission = "change_overrides"
+    required_feature = "sponsors"
     form_class = SponsorOverrideForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -438,6 +449,7 @@ class SponsorOverrideEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/sponsor_override_form.html"
     required_permission = "change_overrides"
+    required_feature = "sponsors"
     form_class = SponsorOverrideForm
 
     def get_queryset(self) -> QuerySet[SponsorOverride]:
@@ -485,6 +497,7 @@ class SubmissionTypeDefaultListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/submission_type_default_list.html"
     required_permission = "view_overrides"
+    required_feature = "pretalx_sync"
     context_object_name = "type_defaults"
     paginate_by = 50
 
@@ -509,6 +522,7 @@ class SubmissionTypeDefaultCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/submission_type_default_form.html"
     required_permission = "change_overrides"
+    required_feature = "pretalx_sync"
     form_class = SubmissionTypeDefaultForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -541,6 +555,7 @@ class SubmissionTypeDefaultEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/submission_type_default_form.html"
     required_permission = "change_overrides"
+    required_feature = "pretalx_sync"
     form_class = SubmissionTypeDefaultForm
 
     def get_queryset(self) -> QuerySet[SubmissionTypeDefault]:

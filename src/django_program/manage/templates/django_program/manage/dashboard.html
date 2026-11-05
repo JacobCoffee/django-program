@@ -43,6 +43,25 @@
   }
   .dash-alert:hover { text-decoration: none; color: var(--color-warning); }
 
+  .attention-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+  .attention-item a {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.6rem 1rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    text-decoration: none;
+  }
+  .attention-item a:hover { text-decoration: none; }
+  .attention-item-count { font-weight: 700; font-size: 1rem; }
+  .attention-item-label { font-weight: 500; }
+  .attention-item-desc { color: inherit; opacity: 0.8; font-weight: 400; }
+  .attention-item--warning a { background: var(--color-warning-bg); border: 1px solid var(--color-warning-border); color: var(--color-warning); }
+  .attention-item--danger a { background: var(--color-danger-bg, #fef2f2); border: 1px solid var(--color-danger-border, #fecaca); color: var(--color-danger, #dc2626); }
+  .attention-item--success a { background: var(--color-success-bg, #f0fdf4); border: 1px solid var(--color-success-border, #bbf7d0); color: var(--color-success-text, #166534); }
+  .attention-item--info a { background: var(--color-primary-bg, #eff6ff); border: 1px solid var(--color-primary-border, #bfdbfe); color: var(--color-primary, #2563eb); }
+
   .dir-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -187,6 +206,25 @@
 <a href="{% url 'manage:talk-list' conference.slug %}?scheduled=no" class="dash-alert">
   &#9888; {{ stats.unscheduled_talks }} talk{{ stats.unscheduled_talks|pluralize }} need{{ stats.unscheduled_talks|pluralize:"s," }} scheduling
 </a>
+{% endif %}
+
+{% if attention_items %}
+<div class="card card--static attention-panel" style="margin-bottom: 1.5rem;">
+  <div class="card-body">
+    <h2 class="section-heading" style="margin-top: 0;">Needs attention</h2>
+    <ul class="attention-list">
+      {% for item in attention_items %}
+      <li class="attention-item attention-item--{{ item.tone }}">
+        <a href="{{ item.url }}">
+          <span class="attention-item-count">{{ item.count }}</span>
+          <span class="attention-item-label">{{ item.label }}</span>
+          {% if item.description %}<span class="attention-item-desc">{{ item.description }}</span>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
 {% endif %}
 
 {% if budget %}

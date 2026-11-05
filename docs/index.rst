@@ -131,6 +131,7 @@ Quick Start
    badge-generation
    programs-activities
    management-dashboard
+   customizing-manage
    admin-reports
 
 .. toctree::

@@ -23,7 +23,7 @@ def cart_total(cart: Cart) -> Decimal:
 
     Usage in templates::
 
-        {% load registration_tags %}
+        {% load program_registration_tags %}
         {% cart_total cart as total %}
         <p>Total: {{ total }}</p>
 
@@ -48,7 +48,7 @@ def format_currency(amount: Decimal | None, currency: str = "USD") -> str:
 
     Usage in templates::
 
-        {% load registration_tags %}
+        {% load program_registration_tags %}
         {{ amount|format_currency }}
         {{ amount|format_currency:"JPY" }}
 
@@ -96,7 +96,7 @@ def ticket_availability(ticket_type: TicketType) -> str:
 
     Usage in templates::
 
-        {% load registration_tags %}
+        {% load program_registration_tags %}
         {% ticket_availability ticket_type as status %}
         <span class="badge">{{ status }}</span>
 

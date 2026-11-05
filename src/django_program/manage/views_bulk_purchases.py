@@ -31,6 +31,7 @@ class BulkPurchaseListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/bulk_purchase_list.html"
     required_permission = "view_bulk_purchases"
+    required_feature = "registration"
     context_object_name = "bulk_purchases"
     paginate_by = 50
 
@@ -60,6 +61,7 @@ class BulkPurchaseDetailView(ManagePermissionMixin, DetailView):
 
     template_name = "django_program/manage/bulk_purchase_detail.html"
     required_permission = "view_bulk_purchases"
+    required_feature = "registration"
     context_object_name = "purchase"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -85,6 +87,7 @@ class BulkPurchaseCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/bulk_purchase_form.html"
     required_permission = "change_bulk_purchases"
+    required_feature = "registration"
     form_class = BulkPurchaseCreateForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -129,6 +132,7 @@ class BulkPurchaseApproveView(ManagePermissionMixin, View):
     """
 
     required_permission = "change_bulk_purchases"
+    required_feature = "registration"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Mark the bulk purchase as approved."""
@@ -169,6 +173,7 @@ class BulkPurchaseFulfillView(ManagePermissionMixin, View):
     """
 
     required_permission = "change_bulk_purchases"
+    required_feature = "registration"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Generate vouchers for the bulk purchase."""

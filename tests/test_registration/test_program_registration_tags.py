@@ -17,7 +17,7 @@ from django_program.registration.models import (
     OrderLineItem,
     TicketType,
 )
-from django_program.registration.templatetags.registration_tags import (
+from django_program.registration.templatetags.program_registration_tags import (
     cart_total,
     format_currency,
     ticket_availability,
@@ -125,7 +125,7 @@ def test_cart_total_template_rendering(conference: Conference, user):
     cart = Cart.objects.create(user=user, conference=conference, status=Cart.Status.OPEN)
     CartItem.objects.create(cart=cart, ticket_type=ticket, quantity=1)
 
-    tpl = Template("{% load registration_tags %}{% cart_total cart as total %}{{ total }}")
+    tpl = Template("{% load program_registration_tags %}{% cart_total cart as total %}{{ total }}")
     rendered = tpl.render(Context({"cart": cart}))
 
     assert rendered.strip() == "42.50"
@@ -178,13 +178,13 @@ def test_format_currency_case_insensitive():
 
 
 def test_format_currency_template_rendering():
-    tpl = Template("{% load registration_tags %}{{ amount|format_currency }}")
+    tpl = Template("{% load program_registration_tags %}{{ amount|format_currency }}")
     rendered = tpl.render(Context({"amount": Decimal("42.50")}))
     assert rendered.strip() == "$42.50"
 
 
 def test_format_currency_template_with_currency_arg():
-    tpl = Template('{% load registration_tags %}{{ amount|format_currency:"JPY" }}')
+    tpl = Template('{% load program_registration_tags %}{{ amount|format_currency:"JPY" }}')
     rendered = tpl.render(Context({"amount": Decimal(1000)}))
     assert rendered.strip() == "\u00a51000"
 
@@ -226,7 +226,7 @@ def test_ticket_availability_remaining(conference: Conference):
 def test_ticket_availability_sold_out(conference: Conference, user, monkeypatch):
     now = _now()
     monkeypatch.setattr(
-        "django_program.registration.templatetags.registration_tags.timezone.now",
+        "django_program.registration.templatetags.program_registration_tags.timezone.now",
         lambda: now,
     )
     monkeypatch.setattr(
@@ -258,7 +258,7 @@ def test_ticket_availability_sold_out(conference: Conference, user, monkeypatch)
 def test_ticket_availability_coming_soon(conference: Conference, monkeypatch):
     now = _now()
     monkeypatch.setattr(
-        "django_program.registration.templatetags.registration_tags.timezone.now",
+        "django_program.registration.templatetags.program_registration_tags.timezone.now",
         lambda: now,
     )
     ticket = TicketType.objects.create(
@@ -278,7 +278,7 @@ def test_ticket_availability_coming_soon(conference: Conference, monkeypatch):
 def test_ticket_availability_ended(conference: Conference, monkeypatch):
     now = _now()
     monkeypatch.setattr(
-        "django_program.registration.templatetags.registration_tags.timezone.now",
+        "django_program.registration.templatetags.program_registration_tags.timezone.now",
         lambda: now,
     )
     ticket = TicketType.objects.create(
@@ -318,7 +318,7 @@ def test_ticket_availability_template_rendering(conference: Conference):
         total_quantity=0,
         is_active=True,
     )
-    tpl = Template("{% load registration_tags %}{% ticket_availability ticket_type as status %}{{ status }}")
+    tpl = Template("{% load program_registration_tags %}{% ticket_availability ticket_type as status %}{{ status }}")
     rendered = tpl.render(Context({"ticket_type": ticket}))
 
     assert rendered.strip() == "Available"

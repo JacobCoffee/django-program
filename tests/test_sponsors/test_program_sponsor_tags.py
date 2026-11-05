@@ -9,7 +9,7 @@ from django.template import Context, Template
 
 from django_program.conference.models import Conference
 from django_program.sponsors.models import Sponsor, SponsorLevel
-from django_program.sponsors.templatetags.sponsor_tags import (
+from django_program.sponsors.templatetags.program_sponsor_tags import (
     sponsor_logo_url,
     sponsors_by_level,
 )
@@ -121,7 +121,7 @@ def test_sponsors_by_level_template_rendering(
     Sponsor.objects.create(conference=conference, level=gold_level, name="Template Corp")
 
     tpl = Template(
-        "{% load sponsor_tags %}"
+        "{% load program_sponsor_tags %}"
         "{% sponsors_by_level conference as groups %}"
         "{% for g in groups %}{{ g.level.name }}:{% for s in g.sponsors %}{{ s.name }}{% endfor %}{% endfor %}"
     )
@@ -188,7 +188,7 @@ def test_sponsor_logo_url_template_rendering(conference: Conference, gold_level:
         logo_url="https://example.com/tag-logo.png",
     )
 
-    tpl = Template("{% load sponsor_tags %}{% sponsor_logo_url sponsor as logo %}{{ logo }}")
+    tpl = Template("{% load program_sponsor_tags %}{% sponsor_logo_url sponsor as logo %}{{ logo }}")
     rendered = tpl.render(Context({"sponsor": sponsor}))
 
     assert rendered.strip() == "https://example.com/tag-logo.png"

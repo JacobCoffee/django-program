@@ -90,6 +90,7 @@ class PurchaseOrderListView(ManagePermissionMixin, ListView):
     parameter.
     """
 
+    required_feature = "registration"
     template_name = "django_program/manage/purchase_order_list.html"
     context_object_name = "purchase_orders"
     paginate_by = 50
@@ -125,6 +126,7 @@ class PurchaseOrderListView(ManagePermissionMixin, ListView):
 class PurchaseOrderDetailView(ManagePermissionMixin, DetailView):
     """Display full details of a purchase order with payments and credit notes."""
 
+    required_feature = "registration"
     template_name = "django_program/manage/purchase_order_detail.html"
     context_object_name = "purchase_order"
 
@@ -151,6 +153,8 @@ class PurchaseOrderCreateView(ManagePermissionMixin, View):
     GET renders the create form. POST validates input and creates the PO
     via the service layer, then redirects to the detail view.
     """
+
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Render the blank purchase order form."""
@@ -237,6 +241,8 @@ class PurchaseOrderCreateView(ManagePermissionMixin, View):
 class PurchaseOrderRecordPaymentView(ManagePermissionMixin, View):
     """Record a payment against a purchase order (POST-only)."""
 
+    required_feature = "registration"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Validate and record a payment."""
         po = get_object_or_404(PurchaseOrder, pk=self.kwargs["pk"], conference=self.conference)
@@ -295,6 +301,8 @@ class PurchaseOrderRecordPaymentView(ManagePermissionMixin, View):
 class PurchaseOrderIssueCreditView(ManagePermissionMixin, View):
     """Issue a credit note against a purchase order (POST-only)."""
 
+    required_feature = "registration"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Validate and issue a credit note."""
         po = get_object_or_404(PurchaseOrder, pk=self.kwargs["pk"], conference=self.conference)
@@ -336,6 +344,8 @@ class PurchaseOrderIssueCreditView(ManagePermissionMixin, View):
 class PurchaseOrderCancelView(ManagePermissionMixin, View):
     """Cancel a purchase order (POST-only)."""
 
+    required_feature = "registration"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Cancel the purchase order."""
         po = get_object_or_404(PurchaseOrder, pk=self.kwargs["pk"], conference=self.conference)
@@ -362,6 +372,8 @@ class PurchaseOrderCancelView(ManagePermissionMixin, View):
 class PurchaseOrderSendView(ManagePermissionMixin, View):
     """Mark a draft purchase order as sent (POST-only)."""
 
+    required_feature = "registration"
+
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Transition the PO from draft to sent."""
         po = get_object_or_404(PurchaseOrder, pk=self.kwargs["pk"], conference=self.conference)
@@ -387,6 +399,8 @@ class PurchaseOrderSendView(ManagePermissionMixin, View):
 class PurchaseOrderInvoiceView(ManagePermissionMixin, View):
     """Generate and download a PO invoice as PDF."""
 
+    required_feature = "registration"
+
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Generate the invoice PDF and return it as a downloadable attachment."""
         po = get_object_or_404(PurchaseOrder, pk=self.kwargs["pk"], conference=self.conference)
@@ -403,6 +417,8 @@ class PurchaseOrderStripeInvoiceView(ManagePermissionMixin, View):
     Uses the conference's Stripe keys to create a hosted invoice that the
     customer can pay via card or ACH. Sets the PO status to SENT on success.
     """
+
+    required_feature = "registration"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Create a Stripe invoice and redirect back to the PO detail page."""
@@ -447,6 +463,8 @@ class PurchaseOrderQBOInvoiceView(ManagePermissionMixin, View):
     REST API and optionally emails it to the customer. Sets the PO status
     to SENT on success if currently in draft.
     """
+
+    required_feature = "registration"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Create a QBO invoice and redirect back to the PO detail page."""

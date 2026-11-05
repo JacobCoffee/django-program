@@ -1,0 +1,11 @@
+{% extends "django_program/manage/base.html" %}
+{% comment %}
+Kiosk/full-width layout for pages that don't need the sidebar (check-in
+scanner, terminal POS, badge preview, etc). Drops the sidebar and widens
+the main content area; everything else (top bar, palette, messages) is
+unchanged.
+{% endcomment %}
+
+{% block sidebar %}{% endblock %}
+
+{% block main_class %}main-content main-content--full{% endblock %}

@@ -34,6 +34,8 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from django_program.conference.models import Conference, Expense, ExpenseCategory, KPITargets, Section
+from django_program.features import require_feature
+from django_program.manage.attention import get_attention
 from django_program.manage.forms import (
     ActivityForm,
     AddOnForm,
@@ -150,31 +152,16 @@ def _safe_csv_cell(value: object) -> str:
     return text
 
 
-_SIDEBAR_PERM_KEYS = [
-    "conference",
-    "settings",
-    "program",
-    "registration_people",
-    "registration_commerce",
-    "badges",
-    "sponsors",
-    "bulk_purchases",
-    "activities",
-    "travel_grants",
-    "checkin",
-    "terminal",
-    "onsite",
-    "finance",
-    "reports",
-    "overrides",
-]
-
-
 class ConferencePermissionMixin(LoginRequiredMixin):
     """Permission mixin for conference-scoped management views.
 
     Each view sets ``required_permission`` to a permission codename.
     Without an app label prefix, defaults to ``program_conference.<codename>``.
+
+    Each view may also set ``required_feature`` to a feature name (see
+    ``django_program.features``). The view always 404s when the ``manage_ui``
+    feature is disabled, and 404s when ``required_feature`` is set and
+    disabled for the resolved conference.
 
     Access is granted if ANY of:
     - User is superuser
@@ -186,6 +173,7 @@ class ConferencePermissionMixin(LoginRequiredMixin):
     """
 
     required_permission: str = ""
+    required_feature: str = ""
     conference: Conference
     kwargs: dict[str, str]
 
@@ -203,7 +191,7 @@ class ConferencePermissionMixin(LoginRequiredMixin):
         ]
 
     def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
-        """Resolve the conference and enforce permissions before dispatch.
+        """Resolve the conference, enforce feature flags and permissions before dispatch.
 
         Args:
             request: The incoming HTTP request.
@@ -215,6 +203,7 @@ class ConferencePermissionMixin(LoginRequiredMixin):
 
         Raises:
             PermissionDenied: If the user is not authorized.
+            Http404: If ``manage_ui`` or ``required_feature`` is disabled.
         """
         if not request.user.is_authenticated:
             return self.handle_no_permission()  # type: ignore[return-value]
@@ -222,6 +211,11 @@ class ConferencePermissionMixin(LoginRequiredMixin):
         slug = kwargs.get("conference_slug", "")
         if slug:
             self.conference = get_object_or_404(Conference, slug=slug)
+
+        conference = getattr(self, "conference", None)
+        require_feature("manage_ui", conference=conference)
+        if self.required_feature:
+            require_feature(self.required_feature, conference=conference)
 
         user = request.user
         if user.is_superuser:
@@ -240,7 +234,7 @@ class ConferencePermissionMixin(LoginRequiredMixin):
         raise PermissionDenied
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
-        """Add the conference, sidebar metadata, and permissions to the template context.
+        """Add the conference and sync metadata to the template context.
 
         Args:
             **kwargs: Additional context data.
@@ -250,37 +244,8 @@ class ConferencePermissionMixin(LoginRequiredMixin):
         """
         context: dict[str, object] = super().get_context_data(**kwargs)  # type: ignore[misc]
         context["conference"] = self.conference
-        context["submission_type_nav"] = self.get_submission_type_nav()
         context["last_synced"] = self._get_last_synced()
-        context["user_perms"] = self._get_sidebar_permissions()
         return context
-
-    def _get_sidebar_permissions(self) -> dict[str, bool]:
-        """Build a dict of sidebar section visibility flags for the current user."""
-        user = self.request.user
-        if user.is_superuser or user.has_perm("program_conference.change_conference"):
-            return dict.fromkeys(_SIDEBAR_PERM_KEYS, True)
-
-        return {
-            "conference": user.has_perm("program_conference.view_dashboard"),
-            "settings": user.has_perm("program_conference.manage_conference_settings"),
-            "program": user.has_perm("program_conference.view_program"),
-            "registration_people": user.has_perm("program_conference.view_registration"),
-            "registration_commerce": user.has_perm("program_conference.view_commerce"),
-            "badges": user.has_perm("program_conference.view_badges"),
-            "sponsors": user.has_perm("program_conference.view_sponsors"),
-            "bulk_purchases": user.has_perm("program_conference.view_bulk_purchases"),
-            "activities": user.has_perm("program_programs.view_activity"),
-            "travel_grants": user.has_perm("program_programs.view_travel_grant"),
-            "checkin": user.has_perm("program_conference.view_checkin"),
-            "terminal": user.has_perm("program_conference.use_terminal"),
-            "onsite": (
-                user.has_perm("program_conference.view_checkin") or user.has_perm("program_conference.use_terminal")
-            ),
-            "finance": user.has_perm("program_conference.view_finance"),
-            "reports": user.has_perm("program_conference.view_reports"),
-            "overrides": user.has_perm("program_conference.view_overrides"),
-        }
 
     def _get_last_synced(self) -> object:
         """Find the most recent synced_at timestamp across all synced models."""
@@ -315,6 +280,10 @@ class ConferenceListView(LoginRequiredMixin, ListView):
     def dispatch(self, request: HttpRequest, *args: str, **kwargs: str) -> HttpResponse:
         """Check that the user has at least one conference management permission.
 
+        When ``DJANGO_PROGRAM["manage"]["conference"]`` names a single-conference
+        site and that conference exists and is accessible to the user, redirect
+        straight to its dashboard instead of showing the list.
+
         Args:
             request: The incoming HTTP request.
             *args: Positional arguments from the URL resolver.
@@ -325,13 +294,26 @@ class ConferenceListView(LoginRequiredMixin, ListView):
 
         Raises:
             PermissionDenied: If the user has no conference management permissions.
+            Http404: If the ``manage_ui`` feature is disabled.
         """
         if not request.user.is_authenticated:
             return self.handle_no_permission()
 
+        require_feature("manage_ui")
+
         user = request.user
         if not (user.is_superuser or any(p.startswith("program_conference.") for p in user.get_all_permissions())):
             raise PermissionDenied
+
+        single_slug = get_config().manage.conference
+        if single_slug:
+            conference = Conference.objects.filter(slug=single_slug).first()
+            if conference is not None and (
+                user.is_superuser
+                or user.has_perm("program_conference.change_conference")
+                or user.has_perm("program_conference.view_dashboard")
+            ):
+                return redirect("manage:dashboard", conference_slug=conference.slug)
 
         return super().dispatch(request, *args, **kwargs)
 
@@ -371,9 +353,13 @@ class ImportFromPretalxView(LoginRequiredMixin, TemplateView):
 
         Raises:
             PermissionDenied: If the user lacks the required permission.
+            Http404: If ``manage_ui`` or ``pretalx_sync`` is disabled.
         """
         if not request.user.is_authenticated:
             return self.handle_no_permission()
+
+        require_feature("manage_ui")
+        require_feature("pretalx_sync")
 
         if not (request.user.is_superuser or request.user.has_perm("program_conference.manage_conference_settings")):
             raise PermissionDenied
@@ -496,6 +482,8 @@ class ImportPretalxStreamView(LoginRequiredMixin, View):
         """Require ``manage_conference_settings`` permission for conference import."""
         if not request.user.is_authenticated:
             return self.handle_no_permission()
+        require_feature("manage_ui")
+        require_feature("pretalx_sync")
         if not (request.user.is_superuser or request.user.has_perm("program_conference.manage_conference_settings")):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
@@ -844,6 +832,8 @@ class DashboardView(ManagePermissionMixin, TemplateView):
             conference_slug=str(conference.slug),
         )
         context["has_psf_sponsor_sync"] = sponsor_profile.has_api_sync
+
+        context["attention_items"] = [item for item in get_attention(self.request, conference) if item.count]
 
         return context
 
@@ -1486,6 +1476,7 @@ class SponsorLevelListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/sponsor_level_list.html"
     required_permission = "view_sponsors"
+    required_feature = "sponsors"
     context_object_name = "levels"
     paginate_by = 50
 
@@ -1509,6 +1500,7 @@ class SponsorLevelEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/sponsor_level_edit.html"
     required_permission = "change_sponsors"
+    required_feature = "sponsors"
     form_class = SponsorLevelForm
     context_object_name = "level"
 
@@ -1537,6 +1529,7 @@ class SponsorLevelCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/sponsor_level_edit.html"
     required_permission = "change_sponsors"
+    required_feature = "sponsors"
     form_class = SponsorLevelForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -1562,6 +1555,7 @@ class SponsorManageListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/sponsor_list.html"
     required_permission = "view_sponsors"
+    required_feature = "sponsors"
     context_object_name = "sponsors"
     paginate_by = 50
 
@@ -1589,6 +1583,7 @@ class SponsorEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/sponsor_edit.html"
     required_permission = "change_sponsors"
+    required_feature = "sponsors"
     form_class = SponsorForm
     context_object_name = "sponsor"
 
@@ -1632,6 +1627,7 @@ class SponsorCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/sponsor_edit.html"
     required_permission = "change_sponsors"
+    required_feature = "sponsors"
     form_class = SponsorForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -1670,6 +1666,7 @@ class ActivityManageListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/activity_list.html"
     required_permission = "program_programs.view_activity"
+    required_feature = "programs"
     context_object_name = "activities"
     paginate_by = 50
 
@@ -1707,6 +1704,7 @@ class ActivityEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/activity_edit.html"
     required_permission = "program_programs.manage_activity"
+    required_feature = "programs"
     form_class = ActivityForm
     context_object_name = "activity"
 
@@ -1744,6 +1742,7 @@ class ActivityCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/activity_edit.html"
     required_permission = "program_programs.manage_activity"
+    required_feature = "programs"
     form_class = ActivityForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -1789,6 +1788,8 @@ class ActivityOrganizerMixin(LoginRequiredMixin):
             return self.handle_no_permission()  # type: ignore[return-value]
 
         self.conference = get_object_or_404(Conference, slug=kwargs.get("conference_slug", ""))
+        require_feature("manage_ui", conference=self.conference)
+        require_feature("programs", conference=self.conference)
         self.activity = get_object_or_404(Activity, pk=kwargs.get("pk"), conference=self.conference)
 
         user = request.user
@@ -1938,6 +1939,7 @@ class TravelGrantManageListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/travel_grant_list.html"
     required_permission = "program_programs.view_travel_grant"
+    required_feature = "travel_grants"
     context_object_name = "grants"
     paginate_by = 50
 
@@ -2025,6 +2027,7 @@ class TravelGrantReviewView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/travel_grant_edit.html"
     required_permission = "program_programs.review_travel_grant"
+    required_feature = "travel_grants"
     form_class = TravelGrantForm
     context_object_name = "grant"
 
@@ -2063,6 +2066,7 @@ class TravelGrantSendMessageView(ManagePermissionMixin, View):
     """POST-only view for reviewers to send a message on a grant."""
 
     required_permission = "program_programs.review_travel_grant"
+    required_feature = "travel_grants"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Create a message attached to the grant."""
@@ -2083,6 +2087,7 @@ class TravelGrantDisburseView(ManagePermissionMixin, View):
     """Mark a travel grant as disbursed."""
 
     required_permission = "program_programs.disburse_travel_grant"
+    required_feature = "travel_grants"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Record disbursement details and transition the grant status.
@@ -2120,6 +2125,7 @@ class ReceiptReviewQueueView(ManagePermissionMixin, View):
     """Pick a random pending receipt for review."""
 
     required_permission = "program_programs.review_receipt"
+    required_feature = "travel_grants"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Redirect to a random pending receipt, or back to the grant list if none."""
@@ -2149,6 +2155,7 @@ class ReceiptReviewDetailView(ManagePermissionMixin, DetailView):
 
     template_name = "django_program/manage/receipt_review.html"
     required_permission = "program_programs.review_receipt"
+    required_feature = "travel_grants"
     context_object_name = "receipt"
 
     def get_queryset(self) -> QuerySet[Receipt]:
@@ -2167,6 +2174,7 @@ class ReceiptApproveView(ManagePermissionMixin, View):
     """POST-only view to approve a receipt."""
 
     required_permission = "program_programs.review_receipt"
+    required_feature = "travel_grants"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Mark the receipt as approved by the current user."""
@@ -2183,6 +2191,7 @@ class ReceiptFlagView(ManagePermissionMixin, View):
     """POST-only view to flag a receipt."""
 
     required_permission = "program_programs.review_receipt"
+    required_feature = "travel_grants"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Flag the receipt with a reason provided by the reviewer."""
@@ -2207,6 +2216,7 @@ class SyncPretalxView(ManagePermissionMixin, View):
     """
 
     required_permission = "manage_conference_settings"
+    required_feature = "pretalx_sync"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Run the Pretalx sync and redirect back to the dashboard.
@@ -2280,6 +2290,7 @@ class SyncSponsorsView(ManagePermissionMixin, View):
     """
 
     required_permission = "manage_conference_settings"
+    required_feature = "sponsors"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Run the PSF sponsor sync and redirect back to the dashboard.
@@ -2314,6 +2325,7 @@ class SyncPretalxStreamView(ManagePermissionMixin, View):
     """
 
     required_permission = "manage_conference_settings"
+    required_feature = "pretalx_sync"
 
     def post(self, request: HttpRequest, **kwargs: str) -> StreamingHttpResponse:  # noqa: ARG002
         """Start the streaming sync and return an SSE response."""
@@ -2553,9 +2565,12 @@ class PretalxEventSearchView(LoginRequiredMixin, View):
 
         Raises:
             PermissionDenied: If the user lacks the required permission.
+            Http404: If ``manage_ui`` or ``pretalx_sync`` is disabled.
         """
         if not request.user.is_authenticated:
             return self.handle_no_permission()
+        require_feature("manage_ui")
+        require_feature("pretalx_sync")
         if not (request.user.is_superuser or request.user.has_perm("program_conference.manage_conference_settings")):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
@@ -2690,6 +2705,7 @@ class TicketTypeListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/ticket_type_list.html"
     required_permission = "view_commerce"
+    required_feature = "registration"
     context_object_name = "ticket_types"
     paginate_by = 50
 
@@ -2758,6 +2774,7 @@ class TicketTypeCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/ticket_type_edit.html"
     required_permission = "change_commerce"
+    required_feature = "registration"
     form_class = TicketTypeForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -2785,6 +2802,7 @@ class TicketTypeEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/ticket_type_edit.html"
     required_permission = "change_commerce"
+    required_feature = "registration"
     form_class = TicketTypeForm
     context_object_name = "ticket_type"
 
@@ -2813,6 +2831,7 @@ class AddOnListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/addon_list.html"
     required_permission = "view_commerce"
+    required_feature = "registration"
     context_object_name = "addons"
     paginate_by = 50
 
@@ -2859,6 +2878,7 @@ class AddOnCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/addon_edit.html"
     required_permission = "change_commerce"
+    required_feature = "registration"
     form_class = AddOnForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -2886,6 +2906,7 @@ class AddOnEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/addon_edit.html"
     required_permission = "change_commerce"
+    required_feature = "registration"
     form_class = AddOnForm
     context_object_name = "addon"
 
@@ -2917,6 +2938,7 @@ class VoucherListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/voucher_list.html"
     required_permission = "view_commerce"
+    required_feature = "registration"
     context_object_name = "vouchers"
     paginate_by = 50
 
@@ -2940,6 +2962,7 @@ class VoucherCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/voucher_edit.html"
     required_permission = "change_commerce"
+    required_feature = "registration"
     form_class = VoucherForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -2972,6 +2995,7 @@ class VoucherEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/voucher_edit.html"
     required_permission = "change_commerce"
+    required_feature = "registration"
     form_class = VoucherForm
     context_object_name = "voucher"
 
@@ -3007,6 +3031,7 @@ class AttendeeListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/attendee_list.html"
     required_permission = "view_registration"
+    required_feature = "registration"
     context_object_name = "attendees"
     paginate_by = 50
 
@@ -3045,6 +3070,7 @@ class AttendeeDetailView(ManagePermissionMixin, DetailView):
 
     template_name = "django_program/manage/attendee_detail.html"
     required_permission = "view_registration"
+    required_feature = "registration"
     context_object_name = "attendee"
 
     def get_queryset(self) -> QuerySet[Attendee]:
@@ -3100,6 +3126,7 @@ class OrderListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/order_list.html"
     required_permission = "view_registration"
+    required_feature = "registration"
     context_object_name = "orders"
     paginate_by = 50
 
@@ -3132,6 +3159,7 @@ class OrderDetailView(ManagePermissionMixin, DetailView):
 
     template_name = "django_program/manage/order_detail.html"
     required_permission = "view_registration"
+    required_feature = "registration"
     context_object_name = "order"
 
     def get_queryset(self) -> QuerySet[Order]:
@@ -3164,6 +3192,7 @@ class ManualPaymentView(ManagePermissionMixin, View):
     """
 
     required_permission = "change_registration"
+    required_feature = "registration"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Record a manual payment and optionally mark the order as paid.
@@ -3291,6 +3320,7 @@ class ConditionListView(ManagePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/condition_list.html"
     required_permission = "view_commerce"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build a merged list of all conditions with display metadata."""
@@ -3336,6 +3366,7 @@ class ConditionCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/condition_edit.html"
     required_permission = "change_commerce"
+    required_feature = "registration"
 
     def setup(self, request: HttpRequest, *args: object, **kwargs: object) -> None:
         """Resolve the condition type from the URL."""
@@ -3385,6 +3416,7 @@ class ConditionEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/condition_edit.html"
     required_permission = "change_commerce"
+    required_feature = "registration"
     context_object_name = "condition"
 
     def setup(self, request: HttpRequest, *args: object, **kwargs: object) -> None:
@@ -3439,6 +3471,7 @@ class BadgeTemplateListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/badge_template_list.html"
     required_permission = "view_badges"
+    required_feature = "registration"
     context_object_name = "badge_templates"
     paginate_by = 50
 
@@ -3470,6 +3503,7 @@ class BadgeTemplateCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/badge_template_edit.html"
     required_permission = "change_badges"
+    required_feature = "registration"
     form_class = BadgeTemplateForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -3502,6 +3536,7 @@ class BadgeTemplateEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/badge_template_edit.html"
     required_permission = "change_badges"
+    required_feature = "registration"
     form_class = BadgeTemplateForm
     context_object_name = "badge_template"
 
@@ -3534,6 +3569,7 @@ class BadgeBulkGenerateView(ManagePermissionMixin, View):
     """
 
     required_permission = "change_badges"
+    required_feature = "registration"
 
     def post(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Trigger bulk badge generation and redirect with a count message.
@@ -3583,6 +3619,7 @@ class BadgeListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/badge_list.html"
     required_permission = "view_badges"
+    required_feature = "registration"
     context_object_name = "badges"
     paginate_by = 50
 
@@ -3639,6 +3676,7 @@ class BadgeDownloadView(ManagePermissionMixin, View):
     """Serve a single badge file as a download attachment."""
 
     required_permission = "view_badges"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:
         """Return the badge file as an attachment.
@@ -3673,6 +3711,7 @@ class BadgeBulkDownloadView(ManagePermissionMixin, View):
     """Generate a ZIP archive of all matching badges and stream it."""
 
     required_permission = "view_badges"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Build and return a ZIP of badge files.
@@ -3727,6 +3766,7 @@ class BadgePreviewView(ManagePermissionMixin, View):
     """
 
     required_permission = "view_badges"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Render a preview badge inline without saving.

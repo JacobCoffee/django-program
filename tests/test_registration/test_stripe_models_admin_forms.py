@@ -1,4 +1,4 @@
-"""Tests for Stripe models, read-only admin classes, registration forms, and stripe_tags."""
+"""Tests for Stripe models, read-only admin classes, registration forms, and program_stripe_tags."""
 
 from datetime import date
 from types import SimpleNamespace
@@ -27,7 +27,7 @@ from django_program.registration.models import (
     StripeCustomer,
     StripeEvent,
 )
-from django_program.registration.templatetags.stripe_tags import stripe_public_key
+from django_program.registration.templatetags.program_stripe_tags import stripe_public_key
 
 User = get_user_model()
 

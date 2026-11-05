@@ -13,7 +13,7 @@ def stripe_public_key(conference: Conference) -> str:
 
     Usage in templates::
 
-        {% load stripe_tags %}
+        {% load program_stripe_tags %}
         {% stripe_public_key conference as stripe_key %}
         <script>
             const stripe = Stripe('{{ stripe_key }}');

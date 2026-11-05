@@ -79,6 +79,49 @@ class FeaturesConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ManageConfig:
+    """Management dashboard shell configuration.
+
+    Lets a host project reuse the manage UI (sidebar, top bar, palette,
+    attention panel) for its own staff pages and trim the built-in modules.
+
+    Attributes:
+        title: Top-bar title text.
+        home_url: URL name or path the top-bar title links to. Empty means
+            the conference list (or the single conference's dashboard).
+        conference: Conference slug for single-conference sites. When set,
+            the conference list redirects to that conference's dashboard and
+            host pages without a ``conference`` in context still get the
+            built-in conference nav.
+        logout_url: URL name or path for the top-bar "Log out" link.
+        public_schedule_link: Show the "View Public Schedule" top-bar link.
+        builtin_nav: ``True`` keeps every built-in nav entry, ``False`` drops
+            them all. A list keeps only the listed section or item keys.
+        hide_nav: Section or item keys to remove (applied after ``builtin_nav``).
+        nav: Dotted paths to callables ``(registry: NavRegistry) -> None``
+            that add host sections and items.
+        attention: Dotted paths to callables
+            ``(request, conference) -> Iterable[AttentionItem]``.
+        stylesheets: Extra static stylesheet paths loaded after ``manage.css``.
+        scripts: Extra static script paths loaded after ``manage.js``.
+        palette: Enable the Cmd/Ctrl-K jump palette.
+    """
+
+    title: str = "Conference Management"
+    home_url: str = ""
+    conference: str = ""
+    logout_url: str = "admin:logout"
+    public_schedule_link: bool = True
+    builtin_nav: bool | tuple[str, ...] = True
+    hide_nav: tuple[str, ...] = ()
+    nav: tuple[str, ...] = ()
+    attention: tuple[str, ...] = ("django_program.manage.attention_builtin.builtin_attention",)
+    stylesheets: tuple[str, ...] = ()
+    scripts: tuple[str, ...] = ()
+    palette: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class ProgramConfig:
     """Top-level django-program configuration."""
 
@@ -86,6 +129,7 @@ class ProgramConfig:
     pretalx: PretalxConfig = field(default_factory=PretalxConfig)
     psf_sponsors: PSFSponsorConfig = field(default_factory=PSFSponsorConfig)
     features: FeaturesConfig = field(default_factory=FeaturesConfig)
+    manage: ManageConfig = field(default_factory=ManageConfig)
     cart_expiry_minutes: int = 30
     pending_order_expiry_minutes: int = 15
     order_reference_prefix: str = "ORD"
@@ -114,6 +158,7 @@ def get_config() -> ProgramConfig:
     pretalx_data = raw_data.pop("pretalx", {})
     psf_sponsors_data = raw_data.pop("psf_sponsors", {})
     features_data = raw_data.pop("features", {})
+    manage_data = raw_data.pop("manage", {})
     if not isinstance(stripe_data, Mapping):
         msg = "DJANGO_PROGRAM['stripe'] must be a mapping (dict-like object)"
         raise TypeError(msg)
@@ -126,16 +171,53 @@ def get_config() -> ProgramConfig:
     if not isinstance(features_data, Mapping):
         msg = "DJANGO_PROGRAM['features'] must be a mapping (dict-like object)"
         raise TypeError(msg)
+    if not isinstance(manage_data, Mapping):
+        msg = "DJANGO_PROGRAM['manage'] must be a mapping (dict-like object)"
+        raise TypeError(msg)
 
     config = ProgramConfig(
         stripe=StripeConfig(**dict(stripe_data)),
         pretalx=PretalxConfig(**dict(pretalx_data)),
         psf_sponsors=PSFSponsorConfig(**dict(psf_sponsors_data)),
         features=FeaturesConfig(**dict(features_data)),
+        manage=_build_manage_config(manage_data),
         **raw_data,
     )
     _validate_program_config(config)
     return config
+
+
+_MANAGE_SEQUENCE_KEYS = ("hide_nav", "nav", "attention", "stylesheets", "scripts")
+
+
+def _as_str_tuple(key: str, value: object) -> tuple[str, ...]:
+    if isinstance(value, str) or not isinstance(value, (list, tuple)):
+        msg = f"DJANGO_PROGRAM['manage']['{key}'] must be a list of strings"
+        raise TypeError(msg)
+    items = tuple(item for item in value if isinstance(item, str) and item)
+    if len(items) != len(value):
+        msg = f"DJANGO_PROGRAM['manage']['{key}'] must contain only non-empty strings"
+        raise TypeError(msg)
+    return items
+
+
+def _build_manage_config(manage_data: Mapping[str, object]) -> ManageConfig:
+    data = dict(manage_data)
+    for key in _MANAGE_SEQUENCE_KEYS:
+        if key in data:
+            data[key] = _as_str_tuple(key, data[key])
+    builtin_nav = data.get("builtin_nav", True)
+    if not isinstance(builtin_nav, bool):
+        data["builtin_nav"] = _as_str_tuple("builtin_nav", builtin_nav)
+    for key in ("title", "home_url", "conference", "logout_url"):
+        if key in data and not isinstance(data[key], str):
+            msg = f"DJANGO_PROGRAM['manage']['{key}'] must be a string"
+            raise TypeError(msg)
+    for key in ("public_schedule_link", "palette"):
+        if key in data and not isinstance(data[key], bool):
+            msg = f"DJANGO_PROGRAM['manage']['{key}'] must be a boolean"
+            raise TypeError(msg)
+    return ManageConfig(**data)
 
 
 def _validate_program_config(config: ProgramConfig) -> None:
