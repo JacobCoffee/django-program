@@ -12,6 +12,7 @@ from typing import Any
 
 from django.views.generic import TemplateView
 
+from django_program.features import is_feature_enabled
 from django_program.manage.reports import (
     get_activity_utilization,
     get_attendee_summary,
@@ -113,6 +114,10 @@ class AnalyticsDashboardView(ConferencePermissionMixin, TemplateView):
         context: dict[str, object] = super().get_context_data(**kwargs)
         context["active_nav"] = "analytics"
         conference = self.conference
+        context["sponsors_enabled"] = is_feature_enabled("sponsors", conference=conference)
+        context["travel_grants_enabled"] = is_feature_enabled("travel_grants", conference=conference)
+        context["programs_enabled"] = is_feature_enabled("programs", conference=conference)
+        context["registration_enabled"] = is_feature_enabled("registration", conference=conference)
 
         # KPI targets (Feature #49)
         targets = _get_effective_targets(conference)
@@ -210,6 +215,7 @@ class SponsorAnalyticsView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/sponsor_analytics.html"
     required_permission = "view_reports"
+    required_feature = "sponsors"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with sponsor analytics data.

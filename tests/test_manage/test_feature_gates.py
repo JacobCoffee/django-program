@@ -299,3 +299,161 @@ class TestSingleConferenceRedirect:
         url = reverse("manage:conference-list")
         resp = client_logged_in_super.get(url)
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# reports (views_reports.py) — registration-backed reports vs visa_letters
+# ---------------------------------------------------------------------------
+
+
+class TestReportsFeatureGating:
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_attendee_manifest_report_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-attendee-manifest", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_attendee_manifest_export_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-attendee-export", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    def test_attendee_manifest_report_200_when_enabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-attendee-manifest", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_inventory_report_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-inventory", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_voucher_usage_report_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-voucher-usage", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_discount_effectiveness_report_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-discount-effectiveness", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_sales_by_date_report_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-sales-by-date", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_credit_notes_report_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-credit-notes", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_speaker_registration_report_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-speaker-registration", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_reconciliation_report_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-reconciliation", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_registration_flow_report_404_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-registration-flow", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"visa_letters_enabled": False}})
+    def test_visa_letter_report_404_when_visa_letters_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-visa-letters", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    @override_settings(DJANGO_PROGRAM={"features": {"visa_letters_enabled": False}})
+    def test_visa_letter_export_404_when_visa_letters_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-visa-letters-export", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    def test_visa_letter_report_200_when_enabled(self, client_logged_in_super, conference):
+        url = reverse("manage:report-visa-letters", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False, "visa_letters_enabled": False}})
+    def test_reports_dashboard_itself_stays_200_with_everything_disabled(self, client_logged_in_super, conference):
+        """The reports hub is feature-less; it just hides links/panels for disabled modules."""
+        url = reverse("manage:reports-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_reports_dashboard_hides_registration_report_links_when_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:reports-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        disabled_url = reverse("manage:report-attendee-manifest", kwargs={"conference_slug": conference.slug})
+        assert disabled_url not in content
+
+    @override_settings(DJANGO_PROGRAM={"features": {"visa_letters_enabled": False}})
+    def test_reports_dashboard_hides_visa_letters_link_when_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:reports-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        disabled_url = reverse("manage:report-visa-letters", kwargs={"conference_slug": conference.slug})
+        assert disabled_url not in content
+
+
+# ---------------------------------------------------------------------------
+# analytics (views_analytics.py) — SponsorAnalyticsView vs feature-less hubs
+# ---------------------------------------------------------------------------
+
+
+class TestAnalyticsFeatureGating:
+    @override_settings(DJANGO_PROGRAM={"features": {"sponsors_enabled": False}})
+    def test_sponsor_analytics_404_when_sponsors_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:sponsor-analytics", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 404
+
+    def test_sponsor_analytics_200_when_enabled(self, client_logged_in_super, conference):
+        url = reverse("manage:sponsor-analytics", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+
+    @override_settings(
+        DJANGO_PROGRAM={
+            "features": {
+                "sponsors_enabled": False,
+                "travel_grants_enabled": False,
+                "programs_enabled": False,
+            }
+        }
+    )
+    def test_analytics_dashboard_itself_stays_200_with_modules_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:analytics-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200
+
+    @override_settings(DJANGO_PROGRAM={"features": {"sponsors_enabled": False}})
+    def test_analytics_dashboard_hides_sponsor_analytics_link_when_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:analytics-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        disabled_url = reverse("manage:sponsor-analytics", kwargs={"conference_slug": conference.slug})
+        assert disabled_url not in content
+
+    def test_cross_event_dashboard_stays_feature_less(self, client_logged_in_super, conference):
+        """Cross-event intelligence aggregates multiple modules and stays ungated itself."""
+        url = reverse("manage:cross-event-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        assert resp.status_code == 200

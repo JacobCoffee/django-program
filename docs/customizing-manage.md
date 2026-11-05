@@ -19,8 +19,8 @@ All options live under `DJANGO_PROGRAM["manage"]`.
 | `conference` | `""` | Conference slug for single-conference sites. The conference list redirects to its dashboard, and pages without a `conference` in context still show the conference's nav. |
 | `logout_url` | `"admin:logout"` | URL name or path for "Log out". |
 | `public_schedule_link` | `True` | Show "View Public Schedule" when a conference is in scope. |
-| `builtin_nav` | `True` | `True` keeps every built-in sidebar entry, `False` drops them all, a list keeps only those section or item keys. |
-| `hide_nav` | `[]` | Section or item keys to remove, applied after host hooks. |
+| `builtin_nav` | `True` | `True` keeps every built-in sidebar entry, `False` drops them all, a list keeps only those section or top-level item keys (dynamic children follow their parent). |
+| `hide_nav` | `[]` | Section, item, or dynamic child keys to remove, applied after host hooks. |
 | `nav` | `[]` | Dotted paths to `register(registry)` callables that add sections and items. |
 | `attention` | `["django_program.manage.attention_builtin.builtin_attention"]` | Dotted paths to attention providers. |
 | `stylesheets` | `[]` | Extra static stylesheets loaded after `django_program/manage/manage.css`. |
@@ -109,9 +109,11 @@ DJANGO_PROGRAM = {"manage": {"nav": ["myproject.staff.nav.register"]}}
 | `order` | Sort order inside the section. |
 
 Items whose URL name does not reverse are skipped, so unmounted modules never
-produce broken links. When no item matches the page's `active_nav`, the item whose
-URL is the longest prefix of the request path is highlighted, so host sub-pages
-keep their section open.
+produce broken links. When an item is unavailable because its module is off, it
+needs a conference, or its URL does not reverse, its visible children take its
+place; when its permission check fails, its children are hidden too. When no item
+matches the page's `active_nav`, the item whose URL is the longest prefix of the
+request path is highlighted, so host sub-pages keep their section open.
 
 Use `django_program.manage.nav.manage_perm("view_registration")` to reuse the
 built-in permission rule (superuser, `program_conference.change_conference`, or

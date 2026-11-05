@@ -18,6 +18,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import ListView, TemplateView
 
+from django_program.features import is_feature_enabled
 from django_program.manage.reports import (
     get_addon_inventory,
     get_attendee_manifest,
@@ -121,6 +122,8 @@ class ReportsDashboardView(ConferencePermissionMixin, TemplateView):
         """
         context: dict[str, object] = super().get_context_data(**kwargs)
         conference = self.conference
+        context["registration_enabled"] = is_feature_enabled("registration", conference=conference)
+        context["visa_letters_enabled"] = is_feature_enabled("visa_letters", conference=conference)
 
         context["attendee_summary"] = get_attendee_summary(conference)
         context["ticket_types"] = get_ticket_inventory(conference)
@@ -246,6 +249,7 @@ class AttendeeManifestView(ConferencePermissionMixin, ListView):
 
     template_name = "django_program/manage/report_attendee_manifest.html"
     required_permission = "view_reports"
+    required_feature = "registration"
     context_object_name = "attendees"
     paginate_by = 50
 
@@ -314,6 +318,7 @@ class AttendeeManifestExportView(ConferencePermissionMixin, View):
     """CSV export of the attendee manifest."""
 
     required_permission = "export_reports"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of the attendee manifest.
@@ -375,6 +380,7 @@ class InventoryReportView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/report_inventory.html"
     required_permission = "view_reports"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with ticket type and add-on inventory data.
@@ -413,6 +419,7 @@ class InventoryReportExportView(ConferencePermissionMixin, View):
     """CSV export of product inventory."""
 
     required_permission = "export_reports"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of inventory data.
@@ -490,6 +497,7 @@ class VoucherUsageReportView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/report_voucher_usage.html"
     required_permission = "view_reports"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with voucher usage data and summary stats.
@@ -525,6 +533,7 @@ class VoucherUsageExportView(ConferencePermissionMixin, View):
     """CSV export of voucher usage data."""
 
     required_permission = "export_reports"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of voucher usage data.
@@ -579,6 +588,7 @@ class DiscountEffectivenessView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/report_discount_effectiveness.html"
     required_permission = "view_reports"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with discount conditions and summary stats.
@@ -614,6 +624,7 @@ class DiscountEffectivenessExportView(ConferencePermissionMixin, View):
     """CSV export of discount effectiveness data."""
 
     required_permission = "export_reports"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of discount conditions data.
@@ -684,6 +695,7 @@ class SalesByDateView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/report_sales_by_date.html"
     required_permission = "view_reports"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with daily sales data and summary totals.
@@ -725,6 +737,7 @@ class SalesByDateExportView(ConferencePermissionMixin, View):
     """CSV export of daily sales data."""
 
     required_permission = "export_reports"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of daily sales.
@@ -762,6 +775,7 @@ class CreditNotesView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/report_credit_notes.html"
     required_permission = "view_reports"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with credit records and summary stats.
@@ -795,6 +809,7 @@ class CreditNotesExportView(ConferencePermissionMixin, View):
     """CSV export of credit notes."""
 
     required_permission = "export_reports"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of credit notes.
@@ -846,6 +861,7 @@ class SpeakerRegistrationView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/report_speaker_registration.html"
     required_permission = "view_reports"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with speaker registration data.
@@ -881,6 +897,7 @@ class SpeakerRegistrationExportView(ConferencePermissionMixin, View):
     """CSV export of speaker registration data."""
 
     required_permission = "export_reports"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of speaker registration status.
@@ -915,6 +932,7 @@ class ReconciliationView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/report_reconciliation.html"
     required_permission = "view_reports"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with reconciliation data.
@@ -958,6 +976,7 @@ class ReconciliationExportView(ConferencePermissionMixin, View):
     """CSV export of financial reconciliation data."""
 
     required_permission = "export_reports"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of reconciliation data.
@@ -998,6 +1017,7 @@ class RegistrationFlowView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/report_registration_flow.html"
     required_permission = "view_reports"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with daily registration flow data.
@@ -1041,6 +1061,7 @@ class RegistrationFlowExportView(ConferencePermissionMixin, View):
     """CSV export of registration flow data."""
 
     required_permission = "export_reports"
+    required_feature = "registration"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of daily registration flow.
@@ -1080,6 +1101,7 @@ class VisaLetterReportView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/report_visa_letters.html"
     required_permission = "view_reports"
+    required_feature = "visa_letters"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with letter request data and chart data.
@@ -1119,6 +1141,7 @@ class VisaLetterExportView(ConferencePermissionMixin, View):
     """CSV export of visa invitation letter requests."""
 
     required_permission = "export_reports"
+    required_feature = "visa_letters"
 
     def get(self, request: HttpRequest, **kwargs: str) -> HttpResponse:  # noqa: ARG002
         """Return a CSV download of all letter requests.

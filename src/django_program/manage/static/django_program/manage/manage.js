@@ -19,11 +19,6 @@
     }
   }
 
-  function getCookie(name) {
-    var match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-    return match ? decodeURIComponent(match.pop()) : '';
-  }
-
   function initSectionCollapse() {
     var stored = readCollapsed();
 
@@ -99,16 +94,35 @@
     var scrim = document.getElementById('manage-sidebar-scrim');
     if (!toggle || !sidebar) return;
 
+    var mql = window.matchMedia('(max-width: 900px)');
+
+    function isMobile() {
+      return mql.matches;
+    }
+
+    function syncInert() {
+      if (isMobile() && !sidebar.classList.contains('open')) {
+        sidebar.setAttribute('inert', '');
+        sidebar.setAttribute('aria-hidden', 'true');
+      } else {
+        sidebar.removeAttribute('inert');
+        sidebar.removeAttribute('aria-hidden');
+      }
+    }
+
     function openDrawer() {
       sidebar.classList.add('open');
       toggle.setAttribute('aria-expanded', 'true');
       if (scrim) scrim.hidden = false;
+      syncInert();
     }
 
     function closeDrawer() {
       sidebar.classList.remove('open');
       toggle.setAttribute('aria-expanded', 'false');
       if (scrim) scrim.hidden = true;
+      syncInert();
+      toggle.focus();
     }
 
     toggle.addEventListener('click', function () {
@@ -124,6 +138,23 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && sidebar.classList.contains('open')) closeDrawer();
     });
+
+    function handleViewportChange() {
+      if (!isMobile() && sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+        toggle.setAttribute('aria-expanded', 'false');
+        if (scrim) scrim.hidden = true;
+      }
+      syncInert();
+    }
+
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', handleViewportChange);
+    } else if (typeof mql.addListener === 'function') {
+      mql.addListener(handleViewportChange);
+    }
+
+    syncInert();
   }
 
   function initPalette() {
@@ -179,6 +210,12 @@
       if (input) {
         input.setAttribute('aria-activedescendant', activeIndex >= 0 ? 'palette-result-' + activeIndex : '');
       }
+      if (activeIndex >= 0) {
+        var activeEl = document.getElementById('palette-result-' + activeIndex);
+        if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+          activeEl.scrollIntoView({ block: 'nearest' });
+        }
+      }
     }
 
     function filterItems(query) {
@@ -199,15 +236,16 @@
     function navigate(item) {
       closePalette();
       if (item.method === 'post') {
-        var form = document.createElement('form');
-        form.method = 'post';
-        form.action = item.href;
+        var template = document.getElementById('manage-palette-post-form');
+        if (!template) {
+          window.location.href = item.href;
+          return;
+        }
+        var form = template.cloneNode(true);
+        form.removeAttribute('id');
+        form.removeAttribute('hidden');
         form.style.display = 'none';
-        var csrfInput = document.createElement('input');
-        csrfInput.type = 'hidden';
-        csrfInput.name = 'csrfmiddlewaretoken';
-        csrfInput.value = getCookie('csrftoken');
-        form.appendChild(csrfInput);
+        form.action = item.href;
         document.body.appendChild(form);
         form.submit();
       } else {

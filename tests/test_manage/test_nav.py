@@ -1,5 +1,6 @@
 """Tests for the configurable manage nav registry and shell templatetag."""
 
+import re
 from datetime import date
 
 import pytest
@@ -91,6 +92,29 @@ def register_host_section(registry: NavRegistry) -> None:
     registry.add(
         "host-tools",
         NavItem(key="host-widgets", label="Widgets", url="/host/widgets/"),
+    )
+
+
+def register_host_section_with_children(registry: NavRegistry) -> None:
+    """A host ``nav`` hook: a grouped parent item with a GET and a POST child."""
+    registry.section("host-grouped", "Host Grouped", order=6)
+    registry.add(
+        "host-grouped",
+        NavItem(
+            key="host-parent",
+            label="Parent",
+            url="/host/parent/",
+            group="Group A",
+            children=lambda ctx: [
+                NavItem(key="host-child-link", label="Child Link", url="/host/parent/child/"),
+                NavItem(
+                    key="host-child-post",
+                    label="Child Post",
+                    url="/host/parent/child-post/",
+                    method="post",
+                ),
+            ],
+        ),
     )
 
 
@@ -271,6 +295,30 @@ class TestBuildNav:
         active = [entry.key for entry in (overrides, *overrides.children) if entry.is_active]
         assert active == [active_key]
 
+    def test_hide_nav_removes_dynamic_children(self, rf, superuser, conference, settings):
+        settings.DJANGO_PROGRAM = {"manage": {"hide_nav": ["overrides-rooms"]}}
+        request = rf.get("/")
+        request.user = superuser
+        sections = build_nav(request, conference=conference)
+        overrides = next(item for section in sections for item in section.items if item.key == "overrides")
+        child_keys = {child.key for child in overrides.children}
+        assert "overrides-rooms" not in child_keys
+        assert "overrides-speakers" in child_keys
+
+    def test_children_outlive_a_parent_whose_module_is_off(self, rf, superuser, conference, settings):
+        settings.DJANGO_PROGRAM = {"features": {"pretalx_sync_enabled": False}}
+        request = rf.get("/")
+        request.user = superuser
+        sections = build_nav(request, conference=conference)
+        sync = next(section for section in sections if section.key == "sync-overrides")
+        assert [item.key for item in sync.items] == ["overrides-sponsors"]
+
+    def test_children_stay_hidden_when_the_parent_permission_fails(self, rf, conference_perm_user, conference):
+        request = rf.get("/")
+        request.user = conference_perm_user
+        keys = {item.key for section in build_nav(request, conference=conference) for item in section.items}
+        assert not any(key.startswith("overrides") for key in keys)
+
     def test_nav_uses_badges_false_by_default(self):
         assert nav_uses_badges() is False
 
@@ -307,3 +355,53 @@ class TestManageShellRendering:
     def test_no_conference_and_no_manage_conference_hides_conference_items(self, rf, superuser):
         html = _render_base(rf, superuser)
         assert 'id="manage-sidebar"' not in html
+
+    def test_palette_post_navigation_has_csrf_form(self, rf, superuser):
+        html = _render_base(rf, superuser)
+        assert 'id="manage-palette-post-form"' in html
+        assert "csrfmiddlewaretoken" in html
+
+    def test_grouped_item_renders_its_children(self, rf, superuser, settings):
+        """Regression: grouped items used to render without their subnav children."""
+        settings.DJANGO_PROGRAM = {
+            "manage": {"nav": ["tests.test_manage.test_nav.register_host_section_with_children"]}
+        }
+        html = _render_base(rf, superuser, active_nav="host-child-link")
+        assert "Child Link" in html
+        assert "Child Post" in html
+        assert 'data-subsection-target="host-grouped-group-a"' in html
+
+    def test_post_child_item_renders_as_csrf_form_not_a_link(self, rf, superuser, settings):
+        """Regression: POST children used to always render as plain GET links."""
+        settings.DJANGO_PROGRAM = {
+            "manage": {"nav": ["tests.test_manage.test_nav.register_host_section_with_children"]}
+        }
+        html = _render_base(rf, superuser, active_nav="host-child-link")
+        assert '<form method="post" action="/host/parent/child-post/"' in html
+        assert '<a href="/host/parent/child-post/"' not in html
+
+    def test_submenu_expands_when_child_is_active(self, rf, superuser, settings):
+        """Regression: the subnav only opened for an active parent, hiding an active child."""
+        settings.DJANGO_PROGRAM = {
+            "manage": {"nav": ["tests.test_manage.test_nav.register_host_section_with_children"]}
+        }
+        html = _render_base(rf, superuser, active_nav="host-child-link")
+        assert 'id="manage-subnav-host-parent"' in html
+        subnav_start = html.index('id="manage-subnav-host-parent"')
+        subnav_tag = html[max(0, subnav_start - 200) : subnav_start]
+        assert "sidebar-subnav open" in subnav_tag or 'class="sidebar-subnav open"' in subnav_tag
+        assert 'aria-expanded="true"' in html[max(0, subnav_start - 400) : subnav_start]
+
+    def test_home_href_is_conference_list_when_not_single_conference(self, rf, superuser, conference):
+        """Regression: home_href used to link the dashboard for any conference in context."""
+        html = _render_base(rf, superuser, conference=conference)
+        match = re.search(r'<a href="([^"]+)" class="top-bar-title">', html)
+        assert match is not None
+        assert match.group(1) == reverse("manage:conference-list")
+
+    def test_home_href_is_dashboard_in_single_conference_mode(self, rf, superuser, conference, settings):
+        settings.DJANGO_PROGRAM = {"manage": {"conference": conference.slug}}
+        html = _render_base(rf, superuser, conference=conference)
+        match = re.search(r'<a href="([^"]+)" class="top-bar-title">', html)
+        assert match is not None
+        assert match.group(1) == reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})

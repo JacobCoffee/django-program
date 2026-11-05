@@ -71,7 +71,7 @@ def _resolve_conference(context_conference: object, config: ManageConfig) -> Con
 def _resolve_home_href(config: ManageConfig, conference: Conference | None) -> str:
     if config.home_url:
         return _resolve_url(config.home_url)
-    if conference is not None:
+    if config.conference and conference is not None:
         try:
             return reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
         except NoReverseMatch:

@@ -22,16 +22,16 @@
 {# Drill-down URL map for clickable charts (Feature #47) #}
 <script>
 window._drilldownUrls = {
-  orderList: '{% url "manage:order-list" conference.slug %}',
-  sponsorList: '{% url "manage:sponsor-manage-list" conference.slug %}',
-  addonList: '{% url "manage:addon-list" conference.slug %}',
+  orderList: '{% if registration_enabled %}{% url "manage:order-list" conference.slug %}{% endif %}',
+  sponsorList: '{% if sponsors_enabled %}{% url "manage:sponsor-manage-list" conference.slug %}{% endif %}',
+  addonList: '{% if registration_enabled %}{% url "manage:addon-list" conference.slug %}{% endif %}',
   talkList: '{% url "manage:talk-list" conference.slug %}',
   roomList: '{% url "manage:room-list" conference.slug %}',
-  activityList: '{% url "manage:activity-list" conference.slug %}',
-  travelGrantList: '{% url "manage:travel-grant-list" conference.slug %}',
-  sponsorAnalytics: '{% url "manage:sponsor-analytics" conference.slug %}',
+  activityList: '{% if programs_enabled %}{% url "manage:activity-list" conference.slug %}{% endif %}',
+  travelGrantList: '{% if travel_grants_enabled %}{% url "manage:travel-grant-list" conference.slug %}{% endif %}',
+  sponsorAnalytics: '{% if sponsors_enabled %}{% url "manage:sponsor-analytics" conference.slug %}{% endif %}',
   roomEditBase: '{% url "manage:room-list" conference.slug %}',
-  activityDashboardBase: '{% url "manage:activity-list" conference.slug %}'
+  activityDashboardBase: '{% if programs_enabled %}{% url "manage:activity-list" conference.slug %}{% endif %}'
 };
 window._conferenceSlug = '{{ conference.slug }}';
 </script>
@@ -129,6 +129,7 @@ window._conferenceSlug = '{{ conference.slug }}';
   </div>
   <div></div>
   <div></div>
+  {% if sponsors_enabled %}
   <div style="display: flex; align-items: center; justify-content: flex-end;">
     <a href="{% url 'manage:sponsor-analytics' conference.slug %}"
        style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.2rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; font-size: 0.82rem; font-weight: 600; color: var(--color-text); text-decoration: none; transition: all 0.2s ease;"
@@ -137,6 +138,7 @@ window._conferenceSlug = '{{ conference.slug }}';
       Sponsor Analytics &rarr;
     </a>
   </div>
+  {% endif %}
 </div>
 
 <!-- Charts Grid -->
@@ -145,8 +147,8 @@ window._conferenceSlug = '{{ conference.slug }}';
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2.5rem;">
   {% include "django_program/manage/charts/_cart_funnel.html" with chart_data=chart_cart_funnel_json %}
   {% include "django_program/manage/charts/_room_utilization.html" with chart_data=chart_room_utilization_json %}
-  {% include "django_program/manage/charts/_activity_capacity.html" with chart_data=chart_activity_capacity_json %}
-  {% include "django_program/manage/charts/_grant_status.html" with chart_data=chart_grant_status_json %}
+  {% if programs_enabled %}{% include "django_program/manage/charts/_activity_capacity.html" with chart_data=chart_activity_capacity_json %}{% endif %}
+  {% if travel_grants_enabled %}{% include "django_program/manage/charts/_grant_status.html" with chart_data=chart_grant_status_json %}{% endif %}
   {% include "django_program/manage/charts/_content_analytics.html" with chart_data=chart_content_json %}
   {% include "django_program/manage/charts/_revenue_breakdown.html" with chart_data=chart_revenue_breakdown_json %}
 </div>
@@ -192,6 +194,7 @@ window._conferenceSlug = '{{ conference.slug }}';
     {% endif %}
   </div>
 
+  {% if sponsors_enabled %}
   <!-- Sponsor Benefit Fulfillment -->
   <div>
     <h2 class="section-heading" style="margin-top: 0;">Sponsor Benefit Fulfillment</h2>
@@ -232,6 +235,7 @@ window._conferenceSlug = '{{ conference.slug }}';
     </div>
     {% endif %}
   </div>
+  {% endif %}
 </div>
 
 <style>

@@ -148,6 +148,7 @@ class NavRegistry:
         """Create an empty registry."""
         self._sections: dict[str, _SectionEntry] = {}
         self._item_sections: dict[str, str] = {}
+        self._hidden: set[str] = set()
 
     def section(self, key: str, label: Label, **options: object) -> NavSection:
         """Add a section, or update an existing section's label and options.
@@ -186,19 +187,32 @@ class NavRegistry:
             entry.items.append(item)
 
     def remove(self, key: str) -> None:
-        """Remove a section (with its items) or a single item by key. Unknown keys are ignored."""
+        """Remove a section (with its items) or an item by key.
+
+        Keys that are not registered statically (e.g. dynamic ``children``) are
+        remembered and dropped when the nav is resolved.
+        """
         entry = self._sections.pop(key, None)
         if entry is not None:
             for item in entry.items:
                 self._item_sections.pop(item.key, None)
             return
         section_key = self._item_sections.pop(key, None)
-        if section_key is not None:
-            items = self._sections[section_key].items
-            items[:] = [item for item in items if item.key != key]
+        if section_key is None:
+            self._hidden.add(key)
+            return
+        items = self._sections[section_key].items
+        items[:] = [item for item in items if item.key != key]
+
+    def is_hidden(self, key: str) -> bool:
+        """Return whether a dynamic item key was removed with :meth:`remove`."""
+        return key in self._hidden
 
     def keep(self, keys: Iterable[str]) -> None:
-        """Keep only the given section or item keys; everything else is removed."""
+        """Keep only the given section or top-level item keys; everything else is removed.
+
+        Dynamic ``children`` follow their parent item.
+        """
         wanted = set(keys)
         for section_key in list(self._sections):
             if section_key in wanted:
@@ -315,6 +329,11 @@ class ResolvedItem:
     badge_count: int | None = None
     children: tuple[ResolvedItem, ...] = ()
 
+    @property
+    def has_active_child(self) -> bool:
+        """Return whether any descendant is the current page."""
+        return any(child.is_active or child.has_active_child for child in self.children)
+
 
 @dataclass(frozen=True, slots=True)
 class ResolvedSection:
@@ -328,7 +347,7 @@ class ResolvedSection:
     @property
     def is_active(self) -> bool:
         """Return whether the current page belongs to this section."""
-        return any(item.is_active or any(child.is_active for child in item.children) for item in self.items)
+        return any(item.is_active or item.has_active_child for item in self.items)
 
 
 def _label(label: Label, ctx: NavContext) -> str:
@@ -355,31 +374,41 @@ def _href(item: NavItem, ctx: NavContext) -> str | None:
         return None
 
 
-def _resolve_item(item: NavItem, ctx: NavContext, section_label: str, badges: dict[str, int]) -> ResolvedItem | None:
-    if not _visible(item, ctx):
-        return None
-    href = _href(item, ctx)
-    if href is None:
-        return None
+def _resolve_item(
+    item: NavItem, ctx: NavContext, section_label: str, badges: dict[str, int]
+) -> tuple[ResolvedItem, ...]:
+    """Resolve one item, returning nothing, the item, or its promoted children.
+
+    A failed permission check hides the item and its children.  When the item
+    itself is unavailable for another reason (its feature is off, it needs a
+    conference, or its URL does not reverse), its visible children take its place.
+    """
+    registry = get_registry()
+    if registry.is_hidden(item.key) or not check_permission(ctx.user, item.permission):
+        return ()
     children = tuple(
-        child
-        for child in (
-            _resolve_item(raw, ctx, section_label, badges) for raw in (item.children(ctx) if item.children else ())
-        )
-        if child is not None
+        resolved
+        for raw in (item.children(ctx) if item.children else ())
+        for resolved in _resolve_item(raw, ctx, section_label, badges)
     )
-    return ResolvedItem(
-        key=item.key,
-        label=_label(item.label, ctx),
-        href=href,
-        icon=item.icon,
-        group=item.group,
-        method=item.method,
-        description=item.description,
-        section_label=section_label,
-        is_active=bool(ctx.active_nav) and ctx.active_nav in (item.active or (item.key,)),
-        badge_count=badges.get(item.badge) if item.badge else None,
-        children=children,
+    feature_on = not item.feature or is_feature_enabled(item.feature, conference=ctx.conference)
+    href = _href(item, ctx) if feature_on else None
+    if href is None:
+        return tuple(replace(child, group=item.group, icon=child.icon or item.icon) for child in children)
+    return (
+        ResolvedItem(
+            key=item.key,
+            label=_label(item.label, ctx),
+            href=href,
+            icon=item.icon,
+            group=item.group,
+            method=item.method,
+            description=item.description,
+            section_label=section_label,
+            is_active=bool(ctx.active_nav) and ctx.active_nav in (item.active or (item.key,)),
+            badge_count=badges.get(item.badge) if item.badge else None,
+            children=children,
+        ),
     )
 
 
@@ -454,7 +483,7 @@ def build_nav(
         if not _visible(section, ctx):
             continue
         label = _label(section.label, ctx)
-        resolved = tuple(item for item in (_resolve_item(raw, ctx, label, counts) for raw in items) if item is not None)
+        resolved = tuple(entry for raw in items for entry in _resolve_item(raw, ctx, label, counts))
         if resolved:
             sections.append(ResolvedSection(key=section.key, label=label, utility=section.utility, items=resolved))
     if not any(section.is_active for section in sections):
