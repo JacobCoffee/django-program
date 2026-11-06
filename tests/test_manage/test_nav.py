@@ -532,6 +532,12 @@ class TestManageShellRendering:
         html = get_template("django_program/manage/base.html").render({"user": superuser})
         assert 'id="manage-sidebar"' not in html
 
+    def test_external_logout_without_request_is_a_plain_link(self, superuser, settings):
+        settings.DJANGO_PROGRAM = {"manage": {"logout_url": "https://sso.example.com/logout"}}
+        html = get_template("django_program/manage/base.html").render({"user": superuser})
+        assert 'action="https://sso.example.com/logout"' not in html
+        assert 'href="https://sso.example.com/logout"' in html
+
     def test_logout_is_a_post_form(self, rf, superuser):
         html = _render_base(rf, superuser)
         assert f'<form method="post" action="{reverse("admin:logout")}" class="top-bar-logout">' in html

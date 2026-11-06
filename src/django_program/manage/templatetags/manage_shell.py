@@ -21,6 +21,7 @@ from django import template
 from django.apps import apps
 from django.urls import NoReverseMatch, reverse
 from django.utils.html import escape
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.safestring import mark_safe
 
 from django_program.manage.attention import attention_counts
@@ -46,7 +47,7 @@ class ManageShell:
     config: ManageConfig
     home_href: str
     logout_href: str
-    logout_same_origin: bool = True
+    logout_same_origin: bool
     palette_items: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -142,12 +143,14 @@ def manage_shell(context: template.Context) -> ManageShell:
     config = get_config().manage
     request: HttpRequest | None = context.get("request")
     if request is None:
+        logout_href = _resolve_url(config.logout_url)
         return ManageShell(
             nav=[],
             conference=None,
             config=config,
             home_href=_resolve_url(config.home_url),
-            logout_href=_resolve_url(config.logout_url),
+            logout_href=logout_href,
+            logout_same_origin=url_has_allowed_host_and_scheme(logout_href, allowed_hosts=None),
         )
     conference = _resolve_conference(context.get("conference"), config)
     active_nav = context.get("active_nav") or ""
