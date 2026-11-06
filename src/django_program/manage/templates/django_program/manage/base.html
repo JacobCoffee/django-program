@@ -49,7 +49,7 @@
         <span class="top-bar-separator"></span>
       {% endif %}
       {% if user.is_authenticated %}
-        <span class="top-bar-user">{{ user.get_short_name|default:user.username }}</span>
+        <span class="top-bar-user">{{ user.get_short_name|default:user.get_username }}</span>
         {% if shell.logout_href %}
         <span class="top-bar-separator"></span>
         <form method="post" action="{{ shell.logout_href }}" class="top-bar-logout">
