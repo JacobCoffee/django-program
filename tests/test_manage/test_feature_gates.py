@@ -457,3 +457,137 @@ class TestAnalyticsFeatureGating:
         url = reverse("manage:cross-event-dashboard", kwargs={"conference_slug": conference.slug})
         resp = client_logged_in_super.get(url)
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Main conference dashboard (views.py DashboardView + dashboard.html) — links,
+# metrics, and sync forms must not point at disabled modules.
+# ---------------------------------------------------------------------------
+
+
+class TestMainDashboardFeatureGating:
+    def test_dashboard_200_with_everything_disabled(self, client_logged_in_super, conference):
+        """The main dashboard itself is feature-less; it just hides gated content."""
+        with override_settings(
+            DJANGO_PROGRAM={
+                "features": {
+                    "registration_enabled": False,
+                    "sponsors_enabled": False,
+                    "travel_grants_enabled": False,
+                    "programs_enabled": False,
+                    "pretalx_sync_enabled": False,
+                    "visa_letters_enabled": False,
+                }
+            }
+        ):
+            url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+            resp = client_logged_in_super.get(url)
+            assert resp.status_code == 200
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_dashboard_hides_registration_metric_and_links_when_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert reverse("manage:order-list", kwargs={"conference_slug": conference.slug}) not in content
+        assert reverse("manage:ticket-type-list", kwargs={"conference_slug": conference.slug}) not in content
+        assert reverse("manage:addon-list", kwargs={"conference_slug": conference.slug}) not in content
+        assert reverse("manage:voucher-list", kwargs={"conference_slug": conference.slug}) not in content
+
+    def test_dashboard_shows_registration_links_when_enabled(self, client_logged_in_super, conference):
+        url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert reverse("manage:order-list", kwargs={"conference_slug": conference.slug}) in content
+
+    @override_settings(DJANGO_PROGRAM={"features": {"programs_enabled": False}})
+    def test_dashboard_hides_activities_link_when_programs_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert reverse("manage:activity-list", kwargs={"conference_slug": conference.slug}) not in content
+
+    @override_settings(DJANGO_PROGRAM={"features": {"sponsors_enabled": False}})
+    def test_dashboard_hides_sponsors_link_when_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert reverse("manage:sponsor-manage-list", kwargs={"conference_slug": conference.slug}) not in content
+
+    @override_settings(DJANGO_PROGRAM={"features": {"travel_grants_enabled": False}})
+    def test_dashboard_hides_travel_grants_link_when_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert reverse("manage:travel-grant-list", kwargs={"conference_slug": conference.slug}) not in content
+
+    @override_settings(DJANGO_PROGRAM={"features": {"visa_letters_enabled": False}})
+    def test_dashboard_hides_visa_letters_link_when_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert reverse("manage:letter-list", kwargs={"conference_slug": conference.slug}) not in content
+
+    @override_settings(DJANGO_PROGRAM={"features": {"pretalx_sync_enabled": False}})
+    def test_dashboard_hides_pretalx_sync_form_when_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert reverse("manage:sync-pretalx", kwargs={"conference_slug": conference.slug}) not in content
+        assert reverse("manage:sync-pretalx-stream", kwargs={"conference_slug": conference.slug}) not in content
+        assert "Sync Pretalx" not in content
+
+    def test_dashboard_shows_pretalx_sync_form_when_enabled(self, client_logged_in_super, conference):
+        url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert reverse("manage:sync-pretalx", kwargs={"conference_slug": conference.slug}) in content
+
+    @override_settings(DJANGO_PROGRAM={"features": {"pretalx_sync_enabled": False, "sponsors_enabled": False}})
+    def test_dashboard_hides_whole_sync_card_when_both_sync_features_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert 'id="sync-section"' not in content
+
+
+# ---------------------------------------------------------------------------
+# analytics_dashboard.html — registration-only charts/table must not render
+# (and must not generate dead drill-down links) when registration is off.
+# ---------------------------------------------------------------------------
+
+
+class TestAnalyticsDashboardRegistrationGating:
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_cart_funnel_chart_not_rendered_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:analytics-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert 'id="chart-cart-funnel"' not in content
+
+    def test_cart_funnel_chart_rendered_when_registration_enabled(self, client_logged_in_super, conference):
+        url = reverse("manage:analytics-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert 'id="chart-cart-funnel"' in content
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_ticket_sales_ratio_table_not_rendered_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:analytics-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert "Ticket Sales Ratio" not in content
+
+    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
+    def test_drilldown_order_list_url_empty_when_registration_disabled(self, client_logged_in_super, conference):
+        url = reverse("manage:analytics-dashboard", kwargs={"conference_slug": conference.slug})
+        resp = client_logged_in_super.get(url)
+        content = resp.content.decode()
+        assert reverse("manage:order-list", kwargs={"conference_slug": conference.slug}) not in content
+        assert "orderList: ''" in content
+
+    def test_analytics_dashboard_200_when_registration_disabled(self, client_logged_in_super, conference):
+        with override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}}):
+            url = reverse("manage:analytics-dashboard", kwargs={"conference_slug": conference.slug})
+            resp = client_logged_in_super.get(url)
+            assert resp.status_code == 200

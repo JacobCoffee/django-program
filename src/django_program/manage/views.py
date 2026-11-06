@@ -34,7 +34,7 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from django_program.conference.models import Conference, Expense, ExpenseCategory, KPITargets, Section
-from django_program.features import require_feature
+from django_program.features import is_feature_enabled, require_feature
 from django_program.manage.attention import get_attention
 from django_program.manage.forms import (
     ActivityForm,
@@ -797,6 +797,12 @@ class DashboardView(ManagePermissionMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         conference = self.conference
         context["active_nav"] = "dashboard"
+        context["registration_enabled"] = is_feature_enabled("registration", conference=conference)
+        context["sponsors_enabled"] = is_feature_enabled("sponsors", conference=conference)
+        context["travel_grants_enabled"] = is_feature_enabled("travel_grants", conference=conference)
+        context["programs_enabled"] = is_feature_enabled("programs", conference=conference)
+        context["pretalx_sync_enabled"] = is_feature_enabled("pretalx_sync", conference=conference)
+        context["visa_letters_enabled"] = is_feature_enabled("visa_letters", conference=conference)
         context["stats"] = {
             "rooms": Room.objects.filter(conference=conference).count(),
             "speakers": Speaker.objects.filter(conference=conference).count(),

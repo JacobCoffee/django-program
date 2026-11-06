@@ -8,8 +8,8 @@
 {% endblock %}
 
 {% block page_actions %}
-{% if conference.pretalx_event_slug %}<a href="#sync-section" class="btn btn-secondary btn-sm">Sync Pretalx</a>{% endif %}
-{% if has_psf_sponsor_sync %}<a href="#sync-section" class="btn btn-secondary btn-sm">Sync Sponsors</a>{% endif %}
+{% if pretalx_sync_enabled and conference.pretalx_event_slug %}<a href="#sync-section" class="btn btn-secondary btn-sm">Sync Pretalx</a>{% endif %}
+{% if sponsors_enabled and has_psf_sponsor_sync %}<a href="#sync-section" class="btn btn-secondary btn-sm">Sync Sponsors</a>{% endif %}
 <a href="{% url 'manage:conference-edit' conference.slug %}" class="btn btn-secondary">Settings</a>
 {% endblock %}
 
@@ -191,6 +191,7 @@
       <div class="stat-card-label">Schedule Slots</div>
     </a>
   </div>
+  {% if registration_enabled %}
   <div class="stat-card">
     <a href="{% url 'manage:order-list' conference.slug %}">
       <div class="stat-card-value">{{ stats.orders }}</div>
@@ -200,6 +201,7 @@
       {% endif %}
     </a>
   </div>
+  {% endif %}
 </div>
 
 {% if stats.unscheduled_talks %}
@@ -245,17 +247,19 @@
         <a href="{% url 'manage:schedule-list' conference.slug %}" class="dir-link">Schedule <span class="dir-link-n">{{ stats.schedule_slots }}</span></a>
         <a href="{% url 'manage:room-list' conference.slug %}" class="dir-link">Rooms <span class="dir-link-n">{{ stats.rooms }}</span></a>
         <a href="{% url 'manage:section-list' conference.slug %}" class="dir-link">Sections <span class="dir-link-n">{{ stats.sections }}</span></a>
-        <a href="{% url 'manage:activity-list' conference.slug %}" class="dir-link">Activities <span class="dir-link-n">{{ stats.activities }}</span></a>
+        {% if programs_enabled %}<a href="{% url 'manage:activity-list' conference.slug %}" class="dir-link">Activities <span class="dir-link-n">{{ stats.activities }}</span></a>{% endif %}
       </div>
       <div>
         <h2 class="section-heading" style="margin-top: 0;">Operations</h2>
+        {% if registration_enabled %}
         <a href="{% url 'manage:order-list' conference.slug %}" class="dir-link">Orders <span class="dir-link-n">{{ stats.orders }}</span></a>
         <a href="{% url 'manage:ticket-type-list' conference.slug %}" class="dir-link">Ticket Types <span class="dir-link-n">{{ stats.ticket_types }}</span></a>
         <a href="{% url 'manage:addon-list' conference.slug %}" class="dir-link">Add-ons <span class="dir-link-n">{{ stats.addons }}</span></a>
         <a href="{% url 'manage:voucher-list' conference.slug %}" class="dir-link">Vouchers <span class="dir-link-n">{{ stats.vouchers }}</span></a>
-        <a href="{% url 'manage:sponsor-manage-list' conference.slug %}" class="dir-link">Sponsors <span class="dir-link-n">{{ stats.sponsors }}</span></a>
-        <a href="{% url 'manage:travel-grant-list' conference.slug %}" class="dir-link">Travel Grants <span class="dir-link-n">{{ stats.travel_grants }}</span></a>
-        <a href="{% url 'manage:letter-list' conference.slug %}" class="dir-link">Visa Letters <span class="dir-link-n">{{ stats.visa_letters }}{% if stats.visa_letters_pending %}<span style="color: var(--color-warning); margin-left: 0.25rem;" title="Pending review">({{ stats.visa_letters_pending }})</span>{% endif %}</span></a>
+        {% endif %}
+        {% if sponsors_enabled %}<a href="{% url 'manage:sponsor-manage-list' conference.slug %}" class="dir-link">Sponsors <span class="dir-link-n">{{ stats.sponsors }}</span></a>{% endif %}
+        {% if travel_grants_enabled %}<a href="{% url 'manage:travel-grant-list' conference.slug %}" class="dir-link">Travel Grants <span class="dir-link-n">{{ stats.travel_grants }}</span></a>{% endif %}
+        {% if visa_letters_enabled %}<a href="{% url 'manage:letter-list' conference.slug %}" class="dir-link">Visa Letters <span class="dir-link-n">{{ stats.visa_letters }}{% if stats.visa_letters_pending %}<span style="color: var(--color-warning); margin-left: 0.25rem;" title="Pending review">({{ stats.visa_letters_pending }})</span>{% endif %}</span></a>{% endif %}
         <a href="{% url 'manage:reports-dashboard' conference.slug %}" class="dir-link">Reports</a>
       </div>
     </div>
@@ -290,9 +294,11 @@
   {% endif %}
 </div>
 
+{% if pretalx_sync_enabled or sponsors_enabled %}
 <!-- Sync -->
 <div class="card card--static" id="sync-section">
   <div class="card-body">
+  {% if pretalx_sync_enabled %}
   {% if conference.pretalx_event_slug %}
     <div id="sync-form-container">
       <form method="post" action="{% url 'manage:sync-pretalx' conference.slug %}" id="sync-form" class="sync-row" style="padding-top: 0;">
@@ -328,8 +334,9 @@
       </span>
     </div>
   {% endif %}
+  {% endif %}
 
-  {% if has_psf_sponsor_sync %}
+  {% if sponsors_enabled and has_psf_sponsor_sync %}
     <form method="post" action="{% url 'manage:sync-sponsors' conference.slug %}" class="sync-row">
       {% csrf_token %}
       <span class="sync-row-label">PSF Sponsors</span>
@@ -339,8 +346,9 @@
   {% endif %}
   </div>
 </div>
+{% endif %}
 
-{% if conference.pretalx_event_slug %}
+{% if pretalx_sync_enabled and conference.pretalx_event_slug %}
 <script>
 (function() {
   var form = document.getElementById('sync-form');
