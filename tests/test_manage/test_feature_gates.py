@@ -229,10 +229,11 @@ class TestPretalxSyncFeature:
         assert resp.status_code == 404
 
     @override_settings(DJANGO_PROGRAM={"features": {"pretalx_sync_enabled": False}})
-    def test_override_list_404_when_disabled(self, client_logged_in_super, conference):
+    def test_override_list_200_when_sync_disabled(self, client_logged_in_super, conference):
+        """Overrides apply regardless of sync (pretalx/models.py), so the view stays open."""
         url = reverse("manage:override-list", kwargs={"conference_slug": conference.slug})
         resp = client_logged_in_super.get(url)
-        assert resp.status_code == 404
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------

@@ -2,11 +2,13 @@
 
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.test import RequestFactory, override_settings
+from django.urls import NoReverseMatch
 
 from django_program.conference.models import Conference
 from django_program.manage.attention_builtin import builtin_attention
@@ -145,4 +147,24 @@ class TestReceiptsPending:
 
     def test_no_items_without_permission(self, conference, regular_user, pending_receipt):
         items = {item.key: item for item in builtin_attention(_request(regular_user), conference)}
+        assert "receipts-pending" not in items
+
+
+class TestUnmountedManageUrls:
+    """``manage:`` URLs may not be mounted on host pages; skip the item instead of 500ing."""
+
+    def test_pending_grant_skipped_when_url_cannot_be_reversed(self, conference, superuser, pending_grant):
+        with patch(
+            "django_program.manage.attention_builtin.reverse",
+            side_effect=NoReverseMatch("manage: not mounted"),
+        ):
+            items = {item.key: item for item in builtin_attention(_request(superuser), conference)}
+        assert "travel-grants-pending" not in items
+
+    def test_pending_receipt_skipped_when_url_cannot_be_reversed(self, conference, superuser, pending_receipt):
+        with patch(
+            "django_program.manage.attention_builtin.reverse",
+            side_effect=NoReverseMatch("manage: not mounted"),
+        ):
+            items = {item.key: item for item in builtin_attention(_request(superuser), conference)}
         assert "receipts-pending" not in items

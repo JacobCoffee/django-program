@@ -2,7 +2,7 @@
 <li>
   {% if item.method == "post" %}
   <form method="post" action="{{ item.href }}" class="sidebar-nav-form">
-    {% csrf_token %}
+    {% if item.same_origin %}{% csrf_token %}{% endif %}
     <button type="submit" class="sidebar-nav-button{% if item.is_active %} active{% endif %}">
       {% if item.icon and not depth %}<span class="sidebar-nav-icon">{{ item.icon|nav_icon }}</span>{% endif %}
       {{ item.label }}

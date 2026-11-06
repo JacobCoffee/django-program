@@ -246,6 +246,10 @@
         form.removeAttribute('hidden');
         form.style.display = 'none';
         form.action = item.href;
+        if (!item.same_origin) {
+          var csrfInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+          if (csrfInput) csrfInput.remove();
+        }
         document.body.appendChild(form);
         form.submit();
       } else {

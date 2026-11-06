@@ -117,6 +117,20 @@ def register_host_section_with_children(registry: NavRegistry) -> None:
     )
 
 
+def register_cross_origin_post_item(registry: NavRegistry) -> None:
+    """A host ``nav`` hook: a POST item whose action is an absolute external URL."""
+    registry.section("host-external", "Host External")
+    registry.add(
+        "host-external",
+        NavItem(
+            key="host-external-post",
+            label="External Action",
+            url="https://evil.example.com/steal/",
+            method="post",
+        ),
+    )
+
+
 def register_badged_child(registry: NavRegistry) -> None:
     """A host ``nav`` hook: the only badge sits on a dynamic child."""
     registry.section("host-queues", "Queues")
@@ -127,6 +141,23 @@ def register_badged_child(registry: NavRegistry) -> None:
             label="Queues",
             url="/host/queues/",
             children=lambda ctx: [NavItem(key="host-queue", label="Queue", url="/host/queues/q/", badge="queue")],
+        ),
+    )
+
+
+def register_feature_gated_parent(registry: NavRegistry) -> None:
+    """A host ``nav`` hook: a feature-gated parent with children that are not gated."""
+    registry.section("host-feature", "Host Feature")
+    registry.add(
+        "host-feature",
+        NavItem(
+            key="host-feature-parent",
+            label="Parent",
+            url="/host/feature/",
+            feature="sponsors",
+            children=lambda ctx: [
+                NavItem(key="host-feature-child", label="Child", url="/host/feature/child/"),
+            ],
         ),
     )
 
@@ -345,13 +376,15 @@ class TestBuildNav:
         assert "overrides-rooms" not in child_keys
         assert "overrides-speakers" in child_keys
 
-    def test_children_outlive_a_parent_whose_module_is_off(self, rf, superuser, conference, settings):
-        settings.DJANGO_PROGRAM = {"features": {"pretalx_sync_enabled": False}}
+    def test_children_outlive_a_parent_whose_module_is_off(self, rf, superuser, settings):
+        settings.DJANGO_PROGRAM = {
+            "features": {"sponsors_enabled": False},
+            "manage": {"builtin_nav": False, "nav": ["tests.test_manage.test_nav.register_feature_gated_parent"]},
+        }
         request = rf.get("/")
         request.user = superuser
-        sections = build_nav(request, conference=conference)
-        sync = next(section for section in sections if section.key == "sync-overrides")
-        assert [item.key for item in sync.items] == ["overrides-sponsors"]
+        (section,) = build_nav(request)
+        assert [item.key for item in section.items] == ["host-feature-child"]
 
     def test_children_stay_hidden_when_the_parent_permission_fails(self, rf, conference_perm_user, conference):
         request = rf.get("/")
@@ -436,6 +469,24 @@ class TestManageShellRendering:
         assert '<form method="post" action="/host/parent/child-post/"' in html
         assert '<a href="/host/parent/child-post/"' not in html
 
+    def test_cross_origin_post_item_omits_csrf_token(self, rf, superuser, settings):
+        """Regression: a POST item pointing off-site must not leak the CSRF token."""
+        settings.DJANGO_PROGRAM = {"manage": {"nav": ["tests.test_manage.test_nav.register_cross_origin_post_item"]}}
+        html = _render_base(rf, superuser)
+        assert '<form method="post" action="https://evil.example.com/steal/"' in html
+        form_start = html.index('<form method="post" action="https://evil.example.com/steal/"')
+        form_end = html.index("</form>", form_start)
+        assert "csrfmiddlewaretoken" not in html[form_start:form_end]
+
+    def test_same_origin_post_item_keeps_csrf_token(self, rf, superuser, settings):
+        settings.DJANGO_PROGRAM = {
+            "manage": {"nav": ["tests.test_manage.test_nav.register_host_section_with_children"]}
+        }
+        html = _render_base(rf, superuser, active_nav="host-child-link")
+        form_start = html.index('<form method="post" action="/host/parent/child-post/"')
+        form_end = html.index("</form>", form_start)
+        assert "csrfmiddlewaretoken" in html[form_start:form_end]
+
     def test_submenu_expands_when_child_is_active(self, rf, superuser, settings):
         """Regression: the subnav only opened for an active parent, hiding an active child."""
         settings.DJANGO_PROGRAM = {
@@ -484,6 +535,13 @@ class TestManageShellRendering:
     def test_logout_is_a_post_form(self, rf, superuser):
         html = _render_base(rf, superuser)
         assert f'<form method="post" action="{reverse("admin:logout")}" class="top-bar-logout">' in html
+
+    def test_cross_origin_logout_renders_a_plain_link(self, rf, superuser, settings):
+        """Regression: an off-site logout_url must not leak the CSRF token."""
+        settings.DJANGO_PROGRAM = {"manage": {"logout_url": "https://sso.example.com/logout/"}}
+        html = _render_base(rf, superuser)
+        assert '<a href="https://sso.example.com/logout/" class="top-bar-link">Log out</a>' in html
+        assert '<form method="post" action="https://sso.example.com/logout/"' not in html
 
     def test_focus_layout_has_no_drawer_toggle(self, rf, superuser, conference):
         request = rf.get("/")

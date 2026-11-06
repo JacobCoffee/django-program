@@ -7,9 +7,9 @@ Usage::
 
 ``shell`` exposes ``nav`` (resolved sections), ``conference``, ``config``
 (the :class:`~django_program.settings.ManageConfig`), ``home_href``,
-``logout_href`` and ``palette_items``.  Works on any page that extends
-``django_program/manage/base.html``, including host pages that only have
-``request`` and ``user`` in context.
+``logout_href``, ``logout_same_origin`` and ``palette_items``.  Works on any
+page that extends ``django_program/manage/base.html``, including host pages
+that only have ``request`` and ``user`` in context.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 from django_program.manage.attention import attention_counts
-from django_program.manage.nav import ResolvedItem, ResolvedSection, build_nav, manage_perm
+from django_program.manage.nav import ResolvedItem, ResolvedSection, build_nav, is_same_origin, manage_perm
 from django_program.settings import ManageConfig, get_config
 
 if TYPE_CHECKING:
@@ -46,6 +46,7 @@ class ManageShell:
     config: ManageConfig
     home_href: str
     logout_href: str
+    logout_same_origin: bool = True
     palette_items: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -114,6 +115,7 @@ def _palette_items(sections: list[ResolvedSection]) -> list[dict[str, Any]]:
                 "section": section_label,
                 "description": resolved.description,
                 "method": resolved.method,
+                "same_origin": resolved.same_origin,
             }
         )
         for child in resolved.children:
@@ -155,12 +157,14 @@ def manage_shell(context: template.Context) -> ManageShell:
         active_nav=active_nav,
         badges=lambda: attention_counts(request, conference),
     )
+    logout_href = _resolve_url(config.logout_url)
     return ManageShell(
         nav=sections,
         conference=conference,
         config=config,
         home_href=_resolve_home_href(config, conference, request.user, sections),
-        logout_href=_resolve_url(config.logout_url),
+        logout_href=logout_href,
+        logout_same_origin=is_same_origin(logout_href, request) if logout_href else True,
         palette_items=_palette_items(sections),
     )
 

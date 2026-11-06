@@ -8,7 +8,7 @@ modules and unauthorized users never pay for a query.
 
 from typing import TYPE_CHECKING
 
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 
 from django_program.features import is_feature_enabled
 from django_program.manage.attention import AttentionItem
@@ -24,6 +24,14 @@ if TYPE_CHECKING:
 
 _can_review_grants = manage_perm("program_programs.view_travel_grant")
 _can_review_receipts = manage_perm("program_programs.review_receipt")
+
+
+def _reverse_or_none(name: str, kwargs: dict[str, str]) -> str | None:
+    """Reverse ``name``, or ``None`` when its URLs aren't mounted (e.g. ``manage:``)."""
+    try:
+        return reverse(name, kwargs=kwargs)
+    except NoReverseMatch:
+        return None
 
 
 def builtin_attention(request: HttpRequest, conference: Conference | None) -> Iterable[AttentionItem]:
@@ -50,15 +58,13 @@ def builtin_attention(request: HttpRequest, conference: Conference | None) -> It
                 conference=conference,
                 status=TravelGrant.GrantStatus.SUBMITTED,
             ).count()
-            if pending_grants:
+            grant_list_url = _reverse_or_none("manage:travel-grant-list", {"conference_slug": conference.slug})
+            if pending_grants and grant_list_url is not None:
                 yield AttentionItem(
                     key="travel-grants-pending",
                     label="Travel grant applications awaiting review",
                     count=pending_grants,
-                    url=(
-                        reverse("manage:travel-grant-list", kwargs={"conference_slug": conference.slug})
-                        + f"?status={TravelGrant.GrantStatus.SUBMITTED}"
-                    ),
+                    url=grant_list_url + f"?status={TravelGrant.GrantStatus.SUBMITTED}",
                     tone="warning",
                 )
 
@@ -68,11 +74,12 @@ def builtin_attention(request: HttpRequest, conference: Conference | None) -> It
                 approved=False,
                 flagged=False,
             ).count()
-            if pending_receipts:
+            receipt_queue_url = _reverse_or_none("manage:receipt-review-queue", {"conference_slug": conference.slug})
+            if pending_receipts and receipt_queue_url is not None:
                 yield AttentionItem(
                     key="receipts-pending",
                     label="Receipts awaiting review",
                     count=pending_receipts,
-                    url=reverse("manage:receipt-review-queue", kwargs={"conference_slug": conference.slug}),
+                    url=receipt_queue_url,
                     tone="warning",
                 )

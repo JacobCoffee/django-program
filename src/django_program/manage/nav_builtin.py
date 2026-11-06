@@ -69,7 +69,6 @@ def _override_children(ctx: NavContext) -> Iterable[NavItem]:  # noqa: ARG001
             url="manage:speaker-override-list",
             conference_url=True,
             permission=manage_perm("view_overrides"),
-            feature="pretalx_sync",
             active=("overrides",),
         ),
         NavItem(
@@ -78,7 +77,6 @@ def _override_children(ctx: NavContext) -> Iterable[NavItem]:  # noqa: ARG001
             url="manage:room-override-list",
             conference_url=True,
             permission=manage_perm("view_overrides"),
-            feature="pretalx_sync",
             active=("overrides",),
         ),
         NavItem(
@@ -96,7 +94,6 @@ def _override_children(ctx: NavContext) -> Iterable[NavItem]:  # noqa: ARG001
             url="manage:type-default-list",
             conference_url=True,
             permission=manage_perm("view_overrides"),
-            feature="pretalx_sync",
             active=("overrides",),
         ),
     ]
@@ -418,7 +415,6 @@ def register_builtin_nav(registry: NavRegistry) -> None:
             icon="overrides",
             conference_url=True,
             permission=manage_perm("view_overrides"),
-            feature="pretalx_sync",
             children=_override_children,
             order=0,
         ),

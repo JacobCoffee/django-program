@@ -37,7 +37,7 @@
     <div class="top-bar-right">
       {% block topbar_actions %}{% endblock %}
       {% if shell.config.palette %}
-      <button type="button" class="palette-trigger" id="manage-palette-trigger" aria-haspopup="dialog" aria-controls="manage-palette">
+      <button type="button" class="palette-trigger" id="manage-palette-trigger" aria-haspopup="dialog" aria-controls="manage-palette" aria-label="Jump to a page">
         <svg aria-hidden="true"><use href="#dp-i-search"></use></svg>
         <span>Jump to…</span>
         <kbd class="palette-kbd" data-mac="⌘K" data-pc="Ctrl K">Ctrl K</kbd>
@@ -52,10 +52,14 @@
         <span class="top-bar-user">{{ user.get_short_name|default:user.get_username }}</span>
         {% if shell.logout_href %}
         <span class="top-bar-separator"></span>
+        {% if shell.logout_same_origin %}
         <form method="post" action="{{ shell.logout_href }}" class="top-bar-logout">
           {% csrf_token %}
           <button type="submit">Log out</button>
         </form>
+        {% else %}
+        <a href="{{ shell.logout_href }}" class="top-bar-link">Log out</a>
+        {% endif %}
         {% endif %}
       {% endif %}
     </div>

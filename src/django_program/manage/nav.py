@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Literal
 from django.core.exceptions import ImproperlyConfigured
 from django.test.signals import setting_changed
 from django.urls import NoReverseMatch, reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.module_loading import import_string
 
 from django_program.features import is_feature_enabled
@@ -327,6 +328,7 @@ class ResolvedItem:
     section_label: str
     is_active: bool = False
     badge_count: int | None = None
+    same_origin: bool = True
     children: tuple[ResolvedItem, ...] = ()
 
     @property
@@ -374,6 +376,11 @@ def _href(item: NavItem, ctx: NavContext) -> str | None:
         return None
 
 
+def is_same_origin(url: str, request: HttpRequest) -> bool:
+    """Return whether ``url`` targets the current host, safe to post a CSRF token to."""
+    return url_has_allowed_host_and_scheme(url, allowed_hosts={request.get_host()}, require_https=request.is_secure())
+
+
 class _BadgeCounts:
     """Attention counts loaded on the first badge lookup, so pages without badges skip providers."""
 
@@ -419,6 +426,7 @@ def _resolve_item(item: NavItem, ctx: NavContext, section_label: str, badges: _B
             section_label=section_label,
             is_active=bool(ctx.active_nav) and ctx.active_nav in (item.active or (item.key,)),
             badge_count=badges.get(item.badge) if item.badge else None,
+            same_origin=is_same_origin(href, ctx.request),
             children=children,
         ),
     )
