@@ -505,6 +505,7 @@ a:hover { color: var(--color-primary-hover); text-decoration: underline; }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   padding: 0;
+  margin: 12vh auto auto;
   width: min(560px, 92vw);
   max-height: min(480px, 80vh);
   color: var(--color-text);
@@ -527,6 +528,7 @@ a:hover { color: var(--color-primary-hover); text-decoration: underline; }
   color: var(--color-text);
   background: none;
 }
+.palette-input:focus-visible { outline: none; }
 .palette-results {
   list-style: none;
   max-height: 360px;
