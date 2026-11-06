@@ -17,7 +17,6 @@ from django_program.manage.nav import (
     NavRegistry,
     build_nav,
     get_registry,
-    nav_uses_badges,
 )
 from django_program.settings import get_config
 
@@ -114,6 +113,20 @@ def register_host_section_with_children(registry: NavRegistry) -> None:
                     method="post",
                 ),
             ],
+        ),
+    )
+
+
+def register_badged_child(registry: NavRegistry) -> None:
+    """A host ``nav`` hook: the only badge sits on a dynamic child."""
+    registry.section("host-queues", "Queues")
+    registry.add(
+        "host-queues",
+        NavItem(
+            key="host-queues-parent",
+            label="Queues",
+            url="/host/queues/",
+            children=lambda ctx: [NavItem(key="host-queue", label="Queue", url="/host/queues/q/", badge="queue")],
         ),
     )
 
@@ -346,8 +359,24 @@ class TestBuildNav:
         keys = {item.key for section in build_nav(request, conference=conference) for item in section.items}
         assert not any(key.startswith("overrides") for key in keys)
 
-    def test_nav_uses_badges_false_by_default(self):
-        assert nav_uses_badges() is False
+    def test_badge_on_a_dynamic_child_gets_its_count(self, rf, superuser, settings):
+        settings.DJANGO_PROGRAM = {
+            "manage": {"builtin_nav": False, "nav": ["tests.test_manage.test_nav.register_badged_child"]}
+        }
+        request = rf.get("/")
+        request.user = superuser
+        (section,) = build_nav(request, badges=lambda: {"queue": 4})
+        (parent,) = section.items
+        assert [(child.key, child.badge_count) for child in parent.children] == [("host-queue", 4)]
+
+    def test_badge_counts_are_not_loaded_without_badged_items(self, rf, superuser, conference):
+        request = rf.get("/")
+        request.user = superuser
+
+        def explode() -> dict[str, int]:
+            raise AssertionError
+
+        assert build_nav(request, conference=conference, badges=explode)
 
 
 # ---------------------------------------------------------------------------

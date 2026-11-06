@@ -16,7 +16,7 @@
       {{ item.label }}
       {% if item.badge_count is not None %}<span class="{% if depth %}sidebar-subnav-count{% else %}sidebar-nav-badge{% endif %}">{{ item.badge_count }}</span>{% endif %}
     </a>
-    <button type="button" class="sidebar-nav-expand-btn{% if item.is_active or item.has_active_child %} open{% endif %}" data-expand-target="manage-subnav-{{ item.key }}" aria-expanded="{% if item.is_active or item.has_active_child %}true{% else %}false{% endif %}" aria-controls="manage-subnav-{{ item.key }}">
+    <button type="button" class="sidebar-nav-expand-btn{% if item.is_active or item.has_active_child %} open{% endif %}" data-expand-target="manage-subnav-{{ item.key }}" aria-expanded="{% if item.is_active or item.has_active_child %}true{% else %}false{% endif %}" aria-controls="manage-subnav-{{ item.key }}" aria-label="Show {{ item.label }} pages">
       <svg aria-hidden="true"><use href="#dp-i-chevron-right"></use></svg>
     </button>
   </div>

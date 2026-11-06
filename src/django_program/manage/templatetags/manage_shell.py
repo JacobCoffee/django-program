@@ -23,7 +23,7 @@ from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 from django_program.manage.attention import attention_counts
-from django_program.manage.nav import ResolvedItem, ResolvedSection, build_nav, nav_uses_badges
+from django_program.manage.nav import ResolvedItem, ResolvedSection, build_nav
 from django_program.settings import ManageConfig, get_config
 
 if TYPE_CHECKING:
@@ -119,8 +119,12 @@ def manage_shell(context: template.Context) -> ManageShell:
     config = get_config().manage
     conference = _resolve_conference(context.get("conference"), config)
     active_nav = context.get("active_nav") or ""
-    badges = attention_counts(request, conference) if nav_uses_badges() else {}
-    sections = build_nav(request, conference=conference, active_nav=active_nav, badges=badges)
+    sections = build_nav(
+        request,
+        conference=conference,
+        active_nav=active_nav,
+        badges=lambda: attention_counts(request, conference),
+    )
     return ManageShell(
         nav=sections,
         conference=conference,

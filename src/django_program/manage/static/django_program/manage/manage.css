@@ -232,11 +232,13 @@ a:hover { color: var(--color-primary-hover); text-decoration: underline; }
 .sidebar-section.collapsed .sidebar-collapse-icon {
   transform: rotate(-90deg);
 }
-.sidebar-section.collapsed > .sidebar-nav {
+.sidebar-section.collapsed > .sidebar-nav,
+.sidebar-section.collapsed > .sidebar-subgroup {
   max-height: 0;
   overflow: hidden;
   margin: 0;
   opacity: 0;
+  visibility: hidden;
 }
 .sidebar-section > .sidebar-nav {
   max-height: 2000px;

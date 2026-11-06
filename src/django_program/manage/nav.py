@@ -36,7 +36,7 @@ Item URLs are URL names (reversed, with ``conference_slug`` when
 """
 
 import functools
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal
 
@@ -374,9 +374,21 @@ def _href(item: NavItem, ctx: NavContext) -> str | None:
         return None
 
 
-def _resolve_item(
-    item: NavItem, ctx: NavContext, section_label: str, badges: dict[str, int]
-) -> tuple[ResolvedItem, ...]:
+class _BadgeCounts:
+    """Attention counts loaded on the first badge lookup, so pages without badges skip providers."""
+
+    def __init__(self, source: Mapping[str, int] | Callable[[], Mapping[str, int]] | None) -> None:
+        self._source = source
+        self._counts: Mapping[str, int] | None = None
+
+    def get(self, key: str) -> int | None:
+        if self._counts is None:
+            source = self._source
+            self._counts = (source() if callable(source) else source) or {}
+        return self._counts.get(key)
+
+
+def _resolve_item(item: NavItem, ctx: NavContext, section_label: str, badges: _BadgeCounts) -> tuple[ResolvedItem, ...]:
     """Resolve one item, returning nothing, the item, or its promoted children.
 
     A failed permission check hides the item and its children.  When the item
@@ -456,7 +468,7 @@ def build_nav(
     *,
     conference: Conference | None = None,
     active_nav: str = "",
-    badges: dict[str, int] | None = None,
+    badges: Mapping[str, int] | Callable[[], Mapping[str, int]] | None = None,
 ) -> list[ResolvedSection]:
     """Resolve the registry for one request.
 
@@ -469,13 +481,14 @@ def build_nav(
         request: The current request (``request.user`` is checked).
         conference: The conference in scope, if any.
         active_nav: The page's ``active_nav`` value.
-        badges: Attention counts keyed by attention item key.
+        badges: Attention counts keyed by attention item key, or a callable
+            returning them; a callable runs only if a visible item has a badge.
 
     Returns:
         Visible sections in display order, each with at least one item.
     """
     ctx = NavContext(request=request, conference=conference, active_nav=active_nav)
-    counts = badges or {}
+    counts = _BadgeCounts(badges)
     sections: list[ResolvedSection] = []
     for section, items in get_registry().entries():
         if not _visible(section, ctx):
@@ -485,8 +498,3 @@ def build_nav(
         if resolved:
             sections.append(ResolvedSection(key=section.key, label=label, utility=section.utility, items=resolved))
     return _settle_active(sections, request.path)
-
-
-def nav_uses_badges() -> bool:
-    """Return whether any registered item shows an attention badge."""
-    return any(item.badge for _, items in get_registry().entries() for item in items)
