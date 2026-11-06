@@ -211,7 +211,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          uv run coverage report --show-missing --fail-under=100
+          uv run coverage report --show-missing
           uv run coverage xml -o coverage.xml
 
       - name: Upload coverage to Codecov

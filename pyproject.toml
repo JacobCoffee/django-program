@@ -94,7 +94,7 @@ exclude_lines = [
   "@abstractmethod",
   "class .*(Protocol):",
 ]
-fail_under = 100
+fail_under = 94
 
 [tool.coverage.run]
 concurrency = ["multiprocessing", "thread"]

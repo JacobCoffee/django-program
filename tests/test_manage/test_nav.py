@@ -500,3 +500,8 @@ class TestManageShellRendering:
         keys = {item.key for section in build_nav(request, conference=conference) for item in section.items}
         assert "financial" in keys
         assert "purchase-orders" not in keys
+
+    def test_home_url_setting_wins_for_the_title_link(self, rf, superuser, conference, settings):
+        settings.DJANGO_PROGRAM = {"manage": {"home_url": "/staff/", "conference": conference.slug}}
+        html = _render_base(rf, superuser, conference=conference)
+        assert '<a href="/staff/" class="top-bar-title">' in html
