@@ -118,6 +118,33 @@ def register_host_section_with_children(registry: NavRegistry) -> None:
     )
 
 
+def register_promoted_children(registry: NavRegistry) -> None:
+    """A host ``nav`` hook: a parent whose URL never reverses, with two tabs sharing ``active``."""
+    registry.section("host-tabs", "Host Tabs")
+    registry.add(
+        "host-tabs",
+        NavItem(
+            key="host-tabs-parent",
+            label="Tabs",
+            url="host:not-mounted",
+            children=lambda ctx: [
+                NavItem(key="host-tab-a", label="A", url="/host/tabs/a/", active=("tabs",)),
+                NavItem(key="host-tab-b", label="B", url="/host/tabs/b/", active=("tabs",)),
+            ],
+        ),
+    )
+
+
+def test_promoted_children_sharing_active_nav_keep_one_current(rf, superuser, settings):
+    settings.DJANGO_PROGRAM = {
+        "manage": {"builtin_nav": False, "nav": ["tests.test_manage.test_nav.register_promoted_children"]}
+    }
+    request = rf.get("/host/tabs/b/")
+    request.user = superuser
+    (section,) = build_nav(request, active_nav="tabs")
+    assert [(item.key, item.is_active) for item in section.items] == [("host-tab-a", False), ("host-tab-b", True)]
+
+
 def _render_base(request_factory: RequestFactory, user, *, conference=None, active_nav: str = "", path: str = "/"):
     request = request_factory.get(path)
     request.user = user

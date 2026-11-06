@@ -424,33 +424,31 @@ def _mark(item: ResolvedItem, key: str) -> ResolvedItem:
     return replace(item, is_active=item.key == key, children=children)
 
 
-def _mark_path_active(sections: list[ResolvedSection], path: str) -> list[ResolvedSection]:
-    """Mark the item whose ``href`` is the longest prefix of ``path`` as active."""
-    best_length, best_key = -1, ""
-    for section in sections:
-        for item in section.items:
-            for candidate in (item, *item.children):
-                length = _prefix_length(candidate, path)
-                if length > best_length:
-                    best_length, best_key = length, candidate.key
-    if best_length < 0:
-        return sections
-    return [replace(section, items=tuple(_mark(item, best_key) for item in section.items)) for section in sections]
+def _walk(items: Iterable[ResolvedItem]) -> Iterable[ResolvedItem]:
+    for item in items:
+        yield item
+        yield from _walk(item.children)
 
 
-def _disambiguate_family(item: ResolvedItem, path: str) -> ResolvedItem:
-    """Keep one active entry when a parent and its children share an ``active_nav`` value.
+def _settle_active(sections: list[ResolvedSection], path: str) -> list[ResolvedSection]:
+    """Leave exactly one current entry, or none when nothing matches.
 
-    The longest matching URL prefix wins; without a match the parent stays active.
+    Entries matching ``active_nav`` compete by longest URL prefix of ``path``
+    (several can share a value, e.g. a parent and its sub-tabs or promoted
+    children); without a prefix match the first in display order wins.  With no
+    ``active_nav`` match, the longest URL prefix of ``path`` among all entries wins.
     """
-    family = (item, *item.children)
-    active = [entry for entry in family if entry.is_active]
-    if len(active) <= 1:
-        return item
-    best = max(active, key=lambda entry: _prefix_length(entry, path))
+    entries = [entry for section in sections for entry in _walk(section.items)]
+    active = [entry for entry in entries if entry.is_active]
+    if len(active) == 1 or not entries:
+        return sections
+    candidates = active or entries
+    best = max(candidates, key=lambda entry: _prefix_length(entry, path))
     if _prefix_length(best, path) < 0:
-        best = item
-    return _mark(item, best.key)
+        if not active:
+            return sections
+        best = active[0]
+    return [replace(section, items=tuple(_mark(item, best.key) for item in section.items)) for section in sections]
 
 
 def build_nav(
@@ -486,12 +484,7 @@ def build_nav(
         resolved = tuple(entry for raw in items for entry in _resolve_item(raw, ctx, label, counts))
         if resolved:
             sections.append(ResolvedSection(key=section.key, label=label, utility=section.utility, items=resolved))
-    if not any(section.is_active for section in sections):
-        return _mark_path_active(sections, request.path)
-    return [
-        replace(section, items=tuple(_disambiguate_family(item, request.path) for item in section.items))
-        for section in sections
-    ]
+    return _settle_active(sections, request.path)
 
 
 def nav_uses_badges() -> bool:
