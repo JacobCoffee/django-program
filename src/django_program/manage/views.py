@@ -173,7 +173,7 @@ class ConferencePermissionMixin(LoginRequiredMixin):
     """
 
     required_permission: str = ""
-    required_feature: str = ""
+    required_feature: str | tuple[str, ...] = ""
     conference: Conference
     kwargs: dict[str, str]
 
@@ -214,8 +214,10 @@ class ConferencePermissionMixin(LoginRequiredMixin):
 
         conference = getattr(self, "conference", None)
         require_feature("manage_ui", conference=conference)
-        if self.required_feature:
-            require_feature(self.required_feature, conference=conference)
+        features = (self.required_feature,) if isinstance(self.required_feature, str) else self.required_feature
+        for feature in features:
+            if feature:
+                require_feature(feature, conference=conference)
 
         user = request.user
         if user.is_superuser:

@@ -18,12 +18,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from django import template
+from django.apps import apps
 from django.urls import NoReverseMatch, reverse
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 from django_program.manage.attention import attention_counts
-from django_program.manage.nav import ResolvedItem, ResolvedSection, build_nav
+from django_program.manage.nav import ResolvedItem, ResolvedSection, build_nav, manage_perm
 from django_program.settings import ManageConfig, get_config
 
 if TYPE_CHECKING:
@@ -32,6 +33,8 @@ if TYPE_CHECKING:
     from django_program.conference.models import Conference
 
 register = template.Library()
+
+_can_view_dashboard = manage_perm("view_dashboard")
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,23 +62,40 @@ def _resolve_url(name: str) -> str:
 
 
 def _resolve_conference(context_conference: object, config: ManageConfig) -> Conference | None:
-    if context_conference:
-        return context_conference  # type: ignore[return-value]
-    if not config.conference:
+    """Return the django-program conference in scope.
+
+    A ``conference`` context value from the host (its own model, a slug, ...) is
+    ignored; only django-program ``Conference`` instances count.
+    """
+    if not apps.is_installed("django_program.conference"):
         return None
     from django_program.conference.models import Conference  # noqa: PLC0415
 
+    if isinstance(context_conference, Conference):
+        return context_conference
+    if not config.conference:
+        return None
     return Conference.objects.filter(slug=config.conference).first()
 
 
-def _resolve_home_href(config: ManageConfig, conference: Conference | None) -> str:
+def _resolve_home_href(
+    config: ManageConfig, conference: Conference | None, user: object, sections: list[ResolvedSection]
+) -> str:
+    """Return the top-bar title link.
+
+    ``home_url`` wins. In single-conference mode the conference dashboard is used
+    when the user may open it, otherwise their first sidebar page.  Without
+    single-conference mode, the conference list.
+    """
     if config.home_url:
         return _resolve_url(config.home_url)
     if config.conference and conference is not None:
-        try:
-            return reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
-        except NoReverseMatch:
-            pass
+        if _can_view_dashboard(user):
+            try:
+                return reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+            except NoReverseMatch:
+                pass
+        return next((item.href for section in sections for item in section.items if item.method == "get"), "")
     try:
         return reverse("manage:conference-list")
     except NoReverseMatch:
@@ -110,13 +130,23 @@ def manage_shell(context: template.Context) -> ManageShell:
     """Resolve the manage shell for the current page.
 
     Args:
-        context: The current template context; must include ``request``.
+        context: The current template context. Without ``request`` (no
+            ``django.template.context_processors.request``) the shell renders
+            without navigation.
 
     Returns:
         A :class:`ManageShell` with nav, config, and palette data.
     """
-    request: HttpRequest = context["request"]
     config = get_config().manage
+    request: HttpRequest | None = context.get("request")
+    if request is None:
+        return ManageShell(
+            nav=[],
+            conference=None,
+            config=config,
+            home_href=_resolve_url(config.home_url),
+            logout_href=_resolve_url(config.logout_url),
+        )
     conference = _resolve_conference(context.get("conference"), config)
     active_nav = context.get("active_nav") or ""
     sections = build_nav(
@@ -129,7 +159,7 @@ def manage_shell(context: template.Context) -> ManageShell:
         nav=sections,
         conference=conference,
         config=config,
-        home_href=_resolve_home_href(config, conference),
+        home_href=_resolve_home_href(config, conference, request.user, sections),
         logout_href=_resolve_url(config.logout_url),
         palette_items=_palette_items(sections),
     )

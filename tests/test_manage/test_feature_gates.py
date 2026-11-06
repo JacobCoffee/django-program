@@ -4,10 +4,13 @@ from datetime import date
 
 import pytest
 from django.contrib.auth.models import User
+from django.http import Http404, HttpResponse
 from django.test import Client, override_settings
 from django.urls import reverse
+from django.views import View
 
 from django_program.conference.models import Conference
+from django_program.manage.views import ConferencePermissionMixin
 
 
 @pytest.fixture
@@ -591,3 +594,22 @@ class TestAnalyticsDashboardRegistrationGating:
             url = reverse("manage:analytics-dashboard", kwargs={"conference_slug": conference.slug})
             resp = client_logged_in_super.get(url)
             assert resp.status_code == 200
+
+
+class _NeedsTwoModules(ConferencePermissionMixin, View):
+    required_feature = ("registration", "sponsors")
+
+    def get(self, request, **kwargs):
+        return HttpResponse("ok")
+
+
+class TestTupleRequiredFeature:
+    def test_every_listed_module_must_be_enabled(self, rf, superuser, conference, settings):
+        request = rf.get("/")
+        request.user = superuser
+        view = _NeedsTwoModules.as_view()
+        assert view(request, conference_slug=conference.slug).status_code == 200
+
+        settings.DJANGO_PROGRAM = {"features": {"sponsors_enabled": False}}
+        with pytest.raises(Http404):
+            view(request, conference_slug=conference.slug)

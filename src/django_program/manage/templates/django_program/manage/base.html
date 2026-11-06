@@ -18,11 +18,13 @@
 
   <header class="top-bar">
     <div class="top-bar-left">
+      {% block sidebar_toggle %}
       {% if shell.nav %}
       <button type="button" class="sidebar-toggle" id="manage-sidebar-toggle" aria-expanded="false" aria-controls="manage-sidebar" aria-label="Open navigation menu">
         <svg aria-hidden="true"><use href="#dp-i-menu"></use></svg>
       </button>
       {% endif %}
+      {% endblock %}
       <a href="{{ shell.home_href }}" class="top-bar-title">{{ shell.config.title }}</a>
       {% if shell.conference and shell.config.public_schedule_link %}
         {% url 'pretalx:schedule' shell.conference.slug as public_schedule_url %}
@@ -50,7 +52,10 @@
         <span class="top-bar-user">{{ user.get_short_name|default:user.username }}</span>
         {% if shell.logout_href %}
         <span class="top-bar-separator"></span>
-        <a href="{{ shell.logout_href }}">Log out</a>
+        <form method="post" action="{{ shell.logout_href }}" class="top-bar-logout">
+          {% csrf_token %}
+          <button type="submit">Log out</button>
+        </form>
         {% endif %}
       {% endif %}
     </div>

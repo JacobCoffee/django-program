@@ -103,11 +103,21 @@ a:hover { color: var(--color-primary-hover); text-decoration: underline; }
   color: rgba(255, 255, 255, 0.65);
 }
 
-.top-bar-right a {
+.top-bar-right a,
+.top-bar-logout button {
   color: rgba(255, 255, 255, 0.65);
   transition: color 0.15s ease;
 }
-.top-bar-right a:hover { color: #ffffff; text-decoration: none; }
+.top-bar-right a:hover,
+.top-bar-logout button:hover { color: #ffffff; text-decoration: none; }
+.top-bar-logout { display: contents; }
+.top-bar-logout button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
 
 .top-bar-user {
   color: rgba(255, 255, 255, 0.85);

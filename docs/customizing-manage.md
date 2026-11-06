@@ -165,9 +165,14 @@ Any template can extend the shell; no django-program view mixin is needed:
 {% endblock %}
 ```
 
-Blocks: `title`, `extra_head`, `body_class`, `main_class`, `sidebar`,
-`topbar_actions`, `breadcrumb`, `messages`, `page_header`, `page_title`,
+Blocks: `title`, `extra_head`, `body_class`, `main_class`, `sidebar_toggle`,
+`sidebar`, `topbar_actions`, `breadcrumb`, `messages`, `page_header`, `page_title`,
 `page_actions`, `content`, `extra_js`.
+
+The shell needs the `django.template.context_processors.request` context
+processor to build navigation; without it pages render without the sidebar.
+A `conference` context value that is not a django-program `Conference` is
+ignored. "Log out" submits a POST to `logout_url`.
 
 For kiosk-style pages without a sidebar, extend
 `django_program/manage/focus.html`.

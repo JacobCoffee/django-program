@@ -11,7 +11,6 @@ from django.test import RequestFactory, override_settings
 from django_program.conference.models import Conference
 from django_program.manage.attention_builtin import builtin_attention
 from django_program.programs.models import Receipt, TravelGrant
-from django_program.registration.models import Order
 
 
 @pytest.fixture
@@ -90,16 +89,6 @@ def pending_receipt(conference, regular_user):
     )
 
 
-@pytest.fixture
-def pending_order(conference, regular_user):
-    return Order.objects.create(
-        conference=conference,
-        user=regular_user,
-        status=Order.Status.PENDING,
-        reference="ORD-PEND01",
-    )
-
-
 class TestConferenceNone:
     def test_no_conference_yields_nothing(self, superuser, pending_grant):
         items = list(builtin_attention(_request(superuser), None))
@@ -157,33 +146,3 @@ class TestReceiptsPending:
     def test_no_items_without_permission(self, conference, regular_user, pending_receipt):
         items = {item.key: item for item in builtin_attention(_request(regular_user), conference)}
         assert "receipts-pending" not in items
-
-
-class TestOrdersPending:
-    def test_superuser_sees_pending_order(self, conference, superuser, pending_order):
-        items = {item.key: item for item in builtin_attention(_request(superuser), conference)}
-        assert "orders-pending" in items
-        item = items["orders-pending"]
-        assert item.count == 1
-        assert item.tone == "info"
-        assert conference.slug in item.url
-
-    def test_paid_order_not_counted(self, conference, superuser, pending_order):
-        pending_order.status = Order.Status.PAID
-        pending_order.save(update_fields=["status"])
-        items = {item.key: item for item in builtin_attention(_request(superuser), conference)}
-        assert "orders-pending" not in items
-
-    @override_settings(DJANGO_PROGRAM={"features": {"registration_enabled": False}})
-    def test_no_items_when_feature_disabled(self, conference, superuser, pending_order):
-        items = {item.key: item for item in builtin_attention(_request(superuser), conference)}
-        assert "orders-pending" not in items
-
-    def test_no_items_without_permission(self, conference, regular_user, pending_order):
-        items = {item.key: item for item in builtin_attention(_request(regular_user), conference)}
-        assert "orders-pending" not in items
-
-    def test_items_with_scoped_permission(self, conference, regular_user, pending_order):
-        _grant_perm(regular_user, "program_conference", "view_registration")
-        items = {item.key: item for item in builtin_attention(_request(regular_user), conference)}
-        assert items["orders-pending"].count == 1

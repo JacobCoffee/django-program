@@ -15,7 +15,7 @@ from django.db.models import Count
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import slugify
 
-from django_program.manage.nav import NavContext, NavItem, NavRegistry, manage_perm
+from django_program.manage.nav import NavContext, NavItem, NavRegistry, has_full_manage_access, manage_perm
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -375,7 +375,7 @@ def register_builtin_nav(registry: NavRegistry) -> None:
             url="manage:purchase-order-list",
             icon="purchase-orders",
             conference_url=True,
-            permission=manage_perm("view_finance"),
+            permission=has_full_manage_access,
             feature="registration",
             order=10,
         ),

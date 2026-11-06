@@ -461,3 +461,42 @@ class TestManageShellRendering:
         match = re.search(r'<a href="([^"]+)" class="top-bar-title">', html)
         assert match is not None
         assert match.group(1) == reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
+
+    def test_single_conference_home_skips_a_dashboard_the_user_cannot_open(
+        self, rf, conference_perm_user, conference, settings
+    ):
+        settings.DJANGO_PROGRAM = {"manage": {"conference": conference.slug}}
+        html = _render_base(rf, conference_perm_user, conference=conference)
+        match = re.search(r'<a href="([^"]+)" class="top-bar-title">', html)
+        assert match is not None
+        assert match.group(1) == reverse("manage:section-list", kwargs={"conference_slug": conference.slug})
+
+    def test_host_conference_object_in_context_is_ignored(self, rf, superuser, settings):
+        settings.DJANGO_PROGRAM = {"manage": {"nav": ["tests.test_manage.test_nav.register_host_section"]}}
+        html = _render_base(rf, superuser, conference="pycon-us-2027")
+        assert "/host/widgets/" in html
+        assert reverse("manage:conference-list") in html
+
+    def test_shell_renders_without_the_request_context_processor(self, superuser):
+        html = get_template("django_program/manage/base.html").render({"user": superuser})
+        assert 'id="manage-sidebar"' not in html
+
+    def test_logout_is_a_post_form(self, rf, superuser):
+        html = _render_base(rf, superuser)
+        assert f'<form method="post" action="{reverse("admin:logout")}" class="top-bar-logout">' in html
+
+    def test_focus_layout_has_no_drawer_toggle(self, rf, superuser, conference):
+        request = rf.get("/")
+        request.user = superuser
+        html = get_template("django_program/manage/focus.html").render({"conference": conference}, request)
+        assert 'id="manage-sidebar-toggle"' not in html
+        assert 'id="manage-sidebar"' not in html
+
+    def test_purchase_orders_follow_their_full_access_gate(self, rf, conference, db):
+        user = User.objects.create_user(username="finance", password="password", email="finance@test.com")
+        user.user_permissions.add(Permission.objects.get(codename="view_finance"))
+        request = rf.get("/")
+        request.user = User.objects.get(pk=user.pk)
+        keys = {item.key for section in build_nav(request, conference=conference) for item in section.items}
+        assert "financial" in keys
+        assert "purchase-orders" not in keys

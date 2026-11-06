@@ -14,7 +14,6 @@ from django_program.features import is_feature_enabled
 from django_program.manage.attention import AttentionItem
 from django_program.manage.nav import manage_perm
 from django_program.programs.models import Receipt, TravelGrant
-from django_program.registration.models import Order
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -25,7 +24,6 @@ if TYPE_CHECKING:
 
 _can_review_grants = manage_perm("program_programs.view_travel_grant")
 _can_review_receipts = manage_perm("program_programs.review_receipt")
-_can_view_orders = manage_perm("program_conference.view_registration")
 
 
 def builtin_attention(request: HttpRequest, conference: Conference | None) -> Iterable[AttentionItem]:
@@ -37,10 +35,9 @@ def builtin_attention(request: HttpRequest, conference: Conference | None) -> It
             a conference-scoped page.
 
     Yields:
-        AttentionItem: Counts of travel grants, receipts, and orders
-        awaiting staff action, each only when the backing feature is
-        enabled, the user has the matching manage permission, and the
-        count is non-zero.
+        AttentionItem: Travel grant applications and receipts awaiting
+        review, each only when the travel grants module is enabled, the
+        user has the matching manage permission, and the count is non-zero.
     """
     if conference is None:
         return
@@ -79,17 +76,3 @@ def builtin_attention(request: HttpRequest, conference: Conference | None) -> It
                     url=reverse("manage:receipt-review-queue", kwargs={"conference_slug": conference.slug}),
                     tone="warning",
                 )
-
-    if is_feature_enabled("registration", conference=conference) and _can_view_orders(user):
-        pending_orders = Order.objects.filter(conference=conference, status=Order.Status.PENDING).count()
-        if pending_orders:
-            yield AttentionItem(
-                key="orders-pending",
-                label="Pending orders",
-                count=pending_orders,
-                url=(
-                    reverse("manage:order-list", kwargs={"conference_slug": conference.slug})
-                    + f"?status={Order.Status.PENDING}"
-                ),
-                tone="info",
-            )
