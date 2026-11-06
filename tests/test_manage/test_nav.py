@@ -117,6 +117,13 @@ def register_host_section_with_children(registry: NavRegistry) -> None:
     )
 
 
+def register_two_groups(registry: NavRegistry) -> None:
+    """A host ``nav`` hook: one section with two labelled groups."""
+    registry.section("host-two", "Host Two")
+    registry.add("host-two", NavItem(key="host-a", label="Alpha", url="/host/a/", group="Group A"))
+    registry.add("host-two", NavItem(key="host-b", label="Beta", url="/host/b/", group="Group B"))
+
+
 def register_cross_origin_post_item(registry: NavRegistry) -> None:
     """A host ``nav`` hook: a POST item whose action is an absolute external URL."""
     registry.section("host-external", "Host External")
@@ -424,6 +431,16 @@ class TestManageShellRendering:
         assert "Host Tools" in html
         assert "Widgets" in html
         assert "/host/widgets/" in html
+
+    def test_only_the_group_holding_the_current_page_starts_open(self, rf, superuser, settings):
+        settings.DJANGO_PROGRAM = {
+            "manage": {"builtin_nav": False, "nav": ["tests.test_manage.test_nav.register_two_groups"]}
+        }
+        html = _render_base(rf, superuser, path="/host/b/")
+        assert '<div class="sidebar-subgroup collapsed" data-subsection-target="host-two-group-a">' in html
+        assert '<div class="sidebar-subgroup" data-subsection-target="host-two-group-b">' in html
+        assert 'data-subsection="host-two-group-a" role="button" tabindex="0" aria-expanded="false"' in html
+        assert 'data-subsection="host-two-group-b" role="button" tabindex="0" aria-expanded="true"' in html
 
     def test_feature_off_hides_item_in_rendered_sidebar(self, rf, superuser, conference, settings):
         html = _render_base(rf, superuser, conference=conference)

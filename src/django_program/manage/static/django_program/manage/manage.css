@@ -294,6 +294,7 @@ a:hover { color: var(--color-primary-hover); text-decoration: underline; }
 .sidebar-subgroup.collapsed {
   max-height: 0;
   opacity: 0;
+  visibility: hidden;
 }
 .sidebar-sublabel.collapsed-label .sidebar-collapse-icon {
   transform: rotate(-90deg);

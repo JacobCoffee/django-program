@@ -79,12 +79,12 @@
           {% for group in section.items|group_nav_items %}
             {% if group.label %}
             <ul class="sidebar-nav">
-              <li class="sidebar-sublabel" data-subsection="{{ section.key }}-{{ group.label|slugify }}" role="button" tabindex="0">
+              <li class="sidebar-sublabel{% if not group.is_active %} collapsed-label{% endif %}" data-subsection="{{ section.key }}-{{ group.label|slugify }}" role="button" tabindex="0" aria-expanded="{% if group.is_active %}true{% else %}false{% endif %}">
                 {{ group.label }}
                 <svg class="sidebar-collapse-icon" aria-hidden="true"><use href="#dp-i-chevron-down"></use></svg>
               </li>
             </ul>
-            <div class="sidebar-subgroup" data-subsection-target="{{ section.key }}-{{ group.label|slugify }}">
+            <div class="sidebar-subgroup{% if not group.is_active %} collapsed{% endif %}" data-subsection-target="{{ section.key }}-{{ group.label|slugify }}">
             <ul class="sidebar-nav">
               {% for item in group.items %}
               {% include "django_program/manage/_nav_item.html" with item=item depth=0 %}

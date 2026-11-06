@@ -174,17 +174,18 @@ def manage_shell(context: template.Context) -> ManageShell:
 
 @register.filter
 def group_nav_items(items: tuple[ResolvedItem, ...]) -> list[dict[str, Any]]:
-    """Group resolved nav items into contiguous ``{"label": ..., "items": [...]}`` buckets.
+    """Group resolved nav items into contiguous ``{"label", "items", "is_active"}`` buckets.
 
-    Items with no ``group`` get an empty-string bucket label.
+    Items with no ``group`` get an empty-string bucket label.  ``is_active`` marks the
+    bucket holding the current page; the shell renders every other labelled bucket collapsed.
     """
     groups: list[dict[str, Any]] = []
     for item in items:
         label = item.group
-        if groups and groups[-1]["label"] == label:
-            groups[-1]["items"].append(item)
-        else:
-            groups.append({"label": label, "items": [item]})
+        if not groups or groups[-1]["label"] != label:
+            groups.append({"label": label, "items": [], "is_active": False})
+        groups[-1]["items"].append(item)
+        groups[-1]["is_active"] = groups[-1]["is_active"] or item.is_active or item.has_active_child
     return groups
 
 

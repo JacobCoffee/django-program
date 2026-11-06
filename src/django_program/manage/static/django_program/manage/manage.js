@@ -51,21 +51,13 @@
     });
 
     document.querySelectorAll('.sidebar-sublabel[data-subsection]').forEach(function (label) {
-      var id = label.dataset.subsection;
-      var target = document.querySelector('[data-subsection-target="' + id + '"]');
+      var target = document.querySelector('[data-subsection-target="' + label.dataset.subsection + '"]');
       if (!target) return;
-      var hasActive = target.querySelector('a.active');
-
-      if (stored[id] && !hasActive) {
-        target.classList.add('collapsed');
-        label.classList.add('collapsed-label');
-      }
 
       function toggleGroup() {
-        target.classList.toggle('collapsed');
-        label.classList.toggle('collapsed-label');
-        stored[id] = target.classList.contains('collapsed');
-        writeCollapsed(stored);
+        var collapsed = target.classList.toggle('collapsed');
+        label.classList.toggle('collapsed-label', collapsed);
+        label.setAttribute('aria-expanded', String(!collapsed));
       }
 
       label.addEventListener('click', toggleGroup);
