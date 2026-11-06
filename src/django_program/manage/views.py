@@ -915,19 +915,8 @@ class ConferenceEditView(ManagePermissionMixin, UpdateView):
         kpi = kpi_form.save(commit=False)
         kpi.conference = self.conference
         kpi.save()
-        return response
-
-    def form_valid(self, form: ConferenceForm) -> HttpResponse:
-        """Save the form and add a success message.
-
-        Args:
-            form: The validated conference form.
-
-        Returns:
-            A redirect response to the success URL.
-        """
         messages.success(self.request, "Conference updated successfully.")
-        return super().form_valid(form)
+        return response
 
 
 class SectionListView(ManagePermissionMixin, ListView):
