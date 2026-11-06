@@ -6,6 +6,7 @@ the URL and return a 404 if the slug does not match.
 """
 
 import itertools
+from datetime import UTC
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -107,7 +108,7 @@ class ScheduleView(ConferenceMixin, FeatureRequiredMixin, TemplateView):
         try:
             conference_tz = ZoneInfo(self.conference.timezone)
         except (ZoneInfoNotFoundError, ValueError):  # fmt: skip
-            conference_tz = timezone.utc
+            conference_tz = UTC
         context["today"] = timezone.localdate(timezone=conference_tz)
         return context
 

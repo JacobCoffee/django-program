@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 
 [manifest]
@@ -274,6 +274,7 @@ dependencies = [
     { name = "qrcode", extra = ["pil"] },
     { name = "reportlab" },
     { name = "stripe" },
+    { name = "tzdata" },
 ]
 
 [package.dev-dependencies]
@@ -333,6 +334,7 @@ requires-dist = [
     { name = "qrcode", extras = ["pil"], specifier = ">=8.2" },
     { name = "reportlab", specifier = ">=4.4.10" },
     { name = "stripe", specifier = ">=12.0.0" },
+    { name = "tzdata", specifier = ">=2025.2" },
 ]
 
 [package.metadata.requires-dev]
