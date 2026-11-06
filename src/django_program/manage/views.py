@@ -910,11 +910,12 @@ class ConferenceEditView(ManagePermissionMixin, UpdateView):
         return self.render_to_response(self.get_context_data(form=form, kpi_form=kpi_form))
 
     def _forms_valid(self, form: ConferenceForm, kpi_form: KPITargetsForm) -> HttpResponse:
-        """Save both the conference and KPI targets forms."""
-        response = super().form_valid(form)
-        kpi = kpi_form.save(commit=False)
-        kpi.conference = self.conference
-        kpi.save()
+        """Save the conference and its KPI targets together."""
+        with transaction.atomic():
+            response = super().form_valid(form)
+            kpi = kpi_form.save(commit=False)
+            kpi.conference = self.conference
+            kpi.save()
         messages.success(self.request, "Conference updated successfully.")
         return response
 

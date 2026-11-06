@@ -7,13 +7,15 @@ views (previously untested), and the analytics JSON-serialization helper.
 
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import User
+from django.db import DatabaseError
 from django.test import Client
 from django.urls import reverse
 
-from django_program.conference.models import Conference, Expense, ExpenseCategory
+from django_program.conference.models import Conference, Expense, ExpenseCategory, KPITargets
 from django_program.manage.views_analytics import _decimal_to_float
 from django_program.programs.models import TravelGrant
 from django_program.registration.models import Order
@@ -463,3 +465,20 @@ class TestDecimalToFloat:
         """Non-Decimal values are returned unchanged (used as json.dumps default)."""
         assert _decimal_to_float("already-a-string") == "already-a-string"
         assert _decimal_to_float(42) == 42
+
+
+def test_conference_edit_rolls_back_when_kpi_save_fails(client_logged_in_super, conference):
+    url = reverse("manage:conference-edit", kwargs={"conference_slug": conference.slug})
+    data = {
+        "name": "Renamed Conf",
+        "start_date": "2027-05-01",
+        "end_date": "2027-05-03",
+        "timezone": "UTC",
+        "total_capacity": 0,
+        "is_active": "on",
+    }
+    with patch.object(KPITargets, "save", side_effect=DatabaseError("kpi write failed")):
+        with pytest.raises(DatabaseError):
+            client_logged_in_super.post(url, data)
+    conference.refresh_from_db()
+    assert conference.name != "Renamed Conf"
