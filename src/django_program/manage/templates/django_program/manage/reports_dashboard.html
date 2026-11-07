@@ -17,6 +17,7 @@
 
 {% block content %}
 
+{% if registration_enabled %}
 <!-- Hero KPI Row -->
 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem; align-items: stretch;">
   <a href="{% url 'manage:report-sales-by-date' conference.slug %}" style="text-decoration: none; color: inherit; display: flex;">
@@ -67,6 +68,7 @@
   {% include "django_program/manage/charts/_checkin_progress.html" with chart_data=chart_checkin_json %}
   {% include "django_program/manage/charts/_speaker_status.html" with chart_data=chart_speakers_json %}
 </div>
+{% endif %}
 
 <!-- Analytics Dashboards -->
 <h2 class="section-heading">Analytics Dashboards</h2>
@@ -90,6 +92,7 @@
 <h2 class="section-heading">Available Reports</h2>
 
 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
+{% if registration_enabled %}
   <a href="{% url 'manage:report-attendee-manifest' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
     <div class="card-body">
       <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Attendee Manifest</div>
@@ -144,6 +147,8 @@
       <div style="font-size: 0.82rem; color: var(--color-text-secondary);">Daily flow of new registrations and cancellations with net change tracking.</div>
     </div>
   </a>
+{% endif %}
+{% if visa_letters_enabled %}
   <a href="{% url 'manage:report-visa-letters' conference.slug %}" class="card" style="color: inherit; text-decoration: none;">
     <div class="card-body">
       <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem;">Visa & Invitation Letters</div>
@@ -151,6 +156,7 @@
       {% if letter_pending_count %}<div style="font-size: 0.75rem; color: var(--color-warning); font-weight: 600; margin-top: 0.3rem;">{{ letter_pending_count }} pending review</div>{% endif %}
     </div>
   </a>
+{% endif %}
 </div>
 
 {% endblock %}

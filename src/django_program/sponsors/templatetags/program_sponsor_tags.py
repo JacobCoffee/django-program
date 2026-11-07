@@ -24,7 +24,7 @@ def sponsors_by_level(conference: Conference) -> list[dict[str, Any]]:
 
     Usage in templates::
 
-        {% load sponsor_tags %}
+        {% load program_sponsor_tags %}
         {% sponsors_by_level conference as sponsor_groups %}
         {% for group in sponsor_groups %}
             <h2>{{ group.level.name }}</h2>
@@ -70,7 +70,7 @@ def sponsor_logo_url(sponsor: Sponsor) -> str:
 
     Usage in templates::
 
-        {% load sponsor_tags %}
+        {% load program_sponsor_tags %}
         {% sponsor_logo_url sponsor as logo %}
         {% if logo %}
             <img src="{{ logo }}" alt="{{ sponsor.name }}">

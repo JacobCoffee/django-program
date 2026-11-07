@@ -564,14 +564,7 @@ class TestFinancialDashboardRecentOrders:
 
 @pytest.mark.django_db
 class TestFinancialDashboardSidebarNavigation:
-    """Sidebar contains a link to the financial dashboard."""
-
-    def test_sidebar_has_financial_link(self, client_logged_in_super, conference):
-        resp = client_logged_in_super.get(_dashboard_url(conference))
-        content = resp.content.decode()
-        expected_url = reverse("manage:financial-dashboard", kwargs={"conference_slug": conference.slug})
-        assert expected_url in content
-        assert "Financial" in content
+    """Dashboard records the financial sidebar's active-nav state."""
 
     def test_active_nav_set_to_financial(self, client_logged_in_super, conference):
         resp = client_logged_in_super.get(_dashboard_url(conference))

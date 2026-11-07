@@ -52,3 +52,4 @@ USE_TZ = True
 ROOT_URLCONF = "tests.urls"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = "/tmp/django-program-test-media/"
+STATIC_URL = "/static/"

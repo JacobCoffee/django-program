@@ -1,1348 +1,115 @@
+{% load static %}
+{% load manage_shell %}
+{% manage_shell as shell %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Management{% endblock %} -- Conference Management</title>
-  <style>
-    /* ---- Reset & Base ---- */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --color-bg: #f8f9fa;
-      --color-surface: #ffffff;
-      --color-text: #1a1a2e;
-      --color-text-secondary: #555770;
-      --color-text-muted: #8889a0;
-      --color-primary: #4338ca;
-      --color-primary-light: #e8e6f8;
-      --color-primary-hover: #3525b3;
-      --color-accent: #0d9488;
-      --color-accent-light: #d5f5f2;
-      --color-border: #e2e4e9;
-      --color-border-light: #f0f1f4;
-      --color-break-bg: #fef3c7;
-      --color-break-text: #92400e;
-      --color-social-bg: #dbeafe;
-      --color-social-text: #1e40af;
-      --color-warning: #d97706;
-      --color-warning-bg: #fffbeb;
-      --color-warning-border: #fcd34d;
-      --color-success: #059669;
-      --color-success-bg: #ecfdf5;
-      --color-danger: #dc2626;
-      --color-danger-bg: #fef2f2;
-      --color-locked-bg: #f5f3ff;
-      --color-locked-border: #c4b5fd;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 16px;
-      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-      --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
-      --shadow-lg: 0 4px 20px rgba(0, 0, 0, 0.1);
-      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      --font-mono: "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-      --sidebar-width: 240px;
-      --header-height: 56px;
-    }
-
-    html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-
-    body {
-      font-family: var(--font-sans);
-      color: var(--color-text);
-      background: var(--color-bg);
-      line-height: 1.6;
-      min-height: 100vh;
-    }
-
-    /* ---- Links ---- */
-    a { color: var(--color-primary); text-decoration: none; transition: color 0.15s ease; }
-    a:hover { color: var(--color-primary-hover); text-decoration: underline; }
-
-    /* ---- Top Header Bar ---- */
-    .top-bar {
-      background: var(--color-text);
-      color: #ffffff;
-      height: var(--header-height);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 1.5rem;
-      position: sticky;
-      top: 0;
-      z-index: 200;
-    }
-
-    .top-bar-left {
-      display: flex;
-      align-items: center;
-      gap: 1.5rem;
-    }
-
-    .top-bar-title {
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: #ffffff;
-      letter-spacing: -0.01em;
-    }
-    .top-bar-title:hover { color: #ffffff; text-decoration: none; opacity: 0.9; }
-
-    .top-bar-link {
-      font-size: 0.82rem;
-      color: rgba(255, 255, 255, 0.65);
-      transition: color 0.15s ease;
-    }
-    .top-bar-link:hover { color: #ffffff; text-decoration: none; }
-
-    .top-bar-right {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      font-size: 0.82rem;
-      color: rgba(255, 255, 255, 0.65);
-    }
-
-    .top-bar-right a {
-      color: rgba(255, 255, 255, 0.65);
-      transition: color 0.15s ease;
-    }
-    .top-bar-right a:hover { color: #ffffff; text-decoration: none; }
-
-    .top-bar-user {
-      color: rgba(255, 255, 255, 0.85);
-      font-weight: 500;
-    }
-
-    .top-bar-separator {
-      width: 1px;
-      height: 18px;
-      background: rgba(255, 255, 255, 0.2);
-    }
-
-    .top-bar-synced {
-      font-size: 0.75rem;
-      color: rgba(255, 255, 255, 0.45);
-      font-family: var(--font-mono);
-      cursor: default;
-    }
-
-    /* ---- Layout Shell ---- */
-    .layout {
-      display: flex;
-      min-height: calc(100vh - var(--header-height));
-    }
-
-    /* ---- Sidebar ---- */
-    .sidebar {
-      width: var(--sidebar-width);
-      flex-shrink: 0;
-      background: var(--color-surface);
-      border-right: 1px solid var(--color-border);
-      padding: 1.25rem 0;
-      position: sticky;
-      top: var(--header-height);
-      height: calc(100vh - var(--header-height));
-      overflow-y: auto;
-    }
-
-    .sidebar-section {
-      padding: 0 0.75rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .sidebar-section-title {
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--color-text-muted);
-      padding: 0 0.75rem;
-      margin-bottom: 0.4rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-      user-select: none;
-      border-radius: var(--radius-sm);
-      transition: color 0.15s ease;
-    }
-    .sidebar-section-title:hover {
-      color: var(--color-text-secondary);
-    }
-    .sidebar-section-title .sidebar-collapse-icon {
-      width: 12px;
-      height: 12px;
-      flex-shrink: 0;
-      opacity: 0.5;
-      transition: transform 0.2s ease, opacity 0.15s ease;
-    }
-    .sidebar-section-title:hover .sidebar-collapse-icon {
-      opacity: 0.8;
-    }
-    .sidebar-section.collapsed .sidebar-collapse-icon {
-      transform: rotate(-90deg);
-    }
-    .sidebar-section.collapsed > .sidebar-nav {
-      max-height: 0;
-      overflow: hidden;
-      margin: 0;
-      opacity: 0;
-    }
-    .sidebar-section > .sidebar-nav {
-      max-height: 2000px;
-      opacity: 1;
-      transition: max-height 0.25s ease, opacity 0.2s ease;
-    }
-
-    .sidebar-sublabel {
-      font-size: 0.62rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--color-text-muted);
-      padding: 0.5rem 0.75rem 0.2rem;
-      opacity: 0.7;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-      user-select: none;
-      border-radius: var(--radius-sm);
-      transition: opacity 0.15s ease;
-    }
-    .sidebar-sublabel:hover {
-      opacity: 1;
-    }
-    .sidebar-sublabel .sidebar-collapse-icon {
-      width: 10px;
-      height: 10px;
-      flex-shrink: 0;
-      opacity: 0.5;
-      transition: transform 0.2s ease, opacity 0.15s ease;
-    }
-    .sidebar-sublabel:hover .sidebar-collapse-icon {
-      opacity: 0.8;
-    }
-    .sidebar-subgroup {
-      max-height: 500px;
-      opacity: 1;
-      overflow: hidden;
-      transition: max-height 0.25s ease, opacity 0.2s ease;
-    }
-    .sidebar-subgroup.collapsed {
-      max-height: 0;
-      opacity: 0;
-    }
-    .sidebar-sublabel.collapsed-label .sidebar-collapse-icon {
-      transform: rotate(-90deg);
-    }
-
-    .sidebar-utility-separator {
-      border: none;
-      border-top: 1px dashed var(--color-border);
-      margin: 0.75rem 0.75rem 0;
-    }
-
-    .sidebar-nav {
-      list-style: none;
-    }
-
-    .sidebar-nav li a {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      padding: 0.45rem 0.75rem;
-      border-radius: var(--radius-sm);
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: var(--color-text-secondary);
-      transition: background 0.15s ease, color 0.15s ease;
-    }
-    .sidebar-nav li a:hover {
-      background: var(--color-primary-light);
-      color: var(--color-primary);
-      text-decoration: none;
-    }
-
-    .sidebar-nav li a.active {
-      background: var(--color-primary-light);
-      color: var(--color-primary);
-      font-weight: 600;
-    }
-
-    .sidebar-nav-icon {
-      flex-shrink: 0;
-      width: 18px;
-      height: 18px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0.65;
-    }
-    .sidebar-nav-icon svg {
-      width: 16px;
-      height: 16px;
-    }
-
-    /* ---- Expandable Nav Item ---- */
-    .sidebar-nav-expandable {
-      display: flex;
-      align-items: center;
-    }
-    .sidebar-nav-expandable > a {
-      flex: 1;
-    }
-    .sidebar-nav-expand-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 28px;
-      height: 28px;
-      border: none;
-      background: none;
-      cursor: pointer;
-      border-radius: var(--radius-sm);
-      color: var(--color-text-muted);
-      transition: background 0.15s ease, color 0.15s ease;
-      flex-shrink: 0;
-      margin-right: 0.4rem;
-    }
-    .sidebar-nav-expand-btn:hover {
-      background: var(--color-primary-light);
-      color: var(--color-primary);
-    }
-    .sidebar-nav-expand-btn svg {
-      width: 14px;
-      height: 14px;
-      transition: transform 0.2s ease;
-    }
-    .sidebar-nav-expand-btn.open svg {
-      transform: rotate(90deg);
-    }
-
-    /* ---- Sidebar Subnav ---- */
-    .sidebar-subnav {
-      list-style: none;
-      margin: 0.15rem 0 0.25rem;
-      padding: 0;
-      overflow: hidden;
-      max-height: 0;
-      transition: max-height 0.25s ease;
-    }
-    .sidebar-subnav.open {
-      max-height: 500px;
-    }
-    .sidebar-subnav li a {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.3rem 0.75rem 0.3rem 2.4rem;
-      border-radius: var(--radius-sm);
-      font-size: 0.8rem;
-      font-weight: 450;
-      color: var(--color-text-muted);
-      transition: background 0.15s ease, color 0.15s ease;
-      position: relative;
-    }
-    .sidebar-subnav li a::before {
-      content: "";
-      position: absolute;
-      left: 1.45rem;
-      top: 50%;
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: var(--color-border);
-      transform: translateY(-50%);
-      transition: background 0.15s ease;
-    }
-    .sidebar-subnav li a:hover {
-      background: var(--color-primary-light);
-      color: var(--color-primary);
-      text-decoration: none;
-    }
-    .sidebar-subnav li a:hover::before {
-      background: var(--color-primary);
-    }
-    .sidebar-subnav li a.active {
-      background: var(--color-primary-light);
-      color: var(--color-primary);
-      font-weight: 600;
-    }
-    .sidebar-subnav li a.active::before {
-      background: var(--color-primary);
-      width: 5px;
-      height: 5px;
-    }
-    .sidebar-subnav-count {
-      margin-left: auto;
-      font-size: 0.68rem;
-      font-weight: 500;
-      color: var(--color-text-muted);
-      font-family: var(--font-mono);
-      background: var(--color-bg);
-      padding: 0 0.35rem;
-      border-radius: 3px;
-      line-height: 1.5;
-    }
-    .sidebar-subnav li a:hover .sidebar-subnav-count,
-    .sidebar-subnav li a.active .sidebar-subnav-count {
-      background: rgba(67, 56, 202, 0.08);
-      color: var(--color-primary);
-    }
-
-    /* ---- Main Content Area ---- */
-    .main-content {
-      flex: 1;
-      min-width: 0;
-      padding: 2rem 2.5rem 4rem;
-    }
-
-    .main-content--full {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 2rem 1.5rem 4rem;
-    }
-
-    /* ---- Breadcrumb ---- */
-    .breadcrumb {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      font-size: 0.82rem;
-      color: var(--color-text-muted);
-      margin-bottom: 1.25rem;
-    }
-
-    .breadcrumb a {
-      color: var(--color-text-muted);
-      transition: color 0.15s ease;
-    }
-    .breadcrumb a:hover { color: var(--color-primary); text-decoration: none; }
-
-    .breadcrumb-separator::after { content: "/"; margin: 0 0.1rem; color: var(--color-border); }
-
-    /* ---- Page Header ---- */
-    .page-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 1rem;
-      margin-bottom: 2rem;
-      padding-bottom: 1.25rem;
-      border-bottom: 2px solid var(--color-border);
-    }
-
-    .page-header-text h1 {
-      font-size: 1.6rem;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      color: var(--color-text);
-      line-height: 1.3;
-    }
-
-    .page-header-text p {
-      margin-top: 0.25rem;
-      color: var(--color-text-secondary);
-      font-size: 0.95rem;
-    }
-
-    .page-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      flex-shrink: 0;
-    }
-
-    /* ---- Buttons ---- */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.5rem 1rem;
-      border-radius: var(--radius-sm);
-      font-size: 0.875rem;
-      font-weight: 600;
-      border: 1px solid transparent;
-      cursor: pointer;
-      transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-      text-decoration: none;
-      line-height: 1.4;
-      font-family: var(--font-sans);
-    }
-    .btn:hover { text-decoration: none; }
-
-    .btn-primary {
-      background: var(--color-primary);
-      color: #ffffff;
-      border-color: var(--color-primary);
-    }
-    .btn-primary:hover {
-      background: var(--color-primary-hover);
-      border-color: var(--color-primary-hover);
-      color: #ffffff;
-    }
-
-    .btn-secondary {
-      background: var(--color-surface);
-      color: var(--color-text-secondary);
-      border-color: var(--color-border);
-    }
-    .btn-secondary:hover {
-      background: var(--color-bg);
-      border-color: var(--color-text-muted);
-      color: var(--color-text);
-    }
-
-    .btn-danger {
-      background: var(--color-danger);
-      color: #ffffff;
-      border-color: var(--color-danger);
-    }
-    .btn-danger:hover {
-      background: #b91c1c;
-      border-color: #b91c1c;
-      color: #ffffff;
-    }
-
-    .btn-sm {
-      padding: 0.35rem 0.7rem;
-      font-size: 0.8rem;
-    }
-
-    /* ---- Flash Messages ---- */
-    .messages {
-      list-style: none;
-      margin-bottom: 1.5rem;
-    }
-
-    .messages li {
-      padding: 0.75rem 1rem;
-      border-radius: var(--radius-sm);
-      margin-bottom: 0.5rem;
-      font-size: 0.9rem;
-    }
-
-    .messages .success { background: var(--color-success-bg); color: var(--color-success); }
-    .messages .error { background: var(--color-danger-bg); color: var(--color-danger); }
-    .messages .warning { background: var(--color-warning-bg); color: var(--color-warning); }
-    .messages .info { background: var(--color-primary-light); color: var(--color-primary); }
-
-    /* ---- Cards ---- */
-    .card {
-      background: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      box-shadow: var(--shadow-sm);
-      transition: box-shadow 0.2s ease, transform 0.2s ease;
-    }
-    .card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-    .card--static:hover { box-shadow: var(--shadow-sm); transform: none; }
-
-    .card-body { padding: 1.25rem 1.5rem; }
-
-    /* ---- Stat Cards Grid ---- */
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }
-
-    .stat-card {
-      background: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      padding: 1.25rem;
-      transition: box-shadow 0.2s ease, border-color 0.2s ease;
-    }
-    .stat-card:hover { box-shadow: var(--shadow-md); border-color: var(--color-primary); }
-
-    .stat-card a {
-      display: block;
-      color: inherit;
-      text-decoration: none;
-    }
-    .stat-card a:hover { text-decoration: none; color: inherit; }
-
-    .stat-card-value {
-      font-size: 2rem;
-      font-weight: 800;
-      color: var(--color-text);
-      line-height: 1.1;
-      letter-spacing: -0.03em;
-    }
-
-    .stat-card-label {
-      font-size: 0.78rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--color-text-muted);
-      margin-top: 0.35rem;
-    }
-
-    /* ---- Conference Card Grid ---- */
-    .conference-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 1.25rem;
-    }
-
-    .conference-card a {
-      display: block;
-      color: inherit;
-      text-decoration: none;
-    }
-    .conference-card a:hover { text-decoration: none; color: inherit; }
-
-    .conference-card-name {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--color-text);
-      margin-bottom: 0.3rem;
-    }
-
-    .conference-card-slug {
-      font-family: var(--font-mono);
-      font-size: 0.78rem;
-      color: var(--color-text-muted);
-      margin-bottom: 0.6rem;
-    }
-
-    .conference-card-dates {
-      font-size: 0.85rem;
-      color: var(--color-text-secondary);
-    }
-
-    /* ---- Tables ---- */
-    .data-table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      background: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .data-table thead { background: var(--color-bg); }
-
-    .data-table th {
-      padding: 0.7rem 1rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--color-text-muted);
-      text-align: left;
-      border-bottom: 1px solid var(--color-border);
-    }
-
-    .data-table td {
-      padding: 0.7rem 1rem;
-      font-size: 0.9rem;
-      border-bottom: 1px solid var(--color-border-light);
-      vertical-align: middle;
-    }
-
-    .data-table tbody tr:last-child td { border-bottom: none; }
-    .data-table tbody tr:hover { background: #fafaff; }
-
-    /* ---- Badges ---- */
-    .badge {
-      display: inline-block;
-      padding: 0.15rem 0.55rem;
-      border-radius: 999px;
-      font-size: 0.72rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .badge--active { background: var(--color-success-bg); color: var(--color-success); }
-    .badge--inactive { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
-    .badge--synced { background: var(--color-accent-light); color: var(--color-accent); }
-    .badge--warning { background: var(--color-warning-bg); color: var(--color-warning); }
-    .badge--confirmed { background: var(--color-success-bg); color: var(--color-success); }
-    .badge--accepted { background: var(--color-primary-light); color: var(--color-primary); }
-    .badge--submitted { background: var(--color-warning-bg); color: var(--color-warning); }
-    .badge--talk { background: var(--color-primary-light); color: var(--color-primary); }
-    .badge--break { background: var(--color-break-bg); color: var(--color-break-text); }
-    .badge--social { background: var(--color-social-bg); color: var(--color-social-text); }
-    .badge--other { background: var(--color-border-light); color: var(--color-text-muted); }
-
-    /* ---- Forms ---- */
-    .form-container {
-      max-width: 640px;
-    }
-
-    .form-container p {
-      margin-bottom: 1rem;
-    }
-
-    .form-container label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--color-text);
-      margin-bottom: 0.35rem;
-    }
-
-    .form-container input[type="text"],
-    .form-container input[type="email"],
-    .form-container input[type="url"],
-    .form-container input[type="number"],
-    .form-container input[type="date"],
-    .form-container input[type="datetime-local"],
-    .form-container textarea,
-    .form-container select {
-      width: 100%;
-      padding: 0.5rem 0.75rem;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      font-size: 0.9rem;
-      font-family: var(--font-sans);
-      color: var(--color-text);
-      background: var(--color-surface);
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    .form-container input:focus,
-    .form-container textarea:focus,
-    .form-container select:focus {
-      outline: none;
-      border-color: var(--color-primary);
-      box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1);
-    }
-
-    .form-container textarea {
-      min-height: 100px;
-      resize: vertical;
-    }
-
-    .form-container .helptext {
-      display: block;
-      font-size: 0.78rem;
-      color: var(--color-text-muted);
-      margin-top: 0.25rem;
-    }
-
-    .form-container .errorlist {
-      list-style: none;
-      margin: 0.25rem 0 0;
-      padding: 0;
-    }
-
-    .form-container .errorlist li {
-      font-size: 0.8rem;
-      color: var(--color-danger);
-    }
-
-    .form-container input[type="checkbox"] {
-      width: auto;
-      margin-right: 0.4rem;
-    }
-
-    .form-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-top: 1.5rem;
-      padding-top: 1.25rem;
-      border-top: 1px solid var(--color-border-light);
-    }
-
-    /* ---- Form Group with Lock ---- */
-    .form-group {
-      margin-bottom: 1rem;
-    }
-
-    .form-group label {
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--color-text);
-      margin-bottom: 0.35rem;
-    }
-
-    .form-group input,
-    .form-group select,
-    .form-group textarea {
-      width: 100%;
-      padding: 0.5rem 0.75rem;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      font-size: 0.9rem;
-      font-family: var(--font-sans);
-      color: var(--color-text);
-      background: var(--color-surface);
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    .form-group input:focus,
-    .form-group select:focus,
-    .form-group textarea:focus {
-      outline: none;
-      border-color: var(--color-primary);
-      box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1);
-    }
-
-    .form-group textarea { min-height: 100px; resize: vertical; }
-
-    .form-group input[type="checkbox"] { width: auto; }
-
-    .form-group .helptext {
-      display: block;
-      font-size: 0.78rem;
-      color: var(--color-text-muted);
-      margin-top: 0.25rem;
-    }
-
-    .form-group .errorlist {
-      list-style: none;
-      margin: 0.25rem 0 0;
-      padding: 0;
-    }
-
-    .form-group .errorlist li {
-      font-size: 0.8rem;
-      color: var(--color-danger);
-    }
-
-    .form-group--locked input,
-    .form-group--locked textarea,
-    .form-group--locked select {
-      background: var(--color-locked-bg);
-      border-color: var(--color-locked-border);
-      cursor: not-allowed;
-      opacity: 0.8;
-    }
-
-    .lock-icon {
-      font-size: 0.75rem;
-      margin-left: 0.3rem;
-      color: var(--color-warning);
-    }
-
-    /* ---- Sync Banner ---- */
-    .sync-banner {
-      background: var(--color-warning-bg);
-      border: 1px solid var(--color-warning-border);
-      border-radius: var(--radius-md);
-      padding: 0.75rem 1rem;
-      margin-bottom: 1.5rem;
-      font-size: 0.9rem;
-      color: var(--color-warning);
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    /* ---- Info Banner ---- */
-    .info-banner {
-      background: var(--color-primary-light);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      padding: 0.75rem 1rem;
-      margin-bottom: 1.5rem;
-      font-size: 0.9rem;
-      color: var(--color-primary);
-    }
-
-    /* ---- Search / Filter Bar ---- */
-    .filter-bar {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-    }
-
-    .filter-bar input[type="text"],
-    .filter-bar input[type="search"],
-    .filter-bar input[type="date"] {
-      padding: 0.45rem 0.75rem;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      font-size: 0.875rem;
-      font-family: var(--font-sans);
-      color: var(--color-text);
-      background: var(--color-surface);
-      min-width: 160px;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-    .filter-bar input:focus {
-      outline: none;
-      border-color: var(--color-primary);
-      box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1);
-    }
-
-    .filter-bar select {
-      padding: 0.45rem 0.75rem;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      font-size: 0.875rem;
-      font-family: var(--font-sans);
-      color: var(--color-text);
-      background: var(--color-surface);
-    }
-
-    /* ---- Pagination ---- */
-    .pagination {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.75rem;
-      margin-top: 2rem;
-      padding-top: 1.25rem;
-      border-top: 1px solid var(--color-border-light);
-    }
-
-    .pagination a {
-      padding: 0.4rem 0.85rem;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      font-size: 0.85rem;
-      font-weight: 500;
-      color: var(--color-text-secondary);
-      background: var(--color-surface);
-      transition: background 0.15s ease, border-color 0.15s ease;
-    }
-    .pagination a:hover {
-      background: var(--color-primary-light);
-      border-color: var(--color-primary);
-      color: var(--color-primary);
-      text-decoration: none;
-    }
-
-    .pagination .page-info {
-      font-size: 0.85rem;
-      color: var(--color-text-muted);
-    }
-
-    /* ---- Empty State ---- */
-    .empty-state {
-      text-align: center;
-      padding: 3rem 1rem;
-      color: var(--color-text-muted);
-      font-size: 1.05rem;
-      background: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-    }
-
-    .empty-state p { margin-bottom: 1rem; }
-    .empty-state p:last-child { margin-bottom: 0; }
-
-    /* ---- Quick Info Grid ---- */
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 0.75rem;
-    }
-
-    .info-item {
-      padding: 0.85rem 1rem;
-      background: var(--color-bg);
-      border: 1px solid var(--color-border-light);
-      border-radius: var(--radius-sm);
-    }
-
-    .info-item-label {
-      font-size: 0.7rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--color-text-muted);
-      margin-bottom: 0.15rem;
-    }
-
-    .info-item-value {
-      font-size: 0.95rem;
-      color: var(--color-text);
-      font-weight: 500;
-    }
-
-    /* ---- Date Group Headers (schedule) ---- */
-    .date-header {
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--color-text);
-      margin: 2rem 0 0.75rem;
-      padding: 0.5rem 0;
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-    }
-    .date-header:first-child { margin-top: 0; }
-
-    .date-header::before {
-      content: "";
-      display: inline-block;
-      width: 4px;
-      height: 1em;
-      background: var(--color-primary);
-      border-radius: 2px;
-    }
-
-    /* ---- Section Heading ---- */
-    .section-heading {
-      font-size: 0.8rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--color-text-muted);
-      margin-bottom: 0.75rem;
-      margin-top: 2rem;
-      padding-bottom: 0.4rem;
-      border-bottom: 1px solid var(--color-border-light);
-    }
-    .section-heading:first-child { margin-top: 0; }
-
-    /* ---- Read-Only Field ---- */
-    .readonly-field {
-      padding: 0.5rem 0.75rem;
-      background: var(--color-bg);
-      border: 1px solid var(--color-border-light);
-      border-radius: var(--radius-sm);
-      font-size: 0.9rem;
-      color: var(--color-text-secondary);
-    }
-
-    /* ---- Mono Text ---- */
-    .mono {
-      font-family: var(--font-mono);
-      font-size: 0.85rem;
-    }
-
-    /* ---- Responsive ---- */
-    @media (max-width: 768px) {
-      .top-bar { padding: 0 1rem; }
-      .top-bar-title { font-size: 0.85rem; }
-      .sidebar { display: none; }
-      .main-content { padding: 1.25rem 1rem 3rem; }
-      .main-content--full { padding: 1.25rem 1rem 3rem; }
-      .page-header { flex-direction: column; gap: 0.75rem; }
-      .page-header-text h1 { font-size: 1.3rem; }
-      .stat-grid { grid-template-columns: repeat(2, 1fr); }
-      .conference-grid { grid-template-columns: 1fr; }
-      .filter-bar { flex-direction: column; align-items: stretch; }
-      .filter-bar input[type="text"],
-      .filter-bar input[type="search"] { min-width: 100%; }
-      .data-table th, .data-table td { padding: 0.5rem 0.6rem; font-size: 0.82rem; }
-      .info-grid { grid-template-columns: 1fr; }
-    }
-  </style>
+  <title>{% block title %}Management{% endblock %} -- {{ shell.config.title }}</title>
+  <link rel="stylesheet" href="{% static 'django_program/manage/manage.css' %}">
+  {% for sheet in shell.config.stylesheets %}
+  <link rel="stylesheet" href="{% static sheet %}">
+  {% endfor %}
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
+  {% include "django_program/manage/_icons.html" %}
+
   <header class="top-bar">
     <div class="top-bar-left">
-      <a href="{% url 'manage:conference-list' %}" class="top-bar-title">Conference Management</a>
-      {% if conference %}
+      {% block sidebar_toggle %}
+      {% if shell.nav %}
+      <button type="button" class="sidebar-toggle" id="manage-sidebar-toggle" aria-expanded="false" aria-controls="manage-sidebar" aria-label="Open navigation menu">
+        <svg aria-hidden="true"><use href="#dp-i-menu"></use></svg>
+      </button>
+      {% endif %}
+      {% endblock %}
+      <a href="{{ shell.home_href }}" class="top-bar-title">{{ shell.config.title }}</a>
+      {% if shell.conference and shell.config.public_schedule_link %}
+        {% url 'pretalx:schedule' shell.conference.slug as public_schedule_url %}
+        {% if public_schedule_url %}
         <span class="top-bar-separator"></span>
-        <a href="{% url 'pretalx:schedule' conference.slug %}" class="top-bar-link">View Public Schedule</a>
+        <a href="{{ public_schedule_url }}" class="top-bar-link">View Public Schedule</a>
+        {% endif %}
       {% endif %}
     </div>
     <div class="top-bar-right">
+      {% block topbar_actions %}{% endblock %}
+      {% if shell.config.palette %}
+      <button type="button" class="palette-trigger" id="manage-palette-trigger" aria-haspopup="dialog" aria-controls="manage-palette" aria-label="Search · {{ shell.config.search_placeholder }}">
+        <svg aria-hidden="true"><use href="#dp-i-search"></use></svg>
+        <span class="palette-trigger-text">{{ shell.config.search_placeholder }}</span>
+        <kbd class="palette-kbd" data-mac="⌘K" data-pc="Ctrl K">Ctrl K</kbd>
+      </button>
+      <span class="top-bar-separator"></span>
+      {% endif %}
       {% if last_synced %}
         <span class="top-bar-synced" title="Last Pretalx sync: {{ last_synced|date:'N j, Y, P' }}">Synced {{ last_synced|timesince }} ago</span>
         <span class="top-bar-separator"></span>
       {% endif %}
       {% if user.is_authenticated %}
-        <span class="top-bar-user">{{ user.get_short_name|default:user.username }}</span>
+        <span class="top-bar-user">{{ user.get_short_name|default:user.get_username }}</span>
+        {% if shell.logout_href %}
         <span class="top-bar-separator"></span>
-        <a href="{% url 'admin:logout' %}">Log out</a>
+        {% if shell.logout_same_origin %}
+        <form method="post" action="{{ shell.logout_href }}" class="top-bar-logout">
+          {% csrf_token %}
+          <button type="submit">Log out</button>
+        </form>
+        {% else %}
+        <a href="{{ shell.logout_href }}" class="top-bar-link">Log out</a>
+        {% endif %}
+        {% endif %}
       {% endif %}
     </div>
   </header>
 
   <div class="layout">
-    {% if conference %}
-    <nav class="sidebar" aria-label="Conference navigation">
-      {# ── Conference ── #}
-      {% if user_perms.conference or user_perms.settings %}
-      <div class="sidebar-section" data-section="conference">
-        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">{{ conference.name }} <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
-        <ul class="sidebar-nav">
-          <li>
-            <a href="{% url 'manage:dashboard' conference.slug %}" class="{% if active_nav == 'dashboard' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx=".5"/><rect x="9" y="2" width="5" height="5" rx=".5"/><rect x="2" y="9" width="5" height="5" rx=".5"/><rect x="9" y="9" width="5" height="5" rx=".5"/></svg></span> Dashboard
-            </a>
-          </li>
-          {% if user_perms.settings %}
-          <li>
-            <a href="{% url 'manage:conference-edit' conference.slug %}" class="{% if active_nav == 'conference-edit' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2m0 10v2M1 8h2m10 0h2M3.2 3.2l1.4 1.4m6.8 6.8l1.4 1.4M3.2 12.8l1.4-1.4m6.8-6.8l1.4-1.4"/></svg></span> Settings
-            </a>
-          </li>
-          {% endif %}
-        </ul>
-      </div>
-      {% endif %}
-
-      {# ── Program ── #}
-      {% if user_perms.program or user_perms.activities or user_perms.travel_grants %}
-      <div class="sidebar-section" data-section="program">
-        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Program <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
-        <ul class="sidebar-nav">
-          {% if user_perms.program %}
-          <li>
-            <a href="{% url 'manage:section-list' conference.slug %}" class="{% if active_nav == 'sections' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 1.5 5.5 8 9l6.5-3.5L8 2z"/><path d="m1.5 8 6.5 3.5L14.5 8"/><path d="m1.5 10.5 6.5 3.5 6.5-3.5"/></svg></span> Sections
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:room-list' conference.slug %}" class="{% if active_nav == 'rooms' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M6.5 13.5v-4h3v4"/></svg></span> Rooms
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:speaker-list' conference.slug %}" class="{% if active_nav == 'speakers' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="2.5"/><path d="M3 14.5c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg></span> Speakers
-            </a>
-          </li>
-          <li>
-            {% if submission_type_nav %}
-            <div class="sidebar-nav-expandable">
-              <a href="{% url 'manage:talk-list' conference.slug %}" class="{% if active_nav == 'talks' and not current_type_slug %}active{% endif %}">
-                <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3.5h11v7h-6l-2.5 2v-2h-2.5v-7z"/></svg></span> Talks
-              </a>
-              <button type="button" class="sidebar-nav-expand-btn{% if current_type_slug %} open{% endif %}" id="talks-expand-btn" aria-expanded="{% if current_type_slug %}true{% else %}false{% endif %}" aria-controls="talk-type-subnav" onclick="this.classList.toggle('open');var s=document.getElementById('talk-type-subnav');s.classList.toggle('open');this.setAttribute('aria-expanded',s.classList.contains('open'))">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4l4 4-4 4"/></svg>
-              </button>
-            </div>
-            <ul class="sidebar-subnav{% if current_type_slug %} open{% endif %}" id="talk-type-subnav">
-              {% for stype in submission_type_nav %}
-              <li>
-                <a href="{% url 'manage:talk-list-by-type' conference.slug stype.slug %}" class="{% if current_type_slug == stype.slug %}active{% endif %}">
-                  {{ stype.name }}
-                  <span class="sidebar-subnav-count">{{ stype.count }}</span>
-                </a>
+    {% block sidebar %}
+    {% if shell.nav %}
+    <nav class="sidebar" aria-label="Management navigation" id="manage-sidebar">
+      {% for section in shell.nav %}
+        {% ifchanged section.utility %}{% if section.utility and not forloop.first %}<hr class="sidebar-utility-separator">{% endif %}{% endifchanged %}
+        <div class="sidebar-section" data-section="{{ section.key }}">
+          <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">
+            {{ section.label }}
+            <svg class="sidebar-collapse-icon" aria-hidden="true"><use href="#dp-i-chevron-down"></use></svg>
+          </div>
+          {% for group in section.items|group_nav_items %}
+            {% if group.label %}
+            <ul class="sidebar-nav">
+              <li class="sidebar-sublabel{% if not group.is_active %} collapsed-label{% endif %}" data-subsection="{{ section.key }}-{{ group.label|slugify }}" role="button" tabindex="0" aria-expanded="{% if group.is_active %}true{% else %}false{% endif %}">
+                {{ group.label }}
+                <svg class="sidebar-collapse-icon" aria-hidden="true"><use href="#dp-i-chevron-down"></use></svg>
               </li>
+            </ul>
+            <div class="sidebar-subgroup{% if not group.is_active %} collapsed{% endif %}" data-subsection-target="{{ section.key }}-{{ group.label|slugify }}">
+            <ul class="sidebar-nav">
+              {% for item in group.items %}
+              {% include "django_program/manage/_nav_item.html" with item=item depth=0 %}
               {% endfor %}
             </ul>
-            {% else %}
-            <a href="{% url 'manage:talk-list' conference.slug %}" class="{% if active_nav == 'talks' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3.5h11v7h-6l-2.5 2v-2h-2.5v-7z"/></svg></span> Talks
-            </a>
-            {% endif %}
-          </li>
-          <li>
-            <a href="{% url 'manage:schedule-list' conference.slug %}" class="{% if active_nav == 'schedule' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5.5 1.5v3M10.5 1.5v3"/></svg></span> Schedule
-            </a>
-          </li>
-          {% endif %}
-          {% if user_perms.activities %}
-          <li>
-            <a href="{% url 'manage:activity-list' conference.slug %}" class="{% if active_nav == 'activities' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.5 1.5L4 8.5h4l-1 6 5.5-7H8.5l1-6z"/></svg></span> Activities
-            </a>
-          </li>
-          {% endif %}
-          {% if user_perms.travel_grants %}
-          <li>
-            <a href="{% url 'manage:travel-grant-list' conference.slug %}" class="{% if active_nav == 'travel-grants' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.5 1.5l-13 5 5 2.5m8-7.5l-4.5 12-3.5-4.5m8-7.5l-8 7.5"/></svg></span> Travel Grants
-            </a>
-          </li>
-          {% endif %}
-        </ul>
-      </div>
-      {% endif %}
-
-      {# ── Registration ── #}
-      {% if user_perms.registration_people or user_perms.registration_commerce or user_perms.badges or user_perms.bulk_purchases %}
-      <div class="sidebar-section" data-section="registration">
-        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Registration <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
-        {% if user_perms.registration_people %}
-        <ul class="sidebar-nav">
-          <li class="sidebar-sublabel" data-subsection="reg-people">People <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></li>
-        </ul>
-        <div class="sidebar-subgroup" data-subsection-target="reg-people">
-        <ul class="sidebar-nav">
-          <li>
-            <a href="{% url 'manage:attendee-list' conference.slug %}" class="{% if active_nav == 'attendees' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="4.5" r="2.5"/><path d="M1 13c0-2.8 2.2-5 5-5s5 2.2 5 5"/><circle cx="12" cy="5.5" r="1.5"/><path d="M15 13c0-1.7-1.3-3-3-3-.8 0-1.5.3-2 .8"/></svg></span> Attendees
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:order-list' conference.slug %}" class="{% if active_nav == 'orders' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 1.5h8v13l-2-1.5-2 1.5-2-1.5-2 1.5v-13z"/><path d="M6.5 5.5h3M6.5 8h2"/></svg></span> Orders
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:letter-list' conference.slug %}" class="{% if active_nav == 'letters' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h10v11H3z"/><path d="M5.5 5.5h5M5.5 7.5h5M5.5 9.5h3"/><path d="M10 1v3M6 1v3"/></svg></span> Visa Letters
-            </a>
-          </li>
-          {% endif %}
-          {% if user_perms.badges %}
-          <li>
-            <a href="{% url 'manage:badge-list' conference.slug %}" class="{% if active_nav == 'badges' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="7" cy="7" r="1.5"/><path d="M9.5 10V6.5h1"/><path d="M12 10V8.5"/></svg></span> Badges
-            </a>
-          </li>
-        </ul>
-        </div>
-        {% endif %}
-        {% if user_perms.registration_commerce %}
-        <ul class="sidebar-nav">
-          <li class="sidebar-sublabel" data-subsection="reg-commerce">Commerce <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></li>
-        </ul>
-        <div class="sidebar-subgroup" data-subsection-target="reg-commerce">
-        <ul class="sidebar-nav">
-          <li>
-            <a href="{% url 'manage:ticket-type-list' conference.slug %}" class="{% if active_nav == 'ticket-types' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4.5h12V7a1.5 1.5 0 010 3v2.5H2V10a1.5 1.5 0 010-3V4.5z"/></svg></span> Ticket Types
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:addon-list' conference.slug %}" class="{% if active_nav == 'addons' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 5.5v5M5.5 8h5"/></svg></span> Add-ons
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:voucher-list' conference.slug %}" class="{% if active_nav == 'vouchers' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 9V3a1 1 0 011-1h6l6 6-6 6z"/><circle cx="5" cy="5.5" r="1" fill="currentColor" stroke="none"/></svg></span> Vouchers
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:condition-list' conference.slug %}" class="{% if active_nav == 'conditions' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v4M8 11v4M1 8h4M11 8h4M3.05 3.05l2.83 2.83M10.12 10.12l2.83 2.83M12.95 3.05l-2.83 2.83M5.88 10.12l-2.83 2.83"/></svg></span> Conditions
-            </a>
-          </li>
-          {% endif %}
-          {% if user_perms.bulk_purchases %}
-          <li>
-            <a href="{% url 'manage:bulk-purchase-list' conference.slug %}" class="{% if active_nav == 'bulk-purchases' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="5" cy="12" r="1"/></svg></span> Bulk Purchases
-            </a>
-          </li>
-          {% endif %}
-        </ul>
-        </div>
-      </div>
-      {% endif %}
-
-      {# ── Sponsors ── #}
-      {% if user_perms.sponsors %}
-      <div class="sidebar-section" data-section="sponsors">
-        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Sponsors <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
-        <ul class="sidebar-nav">
-          <li>
-            <a href="{% url 'manage:sponsor-level-list' conference.slug %}" class="{% if active_nav == 'sponsor-levels' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 2.5h6v4.5a3 3 0 01-6 0V2.5z"/><path d="M5 4.5H3.5V6A1.5 1.5 0 005 7.5"/><path d="M11 4.5h1.5V6A1.5 1.5 0 0111 7.5"/><path d="M8 10v2.5M5.5 12.5h5"/></svg></span> Levels
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:sponsor-manage-list' conference.slug %}" class="{% if active_nav == 'sponsors' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2L2.5 8 8 14l5.5-6L8 2z"/></svg></span> Sponsors
-            </a>
-          </li>
-        </ul>
-      </div>
-      {% endif %}
-
-      {# ── On-site ── #}
-      {% if user_perms.onsite %}
-      <div class="sidebar-section" data-section="onsite">
-        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">On-site <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
-        <ul class="sidebar-nav">
-          {% if user_perms.checkin %}
-          <li>
-            <a href="{% url 'manage:checkin-dashboard' conference.slug %}" class="{% if active_nav == 'checkin' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8l3 3 5-6"/><rect x="1.5" y="1.5" width="13" height="13" rx="2"/></svg></span> Check-in
-            </a>
-          </li>
-          {% endif %}
-          {% if user_perms.terminal %}
-          <li>
-            <a href="{% url 'manage:terminal-pos' conference.slug %}" class="{% if active_nav == 'terminal' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><path d="M4.5 9.5h2M9.5 9.5h2M1.5 6.5h13"/></svg></span> Terminal POS
-            </a>
-          </li>
-          {% endif %}
-        </ul>
-      </div>
-      {% endif %}
-
-      {# ── Finance & Insights ── #}
-      {% if user_perms.finance or user_perms.reports %}
-      <div class="sidebar-section" data-section="finance">
-        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Finance & Insights <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
-        <ul class="sidebar-nav">
-          {% if user_perms.finance %}
-          <li>
-            <a href="{% url 'manage:financial-dashboard' conference.slug %}" class="{% if active_nav == 'financial' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14h12M4 10h2v4H4zM7 7h2v7H7zM10 4h2v10h-2z"/></svg></span> Financial
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:purchase-order-list' conference.slug %}" class="{% if active_nav == 'purchase-orders' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 1.5h10v13H3z"/><path d="M5.5 4.5h5M5.5 7h5M5.5 9.5h3"/><path d="M7 12.5h2"/></svg></span> Purchase Orders
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:expense-list' conference.slug %}" class="{% if active_nav == 'expenses' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4z"/><path d="M6 5h4M6 7.5h4M6 10h2.5"/><path d="M2 4v10h10"/></svg></span> Expenses
-            </a>
-          </li>
-          {% endif %}
-          {% if user_perms.reports %}
-          <li>
-            <a href="{% url 'manage:analytics-dashboard' conference.slug %}" class="{% if active_nav == 'analytics' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14h12M3 11h2v3H3zM6.5 8h2v6h-2zM10 5h2v9h-2z"/><circle cx="4" cy="5" r="1"/><circle cx="8" cy="3" r="1"/><circle cx="12" cy="1.5" r="1"/><path d="M4.8 4.5L7.2 3.5M8.8 2.5L11.2 1.8"/></svg></span> Analytics
-            </a>
-          </li>
-          <li>
-            <a href="{% url 'manage:reports-dashboard' conference.slug %}" class="{% if active_nav == 'reports' %}active{% endif %}">
-              <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13V5l3-3h5l3 3v8a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><path d="M7 7h2M6 9.5h4"/></svg></span> Reports
-            </a>
-          </li>
-          {% endif %}
-        </ul>
-      </div>
-      {% endif %}
-
-      {# ── Sync & Overrides (utility) ── #}
-      {% if user_perms.overrides %}
-      <hr class="sidebar-utility-separator">
-      <div class="sidebar-section" data-section="sync-overrides">
-        <div class="sidebar-section-title" role="button" tabindex="0" aria-expanded="true">Sync & Overrides <svg class="sidebar-collapse-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></div>
-        <ul class="sidebar-nav">
-          <li>
-            <div class="sidebar-nav-expandable">
-              <a href="{% url 'manage:override-list' conference.slug %}" class="{% if active_nav == 'overrides' %}active{% endif %}">
-                <span class="sidebar-nav-icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 1.5L4.5 8l2 2L13 3.5"/><path d="M2.5 12.5h11M2.5 14.5h7"/></svg></span> Overrides
-              </a>
-              <button type="button" class="sidebar-nav-expand-btn{% if active_nav == 'overrides' %} open{% endif %}" id="overrides-expand-btn" aria-expanded="{% if active_nav == 'overrides' %}true{% else %}false{% endif %}" aria-controls="override-subnav" onclick="this.classList.toggle('open');var s=document.getElementById('override-subnav');s.classList.toggle('open');this.setAttribute('aria-expanded',s.classList.contains('open'))">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4l4 4-4 4"/></svg>
-              </button>
             </div>
-            <ul class="sidebar-subnav{% if active_nav == 'overrides' %} open{% endif %}" id="override-subnav">
-              <li><a href="{% url 'manage:override-list' conference.slug %}" class="{% if active_override_tab == 'talks' %}active{% endif %}">Talks</a></li>
-              <li><a href="{% url 'manage:speaker-override-list' conference.slug %}" class="{% if active_override_tab == 'speakers' %}active{% endif %}">Speakers</a></li>
-              <li><a href="{% url 'manage:room-override-list' conference.slug %}" class="{% if active_override_tab == 'rooms' %}active{% endif %}">Rooms</a></li>
-              <li><a href="{% url 'manage:sponsor-override-list' conference.slug %}" class="{% if active_override_tab == 'sponsors' %}active{% endif %}">Sponsors</a></li>
-              <li><a href="{% url 'manage:type-default-list' conference.slug %}" class="{% if active_override_tab == 'type-defaults' %}active{% endif %}">Type Defaults</a></li>
+            {% else %}
+            <ul class="sidebar-nav">
+              {% for item in group.items %}
+              {% include "django_program/manage/_nav_item.html" with item=item depth=0 %}
+              {% endfor %}
             </ul>
-          </li>
-        </ul>
-      </div>
-      {% endif %}
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endfor %}
     </nav>
+    <div class="sidebar-scrim" id="manage-sidebar-scrim" hidden></div>
     {% endif %}
+    {% endblock %}
 
-    <main class="{% if conference %}main-content{% else %}main-content main-content--full{% endif %}">
+    <main class="{% block main_class %}{% if shell.nav %}main-content{% else %}main-content main-content--full{% endif %}{% endblock %}">
       {% block breadcrumb %}{% endblock %}
 
+      {% block messages %}
       {% if messages %}
       <ul class="messages">
         {% for message in messages %}
@@ -1350,7 +117,9 @@
         {% endfor %}
       </ul>
       {% endif %}
+      {% endblock %}
 
+      {% block page_header %}
       <div class="page-header">
         <div class="page-header-text">
           {% block page_title %}{% endblock %}
@@ -1359,66 +128,28 @@
           {% block page_actions %}{% endblock %}
         </div>
       </div>
+      {% endblock %}
 
       {% block content %}{% endblock %}
     </main>
   </div>
 
+  {% if shell.config.palette %}
+  {{ shell.palette_items|json_script:"manage-palette-data" }}
+  <form method="post" id="manage-palette-post-form" class="sidebar-nav-form" hidden>{% csrf_token %}</form>
+  <dialog class="manage-palette" id="manage-palette" aria-label="Jump to a management page" data-search-url="{{ shell.search_href }}">
+    <div class="palette-input-wrap">
+      <svg aria-hidden="true"><use href="#dp-i-search"></use></svg>
+      <input type="text" class="palette-input" role="combobox" aria-expanded="true" aria-controls="manage-palette-results" aria-autocomplete="list" placeholder="{{ shell.config.search_placeholder }}" autocomplete="off">
+    </div>
+    <ul class="palette-results" id="manage-palette-results" role="listbox"></ul>
+  </dialog>
+  {% endif %}
+
   {% block extra_js %}{% endblock %}
-  <script>
-  (function() {
-    var KEY = 'manage-sidebar-collapsed';
-    var stored = {};
-    try { stored = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) {}
-
-    // Section-level collapse
-    document.querySelectorAll('.sidebar-section[data-section]').forEach(function(section) {
-      var id = section.dataset.section;
-      var title = section.querySelector('.sidebar-section-title');
-
-      var hasActive = section.querySelector('.sidebar-nav li a.active, .sidebar-subnav li a.active');
-      if (stored[id] && !hasActive) {
-        section.classList.add('collapsed');
-        title.setAttribute('aria-expanded', 'false');
-      }
-
-      function toggleSection() {
-        section.classList.toggle('collapsed');
-        var isCollapsed = section.classList.contains('collapsed');
-        stored[id] = isCollapsed;
-        title.setAttribute('aria-expanded', String(!isCollapsed));
-        try { localStorage.setItem(KEY, JSON.stringify(stored)); } catch(e) {}
-      }
-
-      title.addEventListener('click', toggleSection);
-      title.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          toggleSection();
-        }
-      });
-    });
-
-    // Sub-section collapse (People, Commerce, etc.)
-    document.querySelectorAll('.sidebar-sublabel[data-subsection]').forEach(function(label) {
-      var id = label.dataset.subsection;
-      var target = document.querySelector('.sidebar-subgroup[data-subsection-target="' + id + '"]');
-      if (!target) return;
-
-      var hasActive = target.querySelector('a.active');
-      if (stored[id] && !hasActive) {
-        target.classList.add('collapsed');
-        label.classList.add('collapsed-label');
-      }
-
-      label.addEventListener('click', function() {
-        target.classList.toggle('collapsed');
-        label.classList.toggle('collapsed-label');
-        stored[id] = target.classList.contains('collapsed');
-        try { localStorage.setItem(KEY, JSON.stringify(stored)); } catch(e) {}
-      });
-    });
-  })();
-  </script>
+  <script src="{% static 'django_program/manage/manage.js' %}"></script>
+  {% for script in shell.config.scripts %}
+  <script src="{% static script %}"></script>
+  {% endfor %}
 </body>
 </html>

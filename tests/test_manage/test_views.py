@@ -294,14 +294,13 @@ class TestManagePermissionMixin:
         resp = client_logged_in_super.get(url)
         assert resp.status_code == 404
 
-    def test_get_submission_type_nav(self, client_logged_in_super, conference, talk):
+    def test_submission_type_nav_not_in_dashboard_context(self, client_logged_in_super, conference, talk):
+        """submission_type_nav is no longer injected into every manage view's context."""
         url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})
         resp = client_logged_in_super.get(url)
         assert resp.status_code == 200
-        nav = resp.context["submission_type_nav"]
-        assert len(nav) == 1
-        assert nav[0]["name"] == "Talk"
-        assert nav[0]["count"] == 1
+        assert "submission_type_nav" not in resp.context
+        assert "user_perms" not in resp.context
 
     def test_last_synced_returns_none_when_no_synced_data(self, client_logged_in_super, conference):
         url = reverse("manage:dashboard", kwargs={"conference_slug": conference.slug})

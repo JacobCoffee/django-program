@@ -19,6 +19,7 @@ class TerminalPOSView(ManagePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/terminal_pos.html"
     required_permission = "use_terminal"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Add active navigation state to the template context.

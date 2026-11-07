@@ -372,6 +372,7 @@ class SponsorOverrideListView(ManagePermissionMixin, ListView):
 
     template_name = "django_program/manage/sponsor_override_list.html"
     required_permission = "view_overrides"
+    required_feature = "sponsors"
     context_object_name = "overrides"
     paginate_by = 50
 
@@ -396,6 +397,7 @@ class SponsorOverrideCreateView(ManagePermissionMixin, CreateView):
 
     template_name = "django_program/manage/sponsor_override_form.html"
     required_permission = "change_overrides"
+    required_feature = "sponsors"
     form_class = SponsorOverrideForm
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
@@ -438,6 +440,7 @@ class SponsorOverrideEditView(ManagePermissionMixin, UpdateView):
 
     template_name = "django_program/manage/sponsor_override_form.html"
     required_permission = "change_overrides"
+    required_feature = "sponsors"
     form_class = SponsorOverrideForm
 
     def get_queryset(self) -> QuerySet[SponsorOverride]:

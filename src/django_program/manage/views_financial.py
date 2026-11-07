@@ -233,6 +233,7 @@ class FinancialDashboardView(ConferencePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/financial_dashboard.html"
     required_permission = "view_finance"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:  # noqa: PLR0915
         """Build context with all financial metrics for the dashboard.

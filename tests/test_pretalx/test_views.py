@@ -6,7 +6,7 @@ the Django test client.
 """
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from django.contrib.auth.models import User
@@ -258,19 +258,13 @@ class TestScheduleView:
         assert response.status_code == 200
         assert "today" in response.context
 
-    def test_schedule_with_invalid_timezone_hits_except_branch(self, client, conference):
-        """When the conference timezone is invalid, the except clause is entered.
-
-        Note: the source currently references ``timezone.utc`` which does not
-        exist on ``django.utils.timezone``, so the fallback raises an
-        ``AttributeError``.  This test exercises the except branch (line 107)
-        for coverage and documents the bug.
-        """
+    def test_schedule_with_invalid_timezone_falls_back_to_utc(self, client, conference):
         conference.timezone = "Not/A/Timezone"
         conference.save()
         url = reverse("pretalx:schedule", kwargs={"conference_slug": conference.slug})
-        with pytest.raises(AttributeError, match="utc"):
-            client.get(url)
+        response = client.get(url)
+        assert response.status_code == 200
+        assert response.context["today"] == timezone.localdate(timezone=UTC)
 
     def test_schedule_renders_talk_title(self, client, conference, slot_with_talk):
         url = reverse("pretalx:schedule", kwargs={"conference_slug": conference.slug})

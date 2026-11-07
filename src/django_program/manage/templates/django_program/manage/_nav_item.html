@@ -1,0 +1,35 @@
+{% load manage_shell %}
+<li>
+  {% if item.method == "post" %}
+  <form method="post" action="{{ item.href }}" class="sidebar-nav-form">
+    {% if item.same_origin %}{% csrf_token %}{% endif %}
+    <button type="submit" class="sidebar-nav-button{% if item.is_active %} active{% endif %}">
+      {% if item.icon and not depth %}<span class="sidebar-nav-icon">{{ item.icon|nav_icon }}</span>{% endif %}
+      {{ item.label }}
+      {% if item.badge_count is not None %}<span class="{% if depth %}sidebar-subnav-count{% else %}sidebar-nav-badge{% endif %}">{{ item.badge_count }}</span>{% endif %}
+    </button>
+  </form>
+  {% elif item.children %}
+  <div class="sidebar-nav-expandable">
+    <a href="{{ item.href }}" class="{% if item.is_active %}active{% endif %}" {% if item.is_active %}aria-current="page"{% endif %}>
+      {% if item.icon and not depth %}<span class="sidebar-nav-icon">{{ item.icon|nav_icon }}</span>{% endif %}
+      {{ item.label }}
+      {% if item.badge_count is not None %}<span class="{% if depth %}sidebar-subnav-count{% else %}sidebar-nav-badge{% endif %}">{{ item.badge_count }}</span>{% endif %}
+    </a>
+    <button type="button" class="sidebar-nav-expand-btn{% if item.is_active or item.has_active_child %} open{% endif %}" data-expand-target="manage-subnav-{{ item.key }}" aria-expanded="{% if item.is_active or item.has_active_child %}true{% else %}false{% endif %}" aria-controls="manage-subnav-{{ item.key }}" aria-label="Show {{ item.label }} pages">
+      <svg aria-hidden="true"><use href="#dp-i-chevron-right"></use></svg>
+    </button>
+  </div>
+  <ul class="sidebar-subnav{% if item.is_active or item.has_active_child %} open{% endif %}" id="manage-subnav-{{ item.key }}">
+    {% for child in item.children %}
+    {% include "django_program/manage/_nav_item.html" with item=child depth=depth|add:1 %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <a href="{{ item.href }}" class="{% if item.is_active %}active{% endif %}" {% if item.is_active %}aria-current="page"{% endif %}>
+    {% if item.icon and not depth %}<span class="sidebar-nav-icon">{{ item.icon|nav_icon }}</span>{% endif %}
+    {{ item.label }}
+    {% if item.badge_count is not None %}<span class="{% if depth %}sidebar-subnav-count{% else %}sidebar-nav-badge{% endif %}">{{ item.badge_count }}</span>{% endif %}
+  </a>
+  {% endif %}
+</li>

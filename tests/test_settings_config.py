@@ -66,3 +66,48 @@ def test_get_config_rejects_non_bool_schedule_delete_guard_enabled() -> None:
     with override_settings(DJANGO_PROGRAM={"pretalx": {"schedule_delete_guard_enabled": "yes"}}):
         with pytest.raises(TypeError, match="schedule_delete_guard_enabled"):
             get_config()
+
+
+def test_get_config_manage_defaults_and_list_coercion() -> None:
+    with override_settings(DJANGO_PROGRAM={}):
+        manage = get_config().manage
+        assert manage.builtin_nav is True
+        assert manage.nav == ()
+        assert manage.search_url == ""
+        assert manage.search_placeholder == "Search…"
+
+    with override_settings(
+        DJANGO_PROGRAM={"manage": {"builtin_nav": ["conference"], "hide_nav": ["conference-edit"], "nav": ["a.b"]}}
+    ):
+        manage = get_config().manage
+        assert manage.builtin_nav == ("conference",)
+        assert manage.hide_nav == ("conference-edit",)
+        assert manage.nav == ("a.b",)
+
+
+def test_get_config_manage_search_settings() -> None:
+    with override_settings(
+        DJANGO_PROGRAM={"manage": {"search_url": "manage:search", "search_placeholder": "Find anything…"}}
+    ):
+        manage = get_config().manage
+        assert manage.search_url == "manage:search"
+        assert manage.search_placeholder == "Find anything…"
+
+
+@pytest.mark.parametrize(
+    ("manage", "error"),
+    [
+        (["bad"], r"DJANGO_PROGRAM\['manage'\] must be a mapping"),
+        ({"nav": "a.b"}, r"\['nav'\] must be a list of strings"),
+        ({"hide_nav": [""]}, r"\['hide_nav'\] must contain only non-empty strings"),
+        ({"builtin_nav": "conference"}, r"\['builtin_nav'\] must be a list of strings"),
+        ({"title": 3}, r"\['title'\] must be a string"),
+        ({"palette": "yes"}, r"\['palette'\] must be a boolean"),
+        ({"search_url": 3}, r"\['search_url'\] must be a string"),
+        ({"search_placeholder": 3}, r"\['search_placeholder'\] must be a string"),
+    ],
+)
+def test_get_config_rejects_invalid_manage(manage: object, error: str) -> None:
+    with override_settings(DJANGO_PROGRAM={"manage": manage}):
+        with pytest.raises(TypeError, match=error):
+            get_config()

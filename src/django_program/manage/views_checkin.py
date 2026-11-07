@@ -23,6 +23,7 @@ class CheckInScannerView(ManagePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/checkin_scanner.html"
     required_permission = "view_checkin"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Add active_nav to the template context.
@@ -48,6 +49,7 @@ class CheckInDashboardView(ManagePermissionMixin, TemplateView):
 
     template_name = "django_program/manage/checkin_dashboard.html"
     required_permission = "view_checkin"
+    required_feature = "registration"
 
     def get_context_data(self, **kwargs: object) -> dict[str, object]:
         """Build context with check-in statistics for the dashboard.

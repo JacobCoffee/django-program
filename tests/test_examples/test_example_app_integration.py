@@ -35,7 +35,7 @@ def test_example_app_loads_and_renders_stripe_template_tag() -> None:
         (
             "from django.template import Context, Template; "
             "conference = type('C', (), {'stripe_publishable_key': 'pk_test_example'})(); "
-            "output = Template('{% load stripe_tags %}{% stripe_public_key conference as key %}{{ key }}')"
+            "output = Template('{% load program_stripe_tags %}{% stripe_public_key conference as key %}{{ key }}')"
             ".render(Context({'conference': conference})); "
             "print(output)"
         ),

@@ -45,6 +45,15 @@ DJANGO_PROGRAM = {
         "manage_ui_enabled": True,
         "all_ui_enabled": True,
     },
+    # Management UI shell (see "Customizing the Management UI")
+    "manage": {
+        "title": "Conference Management",  # default
+        "conference": "",                  # slug for single-conference sites
+        "builtin_nav": True,               # True, False, or a list of keys to keep
+        "hide_nav": [],                    # section or item keys to drop
+        "nav": [],                         # dotted paths to nav hooks
+        "attention": ["django_program.manage.attention_builtin.builtin_attention"],
+    },
     # General
     "cart_expiry_minutes": 30,          # default
     "pending_order_expiry_minutes": 15, # default
@@ -288,6 +297,18 @@ The context processor resolves each flag through `is_feature_enabled()`, so mast
 switch logic and per-conference DB overrides are applied. When the request has a
 `conference` attribute (set by middleware or the view), that conference's `FeatureFlags`
 row is consulted automatically.
+
+Manage views enforce the module toggles too: with `travel_grants_enabled` off, every
+travel grant URL under the management dashboard returns 404 and its sidebar entries
+disappear. Turning off `manage_ui_enabled` (or `all_ui_enabled`) returns 404 for the
+whole management dashboard.
+
+### Management UI settings
+
+The `manage` block configures the management dashboard shell: title, home link,
+single-conference mode, which built-in sidebar entries to show, host-provided
+sidebar sections, "needs attention" counts, and extra assets. See
+[Customizing the Management UI](customizing-manage.md) for the full reference.
 
 ### Accessing config in code
 
