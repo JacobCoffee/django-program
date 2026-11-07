@@ -73,6 +73,8 @@ def test_get_config_manage_defaults_and_list_coercion() -> None:
         manage = get_config().manage
         assert manage.builtin_nav is True
         assert manage.nav == ()
+        assert manage.search_url == ""
+        assert manage.search_placeholder == "Search…"
 
     with override_settings(
         DJANGO_PROGRAM={"manage": {"builtin_nav": ["conference"], "hide_nav": ["conference-edit"], "nav": ["a.b"]}}
@@ -81,6 +83,15 @@ def test_get_config_manage_defaults_and_list_coercion() -> None:
         assert manage.builtin_nav == ("conference",)
         assert manage.hide_nav == ("conference-edit",)
         assert manage.nav == ("a.b",)
+
+
+def test_get_config_manage_search_settings() -> None:
+    with override_settings(
+        DJANGO_PROGRAM={"manage": {"search_url": "manage:search", "search_placeholder": "Find anything…"}}
+    ):
+        manage = get_config().manage
+        assert manage.search_url == "manage:search"
+        assert manage.search_placeholder == "Find anything…"
 
 
 @pytest.mark.parametrize(
@@ -92,6 +103,8 @@ def test_get_config_manage_defaults_and_list_coercion() -> None:
         ({"builtin_nav": "conference"}, r"\['builtin_nav'\] must be a list of strings"),
         ({"title": 3}, r"\['title'\] must be a string"),
         ({"palette": "yes"}, r"\['palette'\] must be a boolean"),
+        ({"search_url": 3}, r"\['search_url'\] must be a string"),
+        ({"search_placeholder": 3}, r"\['search_placeholder'\] must be a string"),
     ],
 )
 def test_get_config_rejects_invalid_manage(manage: object, error: str) -> None:

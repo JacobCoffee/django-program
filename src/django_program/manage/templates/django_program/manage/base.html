@@ -37,9 +37,9 @@
     <div class="top-bar-right">
       {% block topbar_actions %}{% endblock %}
       {% if shell.config.palette %}
-      <button type="button" class="palette-trigger" id="manage-palette-trigger" aria-haspopup="dialog" aria-controls="manage-palette" aria-label="Jump to a page">
+      <button type="button" class="palette-trigger" id="manage-palette-trigger" aria-haspopup="dialog" aria-controls="manage-palette" aria-label="Search · {{ shell.config.search_placeholder }}">
         <svg aria-hidden="true"><use href="#dp-i-search"></use></svg>
-        <span>Jump to…</span>
+        <span class="palette-trigger-text">{{ shell.config.search_placeholder }}</span>
         <kbd class="palette-kbd" data-mac="⌘K" data-pc="Ctrl K">Ctrl K</kbd>
       </button>
       <span class="top-bar-separator"></span>
@@ -137,10 +137,10 @@
   {% if shell.config.palette %}
   {{ shell.palette_items|json_script:"manage-palette-data" }}
   <form method="post" id="manage-palette-post-form" class="sidebar-nav-form" hidden>{% csrf_token %}</form>
-  <dialog class="manage-palette" id="manage-palette" aria-label="Jump to a management page">
+  <dialog class="manage-palette" id="manage-palette" aria-label="Jump to a management page" data-search-url="{{ shell.search_href }}">
     <div class="palette-input-wrap">
       <svg aria-hidden="true"><use href="#dp-i-search"></use></svg>
-      <input type="text" class="palette-input" role="combobox" aria-expanded="true" aria-controls="manage-palette-results" aria-autocomplete="list" placeholder="Jump to a page…" autocomplete="off">
+      <input type="text" class="palette-input" role="combobox" aria-expanded="true" aria-controls="manage-palette-results" aria-autocomplete="list" placeholder="{{ shell.config.search_placeholder }}" autocomplete="off">
     </div>
     <ul class="palette-results" id="manage-palette-results" role="listbox"></ul>
   </dialog>

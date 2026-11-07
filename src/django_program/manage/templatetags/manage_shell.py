@@ -7,9 +7,9 @@ Usage::
 
 ``shell`` exposes ``nav`` (resolved sections), ``conference``, ``config``
 (the :class:`~django_program.settings.ManageConfig`), ``home_href``,
-``logout_href``, ``logout_same_origin`` and ``palette_items``.  Works on any
-page that extends ``django_program/manage/base.html``, including host pages
-that only have ``request`` and ``user`` in context.
+``logout_href``, ``logout_same_origin``, ``search_href`` and ``palette_items``.
+Works on any page that extends ``django_program/manage/base.html``, including
+host pages that only have ``request`` and ``user`` in context.
 """
 
 from __future__ import annotations
@@ -48,6 +48,7 @@ class ManageShell:
     home_href: str
     logout_href: str
     logout_same_origin: bool
+    search_href: str = ""
     palette_items: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -120,9 +121,11 @@ def _palette_items(sections: list[ResolvedSection]) -> list[dict[str, Any]]:
             }
         )
         for child in resolved.children:
-            add(child, section_label)
+            add(child, resolved.label)
 
     for section in sections:
+        if not section.palette:
+            continue
         for item in section.items:
             add(item, section.label)
     return items
@@ -151,6 +154,7 @@ def manage_shell(context: template.Context) -> ManageShell:
             home_href=_resolve_url(config.home_url),
             logout_href=logout_href,
             logout_same_origin=url_has_allowed_host_and_scheme(logout_href, allowed_hosts=None),
+            search_href=_resolve_url(config.search_url),
         )
     conference = _resolve_conference(context.get("conference"), config)
     active_nav = context.get("active_nav") or ""
@@ -168,6 +172,7 @@ def manage_shell(context: template.Context) -> ManageShell:
         home_href=_resolve_home_href(config, conference, request.user, sections),
         logout_href=logout_href,
         logout_same_origin=is_same_origin(logout_href, request) if logout_href else True,
+        search_href=_resolve_url(config.search_url),
         palette_items=_palette_items(sections),
     )
 

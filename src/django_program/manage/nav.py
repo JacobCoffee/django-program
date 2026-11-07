@@ -126,6 +126,10 @@ class NavSection:
         permission: Extra visibility check for the whole section.
         feature: django-program feature name; hidden when the feature is off.
         utility: Render below a separator at the end of the sidebar.
+        palette: Include this section's items in the Cmd/Ctrl-K palette.
+            ``False`` keeps the section in the sidebar but drops it (and its
+            items) from ``palette_items``, e.g. a "shortcuts" section that
+            duplicates tools listed elsewhere.
     """
 
     key: str
@@ -134,6 +138,7 @@ class NavSection:
     permission: PermissionCheck = None
     feature: str = ""
     utility: bool = False
+    palette: bool = True
 
 
 @dataclass(slots=True)
@@ -345,6 +350,7 @@ class ResolvedSection:
     label: str
     utility: bool
     items: tuple[ResolvedItem, ...]
+    palette: bool = True
 
     @property
     def is_active(self) -> bool:
@@ -504,5 +510,9 @@ def build_nav(
         label = _label(section.label, ctx)
         resolved = tuple(entry for raw in items for entry in _resolve_item(raw, ctx, label, counts))
         if resolved:
-            sections.append(ResolvedSection(key=section.key, label=label, utility=section.utility, items=resolved))
+            sections.append(
+                ResolvedSection(
+                    key=section.key, label=label, utility=section.utility, palette=section.palette, items=resolved
+                )
+            )
     return _settle_active(sections, request.path)

@@ -26,6 +26,8 @@ All options live under `DJANGO_PROGRAM["manage"]`.
 | `stylesheets` | `[]` | Extra static stylesheets loaded after `django_program/manage/manage.css`. |
 | `scripts` | `[]` | Extra static scripts loaded after `django_program/manage/manage.js`. |
 | `palette` | `True` | Enable the Cmd/Ctrl-K jump palette. |
+| `search_url` | `""` | URL name or path for the host's global search endpoint. Empty disables remote palette search; the palette still filters its built-in local items. |
+| `search_placeholder` | `"Search…"` | Placeholder text shown on the top-bar search trigger and inside the palette input. |
 
 Module toggles in `DJANGO_PROGRAM["features"]` apply to the manage UI as well: a
 disabled module's sidebar entries disappear and its manage URLs return 404.
@@ -104,9 +106,22 @@ DJANGO_PROGRAM = {"manage": {"nav": ["myproject.staff.nav.register"]}}
 | `active` | `active_nav` values that mark the item current. |
 | `group` | Sub-heading inside the section. |
 | `method` | `"get"` (link) or `"post"` (CSRF form button). |
+| `description` | Extra palette search text. |
 | `badge` | Attention item key whose count shows next to the label. |
 | `children` | Callable returning dynamic child items. |
 | `order` | Sort order inside the section. |
+
+`NavSection` fields:
+
+| Field | Meaning |
+|---|---|
+| `key` | Unique section key. |
+| `label` | Section title, or a callable receiving the `NavContext`. |
+| `order` | Sort order among sections; ties keep registration order. |
+| `permission` | Extra visibility check for the whole section. |
+| `feature` | django-program feature name; hidden when that module is off. |
+| `utility` | Render below a separator at the end of the sidebar. |
+| `palette` | `False` keeps the section in the sidebar but excludes its items from `palette_items`, e.g. a "shortcuts" section that duplicates tools listed elsewhere. Defaults to `True`. |
 
 Items whose URL name does not reverse are skipped, so unmounted modules never
 produce broken links. When an item is unavailable because its module is off, it
@@ -181,4 +196,4 @@ Set `active_nav` in the context to pin the highlighted item; otherwise the
 path-prefix match applies. The shell's data comes from
 `{% load manage_shell %}{% manage_shell as shell %}`, which host templates can use
 directly to build their own home pages from the same nav (`shell.nav`,
-`shell.palette_items`).
+`shell.palette_items`, `shell.search_href`).

@@ -164,15 +164,46 @@
       }
     }
 
+    var searchUrl = dialog.dataset.searchUrl || '';
+
     var input = dialog.querySelector('.palette-input');
     var list = dialog.querySelector('.palette-results');
     var activeIndex = -1;
-    var filtered = items;
+    var localMatches = items;
+    var remoteMatches = [];
+    var remoteLoading = false;
+    var debounceTimer = null;
+    var abortController = null;
+    var requestToken = 0;
+
+    function combined() {
+      return localMatches.concat(remoteMatches);
+    }
+
+    function isSameOrigin(href) {
+      try {
+        var url = new URL(href, window.location.href);
+        return url.origin === window.location.origin;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function clampActiveIndex() {
+      var len = combined().length;
+      if (!len) {
+        activeIndex = -1;
+        return;
+      }
+      if (activeIndex < 0) activeIndex = 0;
+      if (activeIndex >= len) activeIndex = len - 1;
+    }
 
     function render() {
       if (!list) return;
       list.innerHTML = '';
-      if (!filtered.length) {
+      var all = combined();
+      if (!all.length && !remoteLoading) {
         var empty = document.createElement('li');
         empty.className = 'palette-empty';
         empty.textContent = 'No matches';
@@ -180,7 +211,7 @@
         if (input) input.removeAttribute('aria-activedescendant');
         return;
       }
-      filtered.forEach(function (item, index) {
+      all.forEach(function (item, index) {
         var li = document.createElement('li');
         li.className = 'palette-result' + (index === activeIndex ? ' active' : '');
         li.setAttribute('role', 'option');
@@ -199,6 +230,12 @@
         });
         list.appendChild(li);
       });
+      if (remoteLoading) {
+        var loading = document.createElement('li');
+        loading.className = 'palette-loading';
+        loading.textContent = 'Searching…';
+        list.appendChild(loading);
+      }
       if (input) {
         input.setAttribute('aria-activedescendant', activeIndex >= 0 ? 'palette-result-' + activeIndex : '');
       }
@@ -210,19 +247,77 @@
       }
     }
 
-    function filterItems(query) {
+    function localFilter(query) {
       var q = query.trim().toLowerCase();
-      filtered = !q
-        ? items
-        : items.filter(function (item) {
-            return (
-              (item.label && item.label.toLowerCase().indexOf(q) !== -1) ||
-              (item.section && item.section.toLowerCase().indexOf(q) !== -1) ||
-              (item.description && item.description.toLowerCase().indexOf(q) !== -1)
-            );
-          });
-      activeIndex = filtered.length ? 0 : -1;
+      if (!q) return items;
+      var labelMatches = [];
+      var otherMatches = [];
+      items.forEach(function (item) {
+        var label = item.label ? String(item.label).toLowerCase() : '';
+        var section = item.section ? String(item.section).toLowerCase() : '';
+        var description = item.description ? String(item.description).toLowerCase() : '';
+        if (label.indexOf(q) !== -1) {
+          labelMatches.push(item);
+        } else if (section.indexOf(q) !== -1 || description.indexOf(q) !== -1) {
+          otherMatches.push(item);
+        }
+      });
+      return labelMatches.concat(otherMatches);
+    }
+
+    function fetchRemote(query) {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      if (abortController) {
+        abortController.abort();
+        abortController = null;
+      }
+      var q = query.trim();
+      var token = ++requestToken;
+      if (!searchUrl || q.replace(/\s+/g, '').length < 2) {
+        remoteMatches = [];
+        remoteLoading = false;
+        render();
+        return;
+      }
+      remoteLoading = true;
       render();
+      debounceTimer = setTimeout(function () {
+        var controller = typeof AbortController === 'function' ? new AbortController() : null;
+        abortController = controller;
+        fetch(searchUrl + '?q=' + encodeURIComponent(q), {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+          signal: controller ? controller.signal : undefined,
+        })
+          .then(function (response) {
+            if (!response.ok) throw new Error('search request failed');
+            return response.json();
+          })
+          .then(function (data) {
+            if (token !== requestToken) return;
+            remoteMatches = data && Array.isArray(data.results) ? data.results : [];
+            remoteLoading = false;
+            clampActiveIndex();
+            render();
+          })
+          .catch(function () {
+            if (token !== requestToken) return;
+            remoteMatches = [];
+            remoteLoading = false;
+            clampActiveIndex();
+            render();
+          });
+      }, 200);
+    }
+
+    function filterItems(query) {
+      localMatches = localFilter(query);
+      activeIndex = combined().length ? 0 : -1;
+      render();
+      fetchRemote(query);
     }
 
     function navigate(item) {
@@ -233,12 +328,13 @@
           window.location.href = item.href;
           return;
         }
+        var sameOrigin = typeof item.same_origin === 'boolean' ? item.same_origin : isSameOrigin(item.href);
         var form = template.cloneNode(true);
         form.removeAttribute('id');
         form.removeAttribute('hidden');
         form.style.display = 'none';
         form.action = item.href;
-        if (!item.same_origin) {
+        if (!sameOrigin) {
           var csrfInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
           if (csrfInput) csrfInput.remove();
         }
@@ -250,7 +346,17 @@
     }
 
     function openPalette() {
-      filtered = items;
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      if (abortController) {
+        abortController.abort();
+        abortController = null;
+      }
+      localMatches = items;
+      remoteMatches = [];
+      remoteLoading = false;
       activeIndex = items.length ? 0 : -1;
       if (input) input.value = '';
       render();
@@ -293,17 +399,19 @@
         filterItems(input.value);
       });
       input.addEventListener('keydown', function (e) {
+        var len = combined().length;
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          if (filtered.length) activeIndex = Math.min(activeIndex + 1, filtered.length - 1);
+          if (len) activeIndex = Math.min(activeIndex + 1, len - 1);
           render();
         } else if (e.key === 'ArrowUp') {
           e.preventDefault();
-          if (filtered.length) activeIndex = Math.max(activeIndex - 1, 0);
+          if (len) activeIndex = Math.max(activeIndex - 1, 0);
           render();
         } else if (e.key === 'Enter') {
           e.preventDefault();
-          if (filtered[activeIndex]) navigate(filtered[activeIndex]);
+          var target = combined()[activeIndex];
+          if (target) navigate(target);
         } else if (e.key === 'Escape') {
           closePalette();
         }

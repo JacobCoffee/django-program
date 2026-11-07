@@ -105,6 +105,10 @@ class ManageConfig:
         stylesheets: Extra static stylesheet paths loaded after ``manage.css``.
         scripts: Extra static script paths loaded after ``manage.js``.
         palette: Enable the Cmd/Ctrl-K jump palette.
+        search_url: URL name or path for the host's global search endpoint,
+            resolved like ``home_url``. Empty disables remote palette search.
+        search_placeholder: Placeholder text for the search trigger and the
+            palette input.
     """
 
     title: str = "Conference Management"
@@ -119,6 +123,8 @@ class ManageConfig:
     stylesheets: tuple[str, ...] = ()
     scripts: tuple[str, ...] = ()
     palette: bool = True
+    search_url: str = ""
+    search_placeholder: str = "Search…"
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,7 +215,7 @@ def _build_manage_config(manage_data: Mapping[str, object]) -> ManageConfig:
     builtin_nav = data.get("builtin_nav", True)
     if not isinstance(builtin_nav, bool):
         data["builtin_nav"] = _as_str_tuple("builtin_nav", builtin_nav)
-    for key in ("title", "home_url", "conference", "logout_url"):
+    for key in ("title", "home_url", "conference", "logout_url", "search_url", "search_placeholder"):
         if key in data and not isinstance(data[key], str):
             msg = f"DJANGO_PROGRAM['manage']['{key}'] must be a string"
             raise TypeError(msg)

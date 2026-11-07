@@ -167,7 +167,8 @@ a:hover { color: var(--color-primary-hover); text-decoration: underline; }
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.3rem 0.6rem;
+  width: 260px;
+  padding: 0.3rem 0.65rem;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.05);
@@ -178,6 +179,15 @@ a:hover { color: var(--color-primary-hover); text-decoration: underline; }
   transition: background 0.15s ease, color 0.15s ease;
 }
 .palette-trigger:hover { background: rgba(255, 255, 255, 0.12); color: #ffffff; }
+.palette-trigger-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.55);
+}
 .palette-kbd {
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -560,6 +570,7 @@ a:hover { color: var(--color-primary-hover); text-decoration: underline; }
 .palette-result.active .palette-result-section,
 .palette-result:hover .palette-result-section { color: inherit; opacity: 0.7; }
 .palette-empty { padding: 1rem; color: var(--color-text-muted); font-size: 0.88rem; text-align: center; }
+.palette-loading { padding: 0.65rem 1rem; color: var(--color-text-muted); font-size: 0.8rem; text-align: center; }
 
 /* ---- Main Content Area ---- */
 .main-content {
@@ -1229,7 +1240,7 @@ input:focus-visible,
   }
   .top-bar-right { flex-shrink: 0; gap: 0.5rem; }
   .sidebar-toggle { display: inline-flex; flex-shrink: 0; }
-  .palette-trigger { padding: 0.4rem; gap: 0; }
+  .palette-trigger { width: auto; padding: 0.4rem; gap: 0; }
   .palette-trigger span,
   .palette-kbd { display: none; }
   .sidebar {
