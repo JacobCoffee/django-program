@@ -534,21 +534,20 @@ class TestBadgeHelperMethods:
         service = BadgeGenerationService()
         assert service._register_pdf_font("NoSuchFont123.ttf", "TestFont") is None
 
-    @pytest.mark.skipif(
-        not __import__("pathlib").Path("/System/Library/Fonts/Geneva.ttf").exists(),
-        reason="macOS-only font (Geneva.ttf)",
-    )
     def test_register_pdf_font_success(self) -> None:
+        from pathlib import Path
         from unittest.mock import patch
 
+        import reportlab
+
         service = BadgeGenerationService()
-        font_path = "/System/Library/Fonts/Geneva.ttf"
+        font_path = str(Path(reportlab.__file__).parent / "fonts" / "Vera.ttf")
         with patch(
             "django_program.registration.services.badge._resolve_font_path",
             return_value=font_path,
         ):
-            result = service._register_pdf_font("Geneva.ttf", "TestGeneva")
-            assert result == "TestGeneva"
+            result = service._register_pdf_font("Vera.ttf", "TestVera")
+            assert result == "TestVera"
 
     def test_register_pdf_font_register_fails(self) -> None:
         from unittest.mock import patch

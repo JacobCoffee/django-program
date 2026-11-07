@@ -7,7 +7,7 @@ Tier 3 (cross-conference retention, LTV, renewal rates) analytics.
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Avg, Count, Q, Sum, Value
+from django.db.models import Avg, Count, DecimalField, Q, Sum, Value
 from django.db.models.functions import Coalesce
 
 if TYPE_CHECKING:
@@ -212,7 +212,7 @@ def get_session_rating_analytics(conference: Conference) -> dict[str, Any]:
 
     agg = ratings_qs.aggregate(
         total_ratings=Count("id"),
-        average_score=Coalesce(Avg("score"), Value(_ZERO)),
+        average_score=Coalesce(Avg("score", output_field=DecimalField()), Value(_ZERO)),
     )
     total_ratings: int = agg["total_ratings"]
     average_score: Decimal = Decimal(str(agg["average_score"]))
